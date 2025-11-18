@@ -9,7 +9,19 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+
+  // 🔥 LO IMPORTANTE PARA VERCEL
+  build: {
+    outDir: "dist",
+  },
+
+  // 🔥 PARA SOPORTE SPA (todas las rutas → index.html)
+  appType: "spa",
+
+  plugins: [react(), mode === "development" && componentTagger()].filter(
+    Boolean
+  ),
+
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
