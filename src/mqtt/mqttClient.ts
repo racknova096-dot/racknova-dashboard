@@ -1,7 +1,7 @@
 import mqtt from "mqtt";
 
 // ✅ Configuración del broker (usa WSS para navegador seguro)
-const MQTT_URL = "wss://ib197277.ala.dedicated.aws.emqxcloud.com:8084/mqtt";
+const MQTT_URL = "wss://jcc9d611.ala.dedicated.aws.emqxcloud.com:8084/mqtt";
 
 const options = {
   username: "rack-esp32",
