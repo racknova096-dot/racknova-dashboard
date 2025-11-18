@@ -1,8 +1,15 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Package, Table, LayoutDashboard, Plus, Users, Activity } from 'lucide-react';
-import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import {
+  Package,
+  Table,
+  LayoutDashboard,
+  Plus,
+  Users,
+  Activity,
+} from "lucide-react";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 // Navigation component for inventory system
 export function Navigation() {
@@ -17,12 +24,12 @@ export function Navigation() {
           <Package className="h-6 w-6 text-primary" />
           <h2 className="text-lg font-semibold">Sistema de Inventario</h2>
         </div>
-        
+
         <div className="flex gap-2 items-center">
           <div className="flex gap-2">
             <Link to="/">
-              <Button 
-                variant={isActive('/') ? 'default' : 'outline'}
+              <Button
+                variant={isActive("/") ? "default" : "outline"}
                 size="sm"
                 className="flex items-center gap-2"
               >
@@ -31,8 +38,8 @@ export function Navigation() {
               </Button>
             </Link>
             <Link to="/add-product">
-              <Button 
-                variant={isActive('/add-product') ? 'default' : 'outline'}
+              <Button
+                variant={isActive("/add-product") ? "default" : "outline"}
                 size="sm"
                 className="flex items-center gap-2"
               >
@@ -41,8 +48,8 @@ export function Navigation() {
               </Button>
             </Link>
             <Link to="/products">
-              <Button 
-                variant={isActive('/products') ? 'default' : 'outline'}
+              <Button
+                variant={isActive("/products") ? "default" : "outline"}
                 size="sm"
                 className="flex items-center gap-2"
               >
@@ -50,19 +57,22 @@ export function Navigation() {
                 Productos
               </Button>
             </Link>
-            <Link to="/users">
-              <Button 
-                variant={isActive('/users') ? 'default' : 'outline'}
-                size="sm"
-                className="flex items-center gap-2"
-              >
-                <Users className="h-4 w-4" />
-                Usuarios
-              </Button>
-            </Link>
+            {false && (
+              <Link to="/users">
+                <Button
+                  variant={isActive("/users") ? "default" : "outline"}
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <Users className="h-4 w-4" />
+                  Usuarios
+                </Button>
+              </Link>
+            )}
+
             <Link to="/tracking">
-              <Button 
-                variant={isActive('/tracking') ? 'default' : 'outline'}
+              <Button
+                variant={isActive("/tracking") ? "default" : "outline"}
                 size="sm"
                 className="flex items-center gap-2"
               >
