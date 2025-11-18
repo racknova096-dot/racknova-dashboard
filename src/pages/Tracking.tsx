@@ -248,9 +248,8 @@ export default function Tracking() {
       {/* Nota */}
       <div className="bg-accent/50 p-4 rounded-lg border border-accent">
         <p className="text-sm text-foreground">
-          📝 <strong>Nota:</strong> Para restringir el acceso a esta sección
-          solo a administradores, necesitarás conectar tu proyecto a Supabase
-          para implementar autenticación y roles de usuario.
+          📝 <strong>Nota:</strong> El acceso a esta sección está limitado a
+          usuarios autenticados con perfil de administrador.
         </p>
       </div>
     </div>
