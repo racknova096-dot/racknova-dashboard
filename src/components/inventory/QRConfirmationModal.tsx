@@ -41,19 +41,21 @@ export function QRConfirmationModal({
   const generateQRCode = async () => {
     if (!productData) return;
 
-    const qrString =
-      `SKU: ${productData.sku}\n` +
-      `NOMBRE: ${productData.nombre}\n` +
-      `UBICACIÓN: ${productData.rack}-${productData.nivel}-${productData.slot}\n` +
-      `FECHA: ${productData.timestamp.toLocaleString("es-ES", {
+    const qrData = {
+      sku: productData.sku,
+      nombre: productData.nombre,
+      ubicacion: `${productData.rack}-${productData.nivel}-${productData.slot}`,
+      fecha: productData.timestamp.toLocaleString("es-ES", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
-      })}`;
+      }),
+    };
 
     try {
+      const qrString = JSON.stringify(qrData);
       const dataUrl = await QRCode.toDataURL(qrString, {
         width: 300,
         margin: 2,
