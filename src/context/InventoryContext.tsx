@@ -49,7 +49,7 @@ const generateLocations = (): Location[] => {
   const racks: Rack[] = ["A", "B", "C", "D", "E"];
   racks.forEach((rack) => {
     [1, 2, 3].forEach((nivel) => {
-      Array.from({ length: 8 }, (_, i) => i + 1).forEach((slot) => {
+      Array.from({ length: 6 }, (_, i) => i + 1).forEach((slot) => {
         locations.push({
           id: `${rack}-${nivel}-${slot}`,
           rack,
