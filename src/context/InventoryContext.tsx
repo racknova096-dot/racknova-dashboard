@@ -226,12 +226,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       // Mapa de pines (igual para los 3 racks)
       const pinMap: Record<number, number> = {
-        1: 14,
-        2: 12,
-        3: 32,
-        4: 26,
-        5: 35,
-        6: 33,
+        1: 14, //
+        2: 12, //
+        3: 32, //
+        4: 26, //
+        5: 27, //cambio
+        6: 33, //
       };
 
       // Mapa de temas MQTT según nivel del Dashboard
