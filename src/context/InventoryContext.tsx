@@ -313,9 +313,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       // MAPEOS POR NIVEL → PIN POR SLOT
       // ================================
       const pinMapByLevel: Record<number, Record<number, number>> = {
-        1: { 1: 14, 2: 12, 3: 32, 4: 26, 5: 35, 6: 33 }, // ESP32 L3
+        1: { 1: 14, 2: 12, 3: 32, 4: 26, 5: 27, 6: 33 }, // ESP32 L3
         2: { 1: 14, 2: 12, 3: 32, 4: 26, 5: 27, 6: 33 }, // ESP32 L2
-        3: { 1: 14, 2: 27, 3: 32, 4: 26, 5: 35, 6: 33 }, // ESP32 L1
+        3: { 1: 14, 2: 27, 3: 32, 4: 26, 5: 27, 6: 33 }, // ESP32 L1
       };
 
       // ================================
@@ -444,7 +444,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       12: 2,
       32: 3,
       26: 4,
-      35: 5,
+      27: 5,
       33: 6,
     };
 
