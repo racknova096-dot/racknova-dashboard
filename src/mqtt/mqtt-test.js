@@ -1,7 +1,7 @@
 import mqtt from "mqtt";
 
 // 🔗 Dirección del broker (usa el puerto WebSocket 8083)
-const client = mqtt.connect("wss://jcc9d611.ala.dedicated.aws.emqxcloud.com:8084/mqtt", {
+const client = mqtt.connect("wss://l006040f.ala.dedicated.aws.emqxcloud.com:8084/mqtt", {
   username: "rack-esp32",   // 👈 Reemplaza aquí
   password: "clave-esp32" // 👈 Reemplaza aquí
 });
