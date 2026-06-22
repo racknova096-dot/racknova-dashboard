@@ -14,6 +14,8 @@ export interface Product {
   sku: string;
   nombre: string;
   cantidad: number;
+  //Nuevo campo financiero
+  costo_proveedor: number;
 }
 
 export interface ProductWithLocation extends Product {
