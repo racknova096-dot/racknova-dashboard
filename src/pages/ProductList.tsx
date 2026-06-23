@@ -3,6 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,10 +40,11 @@ export default function ProductList() {
   const [filterNivel, setFilterNivel] = useState<string>("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(
-    null
-  );
-
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [saleProduct, setSaleProduct] = useState<Product | null>(null);
+  const [cantidadVendida, setCantidadVendida] = useState("1");
+  const [precioVenta, setPrecioVenta] = useState("");
   // 👉 UNA sola llamada a useInventory()
   const { products, locations, deleteProduct } = useInventory();
   const { toast } = useToast();
@@ -66,12 +75,59 @@ export default function ProductList() {
   };
 
   const handleDelete = (product: Product) => {
-    deleteProduct(product.sku);
-    toast({
-      title: "Producto eliminado",
-      description: `${product.nombre} eliminado exitosamente`,
-    });
+  setSaleProduct(product);
+  setCantidadVendida(product.cantidad.toString());
+  setPrecioVenta("");
+  setSaleModalOpen(true);
   };
+  
+ const confirmSale = async () => {
+  if (!saleProduct) return;
+
+  const cantidad = Number(cantidadVendida);
+  const precio = Number(precioVenta);
+
+  if (!cantidad || cantidad <= 0) {
+    toast({
+      title: "Error",
+      description: "La cantidad vendida debe ser válida.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (cantidad > saleProduct.cantidad) {
+    toast({
+      title: "Error",
+      description: "No puedes vender más cantidad de la existente.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (isNaN(precio) || precio < 0) {
+    toast({
+      title: "Error",
+      description: "El precio de venta debe ser válido.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  await deleteProduct(saleProduct.sku, {
+    cantidad_vendida: cantidad,
+    precio_venta: precio,
+  });
+
+  toast({
+    title: "Salida registrada",
+    description: `${saleProduct.nombre} enviado a retiro.`,
+  });
+
+  setSaleModalOpen(false);
+  setSaleProduct(null);
+}; 
+  
   const handleUpdate = async (updatedProduct: Product) => {
     try {
       const response = await fetch(
@@ -266,7 +322,79 @@ export default function ProductList() {
           </div>
         </CardContent>
       </Card>
+      <Dialog open={saleModalOpen} onOpenChange={setSaleModalOpen}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Registrar salida / venta</DialogTitle>
+    </DialogHeader>
 
+    {saleProduct && (
+      <div className="space-y-4">
+        <div>
+          <p className="text-sm text-muted-foreground">Producto</p>
+          <p className="font-medium">{saleProduct.nombre}</p>
+          <p className="text-xs text-muted-foreground">SKU: {saleProduct.sku}</p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="cantidadVendida">Cantidad vendida</Label>
+          <Input
+            id="cantidadVendida"
+            type="number"
+            min="1"
+            max={saleProduct.cantidad}
+            value={cantidadVendida}
+            onChange={(e) => setCantidadVendida(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="precioVenta">Precio venta unitario</Label>
+          <Input
+            id="precioVenta"
+            type="number"
+            min="0"
+            step="0.01"
+            value={precioVenta}
+            onChange={(e) => setPrecioVenta(e.target.value)}
+            placeholder="Ej: 100.00"
+          />
+        </div>
+
+        <div className="rounded-md bg-muted p-3 text-sm">
+          <p>
+            Costo proveedor unitario: $
+            {(saleProduct.costo_proveedor ?? 0).toFixed(2)}
+          </p>
+          <p>
+            Ingreso estimado: $
+            {(Number(precioVenta || 0) * Number(cantidadVendida || 0)).toFixed(2)}
+          </p>
+          <p>
+            Costo estimado: $
+            {((saleProduct.costo_proveedor ?? 0) * Number(cantidadVendida || 0)).toFixed(2)}
+          </p>
+          <p className="font-semibold">
+            Ganancia estimada: $
+            {(
+              Number(precioVenta || 0) * Number(cantidadVendida || 0) -
+              (saleProduct.costo_proveedor ?? 0) * Number(cantidadVendida || 0)
+            ).toFixed(2)}
+          </p>
+        </div>
+      </div>
+    )}
+
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setSaleModalOpen(false)}>
+        Cancelar
+      </Button>
+      <Button onClick={confirmSale}>
+        Confirmar salida
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
       {/* Product Modal */}
       {selectedProduct && selectedLocation && (
         <ProductModal
