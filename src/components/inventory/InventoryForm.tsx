@@ -77,7 +77,15 @@ export function InventoryForm() {
       });
       return;
     }
-
+    const costoProveedorNum = parseFloat(costoProveedor);
+    if (isNaN(costoProveedorNum) || costoProveedorNum < 0) {
+      toast({
+        title: "Error",
+        description: "El costo proveedor debe ser un número válido",
+        variant: "destructive",
+      });
+      return;
+    }
     const locationId = `${selectedRack}-${selectedNivel}-${selectedSlot}`;
     // 🟡 1️⃣ Marcar el slot como "en proceso" (amarillo)
     startProductPlacement(locationId);
@@ -97,6 +105,7 @@ export function InventoryForm() {
       sku,
       nombre,
       cantidad: cantidadNum,
+      costo_proveedor: costoProveedorNum,
     });
 
     // Prepare data for QR generation
@@ -117,6 +126,7 @@ export function InventoryForm() {
     setNombre("");
     setCantidad("");
     setDescripcion("");
+    setCostoProveedor("");
     setSelectedRack("");
     setSelectedNivel("");
     setSelectedSlot("");
@@ -186,6 +196,20 @@ export function InventoryForm() {
                       onChange={(e) => setDescripcion(e.target.value)}
                       placeholder="Descripción adicional del producto..."
                       rows={3}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="costoProveedor">Costo proveedor unitario *</Label>
+                    <Input
+                      id="costoProveedor"
+                      type="number"
+                      value={costoProveedor}
+                      onChange={(e) => setCostoProveedor(e.target.value)}
+                      placeholder="Ej: 60.00"
+                      min="0"
+                      step="0.01"
+                      required
                     />
                   </div>
                 </CardContent>
@@ -302,6 +326,7 @@ export function InventoryForm() {
                   setNombre("");
                   setCantidad("");
                   setDescripcion("");
+                  setCostoProveedor("");
                   setSelectedRack("");
                   setSelectedNivel("");
                   setSelectedSlot("");
