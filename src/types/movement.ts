@@ -9,4 +9,10 @@ export interface MovementRecord {
   timestamp: Date;
   previousQuantity?: number; // For edits
   newQuantity?: number; // For edits
+  //Campos financieros
+  costo_proveedor?: number;
+  precio_venta?: number;
+  ingreso_total?: number;
+  costo_total?: number;
+  ganancia?: number;
 }
