@@ -191,6 +191,9 @@ export default function Tracking() {
                 <TableHead>SKU</TableHead>
                 <TableHead>Cantidad</TableHead>
                 <TableHead>Ubicación</TableHead>
+                <TableHead>Precio venta</TableHead>
+                <TableHead>Costo total</TableHead>
+                <TableHead>Ganancia</TableHead>
                 <TableHead>Usuario</TableHead>
                 <TableHead>Fecha y Hora</TableHead>
               </TableRow>
@@ -226,6 +229,22 @@ export default function Tracking() {
                         <span className="font-medium">{movement.quantity}</span>
                       )}
                     </TableCell>
+
+                     <TableCell>
+                      {movement.precio_venta ? `$${movement.precio_venta.toFixed(2)}` : "-"}
+                      </TableCell>
+
+                    <TableCell>
+                      {movement.costo_total ? `$${movement.costo_total.toFixed(2)}` : "-"}
+                    </TableCell>
+
+                    <TableCell>
+                      {movement.ganancia !== undefined
+                        ? `$${movement.ganancia.toFixed(2)}`
+                        : "-"}
+                      </TableCell>                   
+
+                    
                     <TableCell>
                       <code className="text-xs bg-muted px-2 py-1 rounded">
                         {movement.location}
