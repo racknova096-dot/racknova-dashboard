@@ -8,6 +8,7 @@ import {
   Plus,
   Users,
   Activity,
+  DollarSign,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
@@ -80,6 +81,16 @@ export function Navigation() {
                 Trackeo
               </Button>
             </Link>
+
+           <Link to="/finanzas">
+            <Button
+              variant={isActive("/finanzas") ? "default" : "ghost"}
+              className="flex items-center gap-2"
+            >
+              <DollarSign className="h-4 w-4" />
+              Finanzas
+            </Button>
+          </Link>  
           </div>
           <ThemeToggle />
         </div>
