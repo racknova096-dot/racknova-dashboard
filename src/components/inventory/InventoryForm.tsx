@@ -29,6 +29,7 @@ export function InventoryForm() {
   const [nombre, setNombre] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  const [costoProveedor, setCostoProveedor] = useState("");
   const [selectedRack, setSelectedRack] = useState<string>("");
   const [selectedNivel, setSelectedNivel] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<string>("");
