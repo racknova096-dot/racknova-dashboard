@@ -33,6 +33,7 @@ export function ProductModal({
   const [sku, setSku] = useState("");
   const [nombre, setNombre] = useState("");
   const [cantidad, setCantidad] = useState("");
+  const [costoProveedor, setCostoProveedor] = useState("");
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
   const [lastAddedProduct, setLastAddedProduct] = useState<{
     sku: string;
@@ -53,10 +54,12 @@ export function ProductModal({
       setSku(product.sku);
       setNombre(product.nombre);
       setCantidad(product.cantidad.toString());
+      setCostoProveedor(product.costo_proveedor?.toString() ?? "0");
     } else {
       setSku("");
       setNombre("");
       setCantidad("");
+      setCostoProveedor("");
     }
   }, [mode, product, isOpen]);
 
@@ -70,6 +73,15 @@ export function ProductModal({
       toast({
         title: "Error",
         description: "La cantidad debe ser un número positivo",
+        variant: "destructive",
+      });
+      return;
+    }
+    const costoProveedorNum = parseFloat(costoProveedor);
+    if (isNaN(costoProveedorNum) || costoProveedorNum < 0) {
+      toast({
+        title: "Error",
+        description: "El costo proveedor debe ser un número válido",
         variant: "destructive",
       });
       return;
@@ -98,6 +110,7 @@ export function ProductModal({
           sku,
           nombre,
           cantidad: cantidadNum,
+          costo_proveedor: costoProveedorNum,
         });
 
         setLastAddedProduct({
@@ -130,6 +143,7 @@ export function ProductModal({
           sku,
           nombre,
           cantidad: cantidadNum,
+          costo_proveedor: costoProveedorNum,
         });
         toast({
           title: "Producto actualizado",
@@ -219,6 +233,21 @@ export function ProductModal({
               required
             />
           </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="costoProveedor">Costo proveedor unitario</Label>
+            <Input
+              id="costoProveedor"
+              type="number"
+              value={costoProveedor}
+              onChange={(e) => setCostoProveedor(e.target.value)}
+              placeholder="Ej: 60.00"
+              min="0"
+              step="0.01"
+              required
+            />
+          </div>
+          
 
           <DialogFooter className="flex gap-2">
             {mode === "edit" && (
