@@ -8,6 +8,7 @@ import { Navigation } from "@/components/layout/Navigation";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 // 🧩 Páginas
+import Finanzas from "./pages/Finanzas";
 import Index from "./pages/Index";
 import AddProduct from "./pages/AddProduct";
 import ProductList from "./pages/ProductList";
@@ -45,6 +46,7 @@ const App = () => (
                   <Route path="/add-product" element={<AddProduct />} />
                   <Route path="/products" element={<ProductList />} />
                   <Route path="/tracking" element={<Tracking />} />
+                  <Route path="/finanzas" element={<Finanzas />} />
                   <Route path="/rackview" element={<RackView />} />
                 </Route>
 
