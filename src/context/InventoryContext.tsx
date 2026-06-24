@@ -1,4 +1,3 @@
-import { publishMQTT, onMQTTMessage } from "@/mqtt/mqttClient";
 import { API_URL } from "../config";
 import React, {
   createContext,
@@ -17,6 +16,13 @@ import {
 } from "@/types/inventory";
 import { MovementRecord } from "@/types/movement";
 import { SaleData } from "@/types/finance";
+
+/**
+ * MODO PRUEBA:
+ * true  = NO conecta MQTT y permite registrar sin confirmación física.
+ * false = usa MQTT normal con ESP32.
+ */
+const TEST_MODE_NO_MQTT = true;// MUY IMPORTANTE AJUA
 
 interface InventoryContextType {
   products: Product[];
@@ -69,6 +75,16 @@ const generateLocations = (): Location[] => {
   return locations;
 };
 
+async function sendMQTT(topic: string, message: string) {
+  if (TEST_MODE_NO_MQTT) {
+    console.log("[MODO PRUEBA] MQTT desactivado:", topic, message);
+    return;
+  }
+
+  const { publishMQTT } = await import("@/mqtt/mqttClient");
+  publishMQTT(topic, message);
+}
+
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
@@ -118,7 +134,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const data = await resp.json();
 
         const loaded: Product[] = data.map((p: any) => ({
-          id: String(p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`),
+          id: String(
+            p.id_producto ?? p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`
+          ),
           sku: p.sku,
           nombre: p.nombre,
           cantidad: Number(p.cantidad ?? 0),
@@ -237,7 +255,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const location = locations.find((loc) => loc.id === product.locationId);
 
       if (location && location.status !== "libre") {
-        alert("❌ El slot no está libre. Debes esperar a que quede en verde.");
+        alert("❌ El slot no está libre.");
         return;
       }
 
@@ -250,6 +268,80 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const newProduct: Product = {
+        ...product,
+        costo_proveedor: Number(product.costo_proveedor ?? 0),
+        id: Date.now().toString(),
+      };
+
+      /**
+       * MODO PRUEBA SIN MQTT:
+       * Guarda directo en backend y actualiza la interfaz sin esperar ESP32.
+       */
+      if (TEST_MODE_NO_MQTT) {
+        const [rack, nivelStr, slotStr] = product.locationId.split("-");
+
+        const nuevoProductoBackend = {
+          sku: product.sku,
+          nombre: product.nombre,
+          cantidad: product.cantidad,
+          costo_proveedor: Number(product.costo_proveedor ?? 0),
+          descripcion: "Agregado desde modo prueba RackNova",
+          rack,
+          nivel: parseInt(nivelStr),
+          slot: parseInt(slotStr),
+        };
+
+        const resp = await fetch(`${API_URL}/productos`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(nuevoProductoBackend),
+        });
+
+        if (!resp.ok) {
+          const errorText = await resp.text();
+          console.error("❌ Error guardando producto:", resp.status, errorText);
+          alert("No se pudo guardar el producto en backend.");
+          return;
+        }
+
+        setProducts((prev) => {
+          const updated = [...prev, newProduct];
+          productsRef.current = updated;
+          return updated;
+        });
+
+        setLocations((prev) =>
+          prev.map((loc) =>
+            loc.id === product.locationId ? { ...loc, status: "ocupado" } : loc
+          )
+        );
+
+        await addMovement({
+          action: "Ingreso",
+          productSku: product.sku,
+          productName: product.nombre,
+          quantity: product.cantidad,
+          location: product.locationId,
+          user: "Admin",
+
+          costo_proveedor: Number(product.costo_proveedor ?? 0),
+          precio_venta: 0,
+          ingreso_total: 0,
+          costo_total: 0,
+          ganancia: 0,
+        });
+
+        console.log("[MODO PRUEBA] Producto registrado sin MQTT:", newProduct);
+        return;
+      }
+
+      /**
+       * MODO NORMAL CON MQTT:
+       * Envía comando al ESP32 y espera confirmación física.
+       */
       const [, nivelStr, slotStr] = product.locationId.split("-");
       const nivel = parseInt(nivelStr);
       const slot = parseInt(slotStr);
@@ -274,7 +366,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       if (pin && topicCorrecto) {
         const comando = `p${pin}c`;
-        publishMQTT(topicCorrecto, comando);
+        await sendMQTT(topicCorrecto, comando);
         console.log(`Enviado a ESP32 → ${topicCorrecto} → ${comando}`);
       } else {
         console.warn(
@@ -282,12 +374,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           product.locationId
         );
       }
-
-      const newProduct: Product = {
-        ...product,
-        costo_proveedor: Number(product.costo_proveedor ?? 0),
-        id: Date.now().toString(),
-      };
 
       setPendingProducts((prev) => {
         const updated = [...prev, newProduct];
@@ -345,6 +431,124 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      /**
+       * MODO PRUEBA SIN MQTT:
+       * Registra la salida inmediatamente, sin esperar estado LIBRE del ESP32.
+       */
+      if (TEST_MODE_NO_MQTT) {
+        const cantidadVendida = venta?.cantidad_vendida ?? product.cantidad;
+        const precioVenta = venta?.precio_venta ?? 0;
+        const costoProveedor = product.costo_proveedor ?? 0;
+
+        if (cantidadVendida <= 0) {
+          alert("La cantidad vendida debe ser mayor a 0.");
+          return;
+        }
+
+        if (cantidadVendida > product.cantidad) {
+          alert("No puedes vender más cantidad de la existente.");
+          return;
+        }
+
+        const ingresoTotal = precioVenta * cantidadVendida;
+        const costoTotal = costoProveedor * cantidadVendida;
+        const ganancia = ingresoTotal - costoTotal;
+
+        const salidaResp = await fetch(
+          `${API_URL}/productos/sku/${product.sku}/salida`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              cantidad_vendida: cantidadVendida,
+              precio_venta: precioVenta,
+              costo_proveedor: costoProveedor,
+              ingreso_total: ingresoTotal,
+              costo_total: costoTotal,
+              ganancia,
+            }),
+          }
+        );
+
+        if (salidaResp.status === 404) {
+          console.warn(
+            "⚠️ Endpoint /salida no existe. Usando DELETE anterior sin finanzas completas."
+          );
+
+          await fetch(`${API_URL}/productos/sku/${product.sku}`, {
+            method: "DELETE",
+          });
+        } else if (!salidaResp.ok) {
+          const errorText = await salidaResp.text();
+          console.error(
+            "❌ Error guardando salida financiera:",
+            salidaResp.status,
+            errorText
+          );
+          alert("No se pudo registrar la salida en backend.");
+          return;
+        }
+
+        await addMovement({
+          action: "Egreso",
+          productSku: product.sku,
+          productName: product.nombre,
+          quantity: cantidadVendida,
+          location: product.locationId,
+          user: "Admin",
+
+          costo_proveedor: costoProveedor,
+          precio_venta: precioVenta,
+          ingreso_total: ingresoTotal,
+          costo_total: costoTotal,
+          ganancia,
+        });
+
+        if (cantidadVendida === product.cantidad) {
+          setProducts((prev) => {
+            const updated = prev.filter((p) => p.sku !== sku);
+            productsRef.current = updated;
+            return updated;
+          });
+
+          setLocations((prev) =>
+            prev.map((loc) =>
+              loc.id === product.locationId
+                ? { ...loc, status: "libre" }
+                : loc
+            )
+          );
+        } else {
+          setProducts((prev) => {
+            const updated = prev.map((p) =>
+              p.sku === sku
+                ? { ...p, cantidad: p.cantidad - cantidadVendida }
+                : p
+            );
+
+            productsRef.current = updated;
+            return updated;
+          });
+        }
+
+        console.log("[MODO PRUEBA] Salida registrada sin MQTT:", {
+          sku,
+          cantidadVendida,
+          precioVenta,
+          ingresoTotal,
+          costoTotal,
+          ganancia,
+        });
+
+        return;
+      }
+
+      /**
+       * MODO NORMAL CON MQTT:
+       * Envía QUITANDO al ESP32 y espera confirmación física LIBRE.
+       */
       const [, nivelStr, slotStr] = product.locationId.split("-");
       const nivel = parseInt(nivelStr);
       const slot = parseInt(slotStr);
@@ -366,7 +570,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
       if (pin && topic) {
         const comando = `q${pin}q`;
-        publishMQTT(topic, comando);
+        await sendMQTT(topic, comando);
         console.log(`QUITANDO enviado → ${topic} → ${comando}`);
       } else {
         console.warn("⚠️ No hay pin configurado para este slot:", slot);
@@ -477,6 +681,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     updateSlotStatus(locationId, "ocupado");
 
   const handleMQTT = React.useCallback((topic: string, data: any) => {
+    if (TEST_MODE_NO_MQTT) {
+      return;
+    }
+
     console.log("MQTT recibido:", topic, data);
 
     if (typeof data !== "object" || data === null) return;
@@ -763,9 +971,29 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    onMQTTMessage((topic, data) => {
-      handleMQTT(topic, data);
+    if (TEST_MODE_NO_MQTT) {
+      console.warn("🟡 MODO PRUEBA ACTIVO: MQTT desactivado.");
+      return;
+    }
+
+    let cleanup: void | (() => void);
+    let cancelled = false;
+
+    import("@/mqtt/mqttClient").then(({ onMQTTMessage }) => {
+      if (cancelled) return;
+
+      cleanup = onMQTTMessage((topic: string, data: any) => {
+        handleMQTT(topic, data);
+      }) as unknown as void | (() => void);
     });
+
+    return () => {
+      cancelled = true;
+
+      if (typeof cleanup === "function") {
+        cleanup();
+      }
+    };
   }, [handleMQTT]);
 
   return (
@@ -802,4 +1030,3 @@ export function useInventory() {
 
   return context;
 }
-//modificacion cierra
