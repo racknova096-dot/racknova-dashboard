@@ -22,7 +22,7 @@ import { SaleData } from "@/types/finance";
  * true  = NO conecta MQTT y permite registrar sin confirmación física.
  * false = usa MQTT normal con ESP32.
  */
-const TEST_MODE_NO_MQTT = false;// MUY IMPORTANTE AJUA
+const TEST_MODE_NO_MQTT = true;// MUY IMPORTANTE AJUA
 
 interface InventoryContextType {
   products: Product[];
