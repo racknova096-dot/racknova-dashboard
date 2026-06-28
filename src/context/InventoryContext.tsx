@@ -30,7 +30,7 @@ interface InventoryContextType {
   movements: MovementRecord[];
 
   addProduct: (product: Omit<Product, "id">) => Promise<void>;
-  updateProduct: (id: string, product: Partial<Product>) => void;
+ updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (sku: string, venta?: SaleData) => Promise<void>;
 
   clearRack: (rack: Rack) => void;
