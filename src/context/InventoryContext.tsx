@@ -319,20 +319,24 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           )
         );
 
-        await addMovement({
-          action: "Ingreso",
-          productSku: product.sku,
-          productName: product.nombre,
-          quantity: product.cantidad,
-          location: product.locationId,
-          user: "Admin",
+const costoProveedorIngreso = Number(product.costo_proveedor ?? 0);
+const cantidadIngreso = Number(product.cantidad ?? 0);
+const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
 
-          costo_proveedor: Number(product.costo_proveedor ?? 0),
-          precio_venta: 0,
-          ingreso_total: 0,
-          costo_total: 0,
-          ganancia: 0,
-        });
+await addMovement({
+  action: "Ingreso",
+  productSku: product.sku,
+  productName: product.nombre,
+  quantity: cantidadIngreso,
+  location: product.locationId,
+  user: "Admin",
+
+  costo_proveedor: costoProveedorIngreso,
+  precio_venta: 0,
+  ingreso_total: 0,
+  costo_total: costoTotalIngreso,
+  ganancia: 0,
+});
 
         console.log("[MODO PRUEBA] Producto registrado sin MQTT:", newProduct);
         return;
@@ -839,20 +843,24 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             }
           })();
 
-          addMovement({
-            action: "Ingreso",
-            productSku: pending.sku,
-            productName: pending.nombre,
-            quantity: pending.cantidad,
-            location: slotId,
-            user: "Admin",
+const costoProveedorIngreso = Number(pending.costo_proveedor ?? 0);
+const cantidadIngreso = Number(pending.cantidad ?? 0);
+const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
 
-            costo_proveedor: pending.costo_proveedor ?? 0,
-            precio_venta: 0,
-            ingreso_total: 0,
-            costo_total: 0,
-            ganancia: 0,
-          });
+addMovement({
+  action: "Ingreso",
+  productSku: pending.sku,
+  productName: pending.nombre,
+  quantity: cantidadIngreso,
+  location: slotId,
+  user: "Admin",
+
+  costo_proveedor: costoProveedorIngreso,
+  precio_venta: 0,
+  ingreso_total: 0,
+  costo_total: costoTotalIngreso,
+  ganancia: 0,
+});
 
           console.log("Ingreso registrado correctamente:", slotId);
         }
