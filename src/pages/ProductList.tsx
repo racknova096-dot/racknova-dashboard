@@ -128,19 +128,15 @@ export default function ProductList() {
   setSaleProduct(null);
 }; 
   
-  const getStockBadge = (cantidad: number) => {
-    if (cantidad <= 5)
-      return <Badge variant="destructive">Stock Crítico</Badge>;
-    if (cantidad <= 10) return <Badge variant="secondary">Stock Bajo</Badge>;
-    return (
-      <Badge
-        variant="default"
-        className="bg-slot-free text-slot-free-foreground"
-      >
-        Stock Normal
-      </Badge>
-    );
-  };
+const getStockBadge = (product: Product) => {
+  const stockMinimo = Number(product.stock_minimo ?? 10);
+
+  if (product.cantidad < stockMinimo) {
+    return <Badge variant="destructive">Stock Crítico</Badge>;
+  }
+
+  return <Badge variant="default">Stock Normal</Badge>;
+};
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
@@ -239,7 +235,10 @@ export default function ProductList() {
                   <TableHead>Nombre</TableHead>
                   <TableHead>Cantidad</TableHead>
                   <TableHead>Costo proveedor</TableHead>
+                  <TableHead>Caducidad</TableHead>
+                  <TableHead>Stock crítico</TableHead>
                   <TableHead>Estado</TableHead>
+                  
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -266,10 +265,20 @@ export default function ProductList() {
                       </TableCell>
                       <TableCell>{product.nombre}</TableCell>
                       <TableCell>{product.cantidad}</TableCell>
-                      <TableCell>
-                        ${Number(product.costo_proveedor ?? 0).toFixed(2)}
-                      </TableCell>
-                      <TableCell>{getStockBadge(product.cantidad)}</TableCell>
+
+<TableCell>
+  ${Number(product.costo_proveedor ?? 0).toFixed(2)}
+</TableCell>
+
+<TableCell>
+  {product.caducidad ? product.caducidad.slice(0, 10) : "No aplica"}
+</TableCell>
+
+<TableCell>
+  {Number(product.stock_minimo ?? 10)}
+</TableCell>
+
+<TableCell>{getStockBadge(product)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
