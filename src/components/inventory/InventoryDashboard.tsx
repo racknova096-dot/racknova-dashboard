@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { API_URL } from "@/config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -93,13 +94,52 @@ export function InventoryDashboard() {
     setModalOpen(true);
   };
 
-  const handleClearRack = () => {
+ /* const handleClearRack = () => {
     clearRack(selectedRack);
     toast({
       title: "Rack limpiado",
       description: `Todos los productos del rack ${selectedRack} han sido eliminados`,
     });
-  };
+  };*///Regresar cuando terminemos la prueba 
+
+  const handleClearRack = async () => {
+  const confirmar = window.confirm(
+    "⚠️ Esto borrará TODOS los productos y TODOS los movimientos de la base de datos. ¿Seguro que quieres continuar?"
+  );
+
+  if (!confirmar) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/admin/clear-all?confirm=BORRAR_TODO_RACKNOVA`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText);
+    }
+
+    toast({
+      title: "Base de datos limpiada",
+      description: "Se eliminaron todos los productos y movimientos.",
+    });
+
+    // Recargar para que el dashboard vuelva vacío desde backend
+    window.location.reload();
+  } catch (error) {
+    console.error("❌ Error limpiando base de datos:", error);
+
+    toast({
+      title: "Error",
+      description: "No se pudo limpiar la base de datos.",
+      variant: "destructive",
+    });
+  }
+};
+  
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
