@@ -32,7 +32,7 @@ import { Product, Location, Rack, Nivel } from "@/types/inventory";
 import { Pencil, Trash2, Search, Filter, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
-import { API_URL } from "../config";
+
 
 export default function ProductList() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -128,33 +128,6 @@ export default function ProductList() {
   setSaleProduct(null);
 }; 
   
-  const handleUpdate = async (updatedProduct: Product) => {
-    try {
-      const response = await fetch(
-        `${API_URL}/productos/${updatedProduct.id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updatedProduct),
-        }
-      );
-
-      if (!response.ok) throw new Error("Error al actualizar el producto");
-
-      toast({
-        title: "Producto actualizado",
-        description: `${updatedProduct.nombre} fue actualizado correctamente.`,
-      });
-    } catch (error) {
-      console.error("❌ Error al actualizar:", error);
-      toast({
-        title: "Error",
-        description: "No se pudo actualizar el producto en el servidor.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const getStockBadge = (cantidad: number) => {
     if (cantidad <= 5)
       return <Badge variant="destructive">Stock Crítico</Badge>;
@@ -265,6 +238,7 @@ export default function ProductList() {
                   <TableHead>SKU</TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Cantidad</TableHead>
+                  <TableHead>Costo proveedor</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -291,8 +265,9 @@ export default function ProductList() {
                         {product.sku}
                       </TableCell>
                       <TableCell>{product.nombre}</TableCell>
-                      <TableCell className="font-medium">
-                        {product.cantidad}
+                      <TableCell>{product.cantidad}</TableCell>
+                      <TableCell>
+                        ${Number(product.costo_proveedor ?? 0).toFixed(2)}
                       </TableCell>
                       <TableCell>{getStockBadge(product.cantidad)}</TableCell>
                       <TableCell className="text-right">
