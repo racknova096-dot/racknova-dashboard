@@ -134,15 +134,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const data = await resp.json();
 
         const loaded: Product[] = data.map((p: any) => ({
-          id: String(
-            p.id_producto ?? p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`
-          ),
-          sku: p.sku,
-          nombre: p.nombre,
-          cantidad: Number(p.cantidad ?? 0),
-          costo_proveedor: Number(p.costo_proveedor ?? 0),
-          locationId: `${p.rack}-${p.nivel}-${p.slot}`,
-        }));
+  id: String(
+    p.id_producto ?? p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`
+  ),
+    sku: p.sku,
+    nombre: p.nombre,
+    cantidad: Number(p.cantidad ?? 0),
+    costo_proveedor: Number(p.costo_proveedor ?? 0),
+    caducidad: p.caducidad ?? null,
+    stock_minimo: Number(p.stock_minimo ?? 10),
+    locationId: `${p.rack}-${p.nivel}-${p.slot}`,
+  }));
 
         setProducts(loaded);
         productsRef.current = loaded;
@@ -269,10 +271,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
 
       const newProduct: Product = {
-        ...product,
-        costo_proveedor: Number(product.costo_proveedor ?? 0),
-        id: Date.now().toString(),
-      };
+  ...product,
+  costo_proveedor: Number(product.costo_proveedor ?? 0),
+  caducidad: product.caducidad ?? null,
+  stock_minimo: Number(product.stock_minimo ?? 10),
+  id: Date.now().toString(),
+};
 
       /**
        * MODO PRUEBA SIN MQTT:
@@ -281,16 +285,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (TEST_MODE_NO_MQTT) {
         const [rack, nivelStr, slotStr] = product.locationId.split("-");
 
-        const nuevoProductoBackend = {
-          sku: product.sku,
-          nombre: product.nombre,
-          cantidad: product.cantidad,
-          costo_proveedor: Number(product.costo_proveedor ?? 0),
-          descripcion: "Agregado desde modo prueba RackNova",
-          rack,
-          nivel: parseInt(nivelStr),
-          slot: parseInt(slotStr),
-        };
+const nuevoProductoBackend = {
+  sku: product.sku,
+  nombre: product.nombre,
+  cantidad: product.cantidad,
+  costo_proveedor: Number(product.costo_proveedor ?? 0),
+  caducidad: product.caducidad || null,
+  stock_minimo: Number(product.stock_minimo ?? 10),
+  descripcion: "Agregado desde modo prueba RackNova",
+  rack,
+  nivel: nivelStr,
+  slot: slotStr,
+};
 
         const resp = await fetch(`${API_URL}/productos`, {
           method: "POST",
@@ -392,39 +398,82 @@ await addMovement({
     }
   };
 
-  const updateProduct = (id: string, updates: Partial<Product>) => {
-    const originalProduct = products.find((p) => p.id === id);
+  const updateProduct = async (id: string, updates: Partial<Product>) => {
+  const originalProduct = products.find((p) => p.id === id);
 
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updates } : p))
+  if (!originalProduct) {
+    console.warn("Producto no encontrado para actualizar:", id);
+    return;
+  }
+
+  const updatedProduct: Product = {
+    ...originalProduct,
+    ...updates,
+    costo_proveedor: Number(
+      updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0
+    ),
+    caducidad: updates.caducidad ?? originalProduct.caducidad ?? null,
+    stock_minimo: Number(
+      updates.stock_minimo ?? originalProduct.stock_minimo ?? 10
+    ),
+  };
+
+  const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
+
+  const resp = await fetch(`${API_URL}/productos/${originalProduct.sku}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      sku: updatedProduct.sku,
+      nombre: updatedProduct.nombre,
+      cantidad: updatedProduct.cantidad,
+      descripcion: "Actualizado desde RackNova",
+      rack,
+      nivel: nivelStr,
+      slot: slotStr,
+      costo_proveedor: Number(updatedProduct.costo_proveedor ?? 0),
+      caducidad: updatedProduct.caducidad || null,
+      stock_minimo: Number(updatedProduct.stock_minimo ?? 10),
+    }),
+  });
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    console.error("❌ Error actualizando producto:", resp.status, errorText);
+    throw new Error("No se pudo actualizar el producto en backend.");
+  }
+
+  setProducts((prev) =>
+    prev.map((p) => (p.id === id ? updatedProduct : p))
+  );
+
+  if (updates.cantidad !== undefined) {
+    const location = locations.find(
+      (loc) => loc.id === originalProduct.locationId
     );
 
-    if (originalProduct && updates.cantidad !== undefined) {
-      const location = locations.find(
-        (loc) => loc.id === originalProduct.locationId
-      );
-
-      if (location) {
-        addMovement({
-          action: "Edición",
-          productSku: originalProduct.sku,
-          productName: originalProduct.nombre,
-          quantity: updates.cantidad,
-          location: `${location.rack}-${location.nivel}-${location.slot}`,
-          user: "Admin",
-          previousQuantity: originalProduct.cantidad,
-          newQuantity: updates.cantidad,
-
-          costo_proveedor:
-            updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
-          precio_venta: 0,
-          ingreso_total: 0,
-          costo_total: 0,
-          ganancia: 0,
-        });
-      }
+    if (location) {
+      addMovement({
+        action: "Edición",
+        productSku: originalProduct.sku,
+        productName: originalProduct.nombre,
+        quantity: updates.cantidad,
+        location: `${location.rack}-${location.nivel}-${location.slot}`,
+        user: "Admin",
+        previousQuantity: originalProduct.cantidad,
+        newQuantity: updates.cantidad,
+        costo_proveedor:
+          updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
+        precio_venta: 0,
+        ingreso_total: 0,
+        costo_total: 0,
+        ganancia: 0,
+      });
     }
-  };
+  }
+};
 
   const deleteProduct = async (sku: string, venta?: SaleData) => {
     try {
@@ -665,7 +714,8 @@ await addMovement({
 
   const getTotalProducts = () => products.length;
 
-  const getLowStockProducts = () => products.filter((p) => p.cantidad <= 10);
+  const getLowStockProducts = () =>
+  products.filter((p) => p.cantidad < Number(p.stock_minimo ?? 10));
 
   const getMovements = () =>
     [...movements].sort(
@@ -810,16 +860,18 @@ await addMovement({
             try {
               const [rack, nivelStr, slotStr] = slotId.split("-");
 
-              const nuevoProducto = {
-                sku: pending.sku,
-                nombre: pending.nombre,
-                cantidad: pending.cantidad,
-                costo_proveedor: pending.costo_proveedor ?? 0,
-                descripcion: "Agregado desde interfaz RackNova",
-                rack,
-                nivel: parseInt(nivelStr),
-                slot: parseInt(slotStr),
-              };
+const nuevoProducto = {
+  sku: pending.sku,
+  nombre: pending.nombre,
+  cantidad: pending.cantidad,
+  costo_proveedor: Number(pending.costo_proveedor ?? 0),
+  caducidad: pending.caducidad || null,
+  stock_minimo: Number(pending.stock_minimo ?? 10),
+  descripcion: "Agregado desde interfaz RackNova",
+  rack,
+  nivel: nivelStr,
+  slot: slotStr,
+};
 
               const resp = await fetch(`${API_URL}/productos`, {
                 method: "POST",
