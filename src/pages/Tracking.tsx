@@ -52,6 +52,15 @@ export default function Tracking() {
       minute: "2-digit",
     }).format(new Date(date));
   };
+  const getLocalDateKey = (date: Date) => {
+  const localDate = new Date(date);
+
+  const year = localDate.getFullYear();
+  const month = String(localDate.getMonth() + 1).padStart(2, "0");
+  const day = String(localDate.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
 
   const getActionBadge = (action: MovementRecord["action"]) => {
     const variants: Record<
@@ -93,9 +102,8 @@ export default function Tracking() {
       const matchesAction =
         filterAction === "all" || movement.action === filterAction;
 
-      const matchesDate =
-        !filterDate ||
-        new Date(movement.timestamp).toISOString().split("T")[0] === filterDate;
+const matchesDate =
+  !filterDate || getLocalDateKey(movement.timestamp) === filterDate;
 
       return matchesSearch && matchesAction && matchesDate;
     })
