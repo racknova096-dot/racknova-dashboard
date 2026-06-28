@@ -6,7 +6,7 @@ import mqtt from "mqtt";
  * false = bloquea por completo la conexión MQTT.
  * true  = activa conexión MQTT real con EMQX.
  */
-const MQTT_ENABLED = true;
+const MQTT_ENABLED = false;
 
 const MQTT_URL = "wss://l006040f.ala.dedicated.aws.emqxcloud.com:8084/mqtt";
 
