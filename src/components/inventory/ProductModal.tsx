@@ -6,6 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,9 @@ export function ProductModal({
   const [nombre, setNombre] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [costoProveedor, setCostoProveedor] = useState("");
+  const [saleModalOpen, setSaleModalOpen] = useState(false);
+  const [cantidadVendida, setCantidadVendida] = useState("1");
+  const [precioVenta, setPrecioVenta] = useState("");
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
   const [lastAddedProduct, setLastAddedProduct] = useState<{
     sku: string;
@@ -163,25 +167,68 @@ export function ProductModal({
   };
 
   // 🗑️ Eliminar producto (llama a backend)
-  const handleDelete = async () => {
-    if (!product) return;
+  const handleDelete = () => {
+  if (!product) return;
+  setCantidadVendida("1");
+  setPrecioVenta("");
+  setSaleModalOpen(true);
+};
 
-    try {
-      await deleteProduct(product.sku);
-      toast({
-        title: "Producto eliminado",
-        description: `${product.nombre} eliminado correctamente.`,
-      });
-      onClose();
-    } catch (error) {
-      console.error("❌ Error eliminando producto:", error);
-      toast({
-        title: "Error",
-        description: "No se pudo eliminar el producto en el servidor.",
-        variant: "destructive",
-      });
-    }
-  };
+  const confirmSale = async () => {
+  if (!product) return;
+
+  const cantidad = Number(cantidadVendida);
+  const precio = Number(precioVenta);
+
+  if (!cantidad || cantidad <= 0) {
+    toast({
+      title: "Cantidad inválida",
+      description: "La cantidad a eliminar debe ser mayor a 0.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (cantidad > product.cantidad) {
+    toast({
+      title: "Cantidad inválida",
+      description: "No puedes eliminar más piezas de las existentes.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  if (isNaN(precio) || precio < 0) {
+    toast({
+      title: "Precio inválido",
+      description: "El precio de venta debe ser válido.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  try {
+    await deleteProduct(product.sku, {
+      cantidad_vendida: cantidad,
+      precio_venta: precio,
+    });
+
+    toast({
+      title: "Salida registrada",
+      description: `${product.nombre}: ${cantidad} pieza(s) registradas como salida.`,
+    });
+
+    setSaleModalOpen(false);
+    onClose();
+  } catch (error) {
+    console.error("❌ Error registrando salida:", error);
+    toast({
+      title: "Error",
+      description: "No se pudo registrar la salida.",
+      variant: "destructive",
+    });
+  }
+};
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -268,6 +315,89 @@ export function ProductModal({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <Dialog open={saleModalOpen} onOpenChange={setSaleModalOpen}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Registrar salida / venta</DialogTitle>
+      <DialogDescription>
+        Indica cuántas piezas vas a eliminar y el precio de venta unitario.
+      </DialogDescription>
+    </DialogHeader>
+
+    {product && (
+      <div className="space-y-4">
+        <div className="rounded-md border p-3">
+          <p className="font-semibold">{product.nombre}</p>
+          <p className="text-sm text-muted-foreground">SKU: {product.sku}</p>
+          <p className="text-sm text-muted-foreground">
+            Disponible: {product.cantidad}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Costo proveedor unitario: $
+            {Number(product.costo_proveedor ?? 0).toFixed(2)}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="cantidadVendida">Cantidad a eliminar</Label>
+          <Input
+            id="cantidadVendida"
+            type="number"
+            min="1"
+            max={product.cantidad}
+            value={cantidadVendida}
+            onChange={(e) => setCantidadVendida(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="precioVenta">Precio venta unitario</Label>
+          <Input
+            id="precioVenta"
+            type="number"
+            min="0"
+            step="0.01"
+            value={precioVenta}
+            onChange={(e) => setPrecioVenta(e.target.value)}
+            placeholder="Ej: 120.00"
+          />
+        </div>
+
+        <div className="rounded-md bg-muted p-3 text-sm space-y-1">
+          <p>
+            Ingreso estimado: $
+            {(Number(precioVenta || 0) * Number(cantidadVendida || 0)).toFixed(
+              2
+            )}
+          </p>
+          <p>
+            Costo estimado: $
+            {(
+              Number(product.costo_proveedor ?? 0) *
+              Number(cantidadVendida || 0)
+            ).toFixed(2)}
+          </p>
+          <p className="font-semibold">
+            Ganancia estimada: $
+            {(
+              Number(precioVenta || 0) * Number(cantidadVendida || 0) -
+              Number(product.costo_proveedor ?? 0) *
+                Number(cantidadVendida || 0)
+            ).toFixed(2)}
+          </p>
+        </div>
+      </div>
+    )}
+
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setSaleModalOpen(false)}>
+        Cancelar
+      </Button>
+      <Button onClick={confirmSale}>Confirmar salida</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
 
       {/* 🔳 Confirmación QR */}
       <QRConfirmationModal
