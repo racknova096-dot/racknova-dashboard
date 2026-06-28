@@ -29,6 +29,9 @@ export function InventoryForm() {
   const [cantidad, setCantidad] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [costoProveedor, setCostoProveedor] = useState("");
+  const [caducidad, setCaducidad] = useState("");
+const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
+const [stockMinimo, setStockMinimo] = useState("");
   const [selectedRack, setSelectedRack] = useState<string>("");
   const [selectedNivel, setSelectedNivel] = useState<string>("");
   const [selectedSlot, setSelectedSlot] = useState<string>("");
@@ -84,6 +87,19 @@ export function InventoryForm() {
       });
       return;
     }
+    const stockMinimoNum =
+  stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
+
+if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
+  toast({
+    title: "Error",
+    description: "El stock crítico debe ser un número mayor a 0.",
+    variant: "destructive",
+  });
+  return;
+}
+
+const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
     const locationId = `${selectedRack}-${selectedNivel}-${selectedSlot}`;
    
 
@@ -93,6 +109,8 @@ export function InventoryForm() {
       nombre,
       cantidad: cantidadNum,
       costo_proveedor: costoProveedorNum,
+      caducidad: caducidadValue,
+  stock_minimo: stockMinimoNum,
     });
 
     // Prepare data for QR generation
@@ -114,6 +132,9 @@ export function InventoryForm() {
     setCantidad("");
     setDescripcion("");
     setCostoProveedor("");
+    setCaducidad("");
+setCaducidadNoAplica(true);
+setStockMinimo("");
     setSelectedRack("");
     setSelectedNivel("");
     setSelectedSlot("");
@@ -199,6 +220,50 @@ export function InventoryForm() {
                       required
                     />
                   </div>
+
+                  <div className="space-y-2">
+  <Label htmlFor="caducidad">Caducidad</Label>
+
+  <div className="flex items-center gap-2">
+    <input
+      id="caducidadNoAplica"
+      type="checkbox"
+      checked={caducidadNoAplica}
+      onChange={(e) => {
+        setCaducidadNoAplica(e.target.checked);
+        if (e.target.checked) setCaducidad("");
+      }}
+    />
+    <Label htmlFor="caducidadNoAplica" className="text-sm font-normal">
+      No aplica
+    </Label>
+  </div>
+
+  <Input
+    id="caducidad"
+    type="date"
+    value={caducidad}
+    onChange={(e) => setCaducidad(e.target.value)}
+    disabled={caducidadNoAplica}
+  />
+</div>
+
+<div className="space-y-2">
+  <Label htmlFor="stockMinimo">Stock crítico personalizado</Label>
+  <Input
+    id="stockMinimo"
+    type="number"
+    value={stockMinimo}
+    onChange={(e) => setStockMinimo(e.target.value)}
+    placeholder="Opcional. Por defecto: 10"
+    min="1"
+  />
+  <p className="text-xs text-muted-foreground">
+    Si lo dejas vacío, el sistema usará 10. El producto será crítico cuando la
+    cantidad sea menor a este valor.
+  </p>
+</div>
+                  
                 </CardContent>
               </Card>
 
@@ -314,6 +379,9 @@ export function InventoryForm() {
                   setCantidad("");
                   setDescripcion("");
                   setCostoProveedor("");
+                  setCaducidad("");
+                  setCaducidadNoAplica(true);
+                  setStockMinimo("");
                   setSelectedRack("");
                   setSelectedNivel("");
                   setSelectedSlot("");
