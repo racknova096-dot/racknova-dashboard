@@ -22,7 +22,6 @@ import { Rack, Nivel } from "@/types/inventory";
 import { useToast } from "@/hooks/use-toast";
 import { QRConfirmationModal } from "./QRConfirmationModal";
 import { Package, Plus, MapPin } from "lucide-react";
-import { publishMQTT } from "@/mqtt/mqttClient"; // 👈 Añadir esto
 
 export function InventoryForm() {
   const [sku, setSku] = useState("");
@@ -43,8 +42,7 @@ export function InventoryForm() {
     timestamp: Date;
   } | null>(null);
 
-  const { locations, addProduct, getProductByLocation, startProductPlacement } =
-    useInventory();
+  const { locations, addProduct, getProductByLocation } = useInventory();
   const { toast } = useToast();
 
   // Get available slots for selected rack and nivel
@@ -87,18 +85,7 @@ export function InventoryForm() {
       return;
     }
     const locationId = `${selectedRack}-${selectedNivel}-${selectedSlot}`;
-    // 🟡 1️⃣ Marcar el slot como "en proceso" (amarillo)
-    startProductPlacement(locationId);
-
-    // 🧠 2️⃣ Enviar el mensaje MQTT al ESP32
-    try {
-      const nivelTopic = `L${selectedNivel}`; // ejemplo: L1, L2, L3
-      const pin = parseInt(selectedSlot); // ejemplo: 14, 27, 32...
-      publishMQTT(`Entrada/${nivelTopic}`, `p${pin}c`);
-      console.log(`📡 Enviado MQTT: Entrada/${nivelTopic} → p${pin}c`);
-    } catch (err) {
-      console.error("❌ Error al enviar MQTT:", err);
-    }
+   
 
     addProduct({
       locationId,
