@@ -35,6 +35,9 @@ export function ProductModal({
   const [nombre, setNombre] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [costoProveedor, setCostoProveedor] = useState("");
+  const [caducidad, setCaducidad] = useState("");
+  const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
+  const [stockMinimo, setStockMinimo] = useState("");  
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [cantidadVendida, setCantidadVendida] = useState("1");
   const [precioVenta, setPrecioVenta] = useState("");
@@ -59,11 +62,17 @@ export function ProductModal({
       setNombre(product.nombre);
       setCantidad(product.cantidad.toString());
       setCostoProveedor(product.costo_proveedor?.toString() ?? "0");
+      setCaducidad(product.caducidad ? product.caducidad.slice(0, 10) : "");
+      setCaducidadNoAplica(!product.caducidad);
+      setStockMinimo(product.stock_minimo?.toString() ?? "");
     } else {
       setSku("");
       setNombre("");
       setCantidad("");
       setCostoProveedor("");
+      setCaducidad("");
+      setCaducidadNoAplica(true);
+      setStockMinimo("");
     }
   }, [mode, product, isOpen]);
 
@@ -90,6 +99,20 @@ export function ProductModal({
       });
       return;
     }
+const stockMinimoNum =
+  stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
+
+if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
+  toast({
+    title: "Error",
+    description: "El stock crítico debe ser un número mayor a 0.",
+    variant: "destructive",
+  });
+  return;
+}
+
+const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
+    
 
     // 🟩 AGREGAR
     // 🟩 AGREGAR
@@ -115,7 +138,9 @@ export function ProductModal({
           nombre,
           cantidad: cantidadNum,
           costo_proveedor: costoProveedorNum,
-        });
+          caducidad: caducidadValue,
+            stock_minimo: stockMinimoNum,
+          });
 
         setLastAddedProduct({
           sku,
@@ -143,12 +168,14 @@ export function ProductModal({
     // 🟨 EDITAR
     else if (mode === "edit" && product) {
       try {
-        updateProduct(product.id, {
-          sku,
-          nombre,
-          cantidad: cantidadNum,
-          costo_proveedor: costoProveedorNum,
-        });
+        await updateProduct(product.id, {
+  sku,
+  nombre,
+  cantidad: cantidadNum,
+  costo_proveedor: costoProveedorNum,
+  caducidad: caducidadValue,
+  stock_minimo: stockMinimoNum,
+});
         toast({
           title: "Producto actualizado",
           description: `${nombre} actualizado exitosamente`,
@@ -294,6 +321,49 @@ export function ProductModal({
               required
             />
           </div>
+
+          <div className="space-y-2">
+  <Label htmlFor="caducidad">Caducidad</Label>
+
+  <div className="flex items-center gap-2">
+    <input
+      id="caducidadNoAplica"
+      type="checkbox"
+      checked={caducidadNoAplica}
+      onChange={(e) => {
+        setCaducidadNoAplica(e.target.checked);
+        if (e.target.checked) setCaducidad("");
+      }}
+    />
+    <Label htmlFor="caducidadNoAplica" className="text-sm font-normal">
+      No aplica
+    </Label>
+  </div>
+
+  <Input
+    id="caducidad"
+    type="date"
+    value={caducidad}
+    onChange={(e) => setCaducidad(e.target.value)}
+    disabled={caducidadNoAplica}
+  />
+</div>
+
+<div className="space-y-2">
+  <Label htmlFor="stockMinimo">Stock crítico personalizado</Label>
+  <Input
+    id="stockMinimo"
+    type="number"
+    value={stockMinimo}
+    onChange={(e) => setStockMinimo(e.target.value)}
+    placeholder="Opcional. Por defecto: 10"
+    min="1"
+  />
+  <p className="text-xs text-muted-foreground">
+    Si lo dejas vacío, el sistema usará 10. El producto será crítico cuando la
+    cantidad sea menor a este valor.
+  </p>
+</div>
           
 
           <DialogFooter className="flex gap-2">
