@@ -16,6 +16,9 @@ export interface Product {
   cantidad: number;
   //Nuevo campo financiero
   costo_proveedor: number;
+  // Nuevos campos
+  caducidad?: string | null;
+  stock_minimo?: number;
 }
 
 export interface ProductWithLocation extends Product {
