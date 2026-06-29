@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
 // 🧩 Páginas
 import Finanzas from "./pages/Finanzas";
+import Reportes from "./pages/Reportes";
 import Index from "./pages/Index";
 import AddProduct from "./pages/AddProduct";
 import ProductList from "./pages/ProductList";
@@ -47,6 +48,7 @@ const App = () => (
                   <Route path="/products" element={<ProductList />} />
                   <Route path="/tracking" element={<Tracking />} />
                   <Route path="/finanzas" element={<Finanzas />} />
+                  <Route path="/reportes" element={<Reportes />} />
                   <Route path="/rackview" element={<RackView />} />
                 </Route>
 
