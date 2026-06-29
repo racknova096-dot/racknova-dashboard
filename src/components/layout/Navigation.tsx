@@ -9,6 +9,7 @@ import {
   Users,
   Activity,
   DollarSign,
+  BarChart3,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
@@ -91,6 +92,16 @@ export function Navigation() {
               Finanzas
             </Button>
           </Link>  
+
+          <Link to="/reportes">
+          <Button
+            variant={isActive("/reportes") ? "default" : "ghost"}
+            className="flex items-center gap-2"
+          >
+            <BarChart3 className="h-4 w-4" />
+            Reportes
+          </Button>
+        </Link>      
           </div>
           <ThemeToggle />
         </div>
