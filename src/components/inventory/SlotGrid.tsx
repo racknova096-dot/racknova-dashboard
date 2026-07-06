@@ -53,18 +53,44 @@ export function SlotGrid({ rack, nivel, onSlotClick }: SlotGridProps) {
 
           // 🎨 Mantiene tu mismo esquema de colores pero dinámico
           const getSlotStyles = () => {
-            switch (status) {
-              case "libre":
-                return "bg-gradient-to-br from-green-100 to-green-200 text-green-800 border-green-300 hover:from-green-200 hover:to-green-300";
-              case "en_proceso":
-              case "colocando": // por si el ESP32 manda "COLOCANDO"
-                return "bg-gradient-to-br from-yellow-100 to-yellow-200 text-yellow-800 border-yellow-300 hover:from-yellow-200 hover:to-yellow-300 animate-pulse";
-              case "ocupado":
-                return "bg-gradient-to-br from-red-100 to-red-200 text-red-800 border-red-300 hover:from-red-200 hover:to-red-300";
-              default:
-                return "bg-gradient-to-br from-gray-100 to-gray-200 text-gray-800 border-gray-300";
-            }
-          };
+  switch (status) {
+    case "libre":
+      return [
+        "bg-gradient-slot-free text-slot-free-foreground border-transparent",
+        "shadow-sm shadow-green-500/20",
+        "hover:shadow-lg hover:shadow-green-500/30",
+      ].join(" ");
+
+    case "en_proceso":
+    case "colocando":
+      return [
+        "bg-gradient-slot-placing text-slot-placing-foreground border-transparent",
+        "shadow-sm shadow-yellow-500/25 animate-pulse",
+        "hover:shadow-lg hover:shadow-yellow-500/35",
+      ].join(" ");
+
+    case "quitando":
+    case "retiro":
+      return [
+        "bg-gradient-slot-removing text-slot-removing-foreground border-transparent",
+        "shadow-sm shadow-purple-500/25 animate-pulse",
+        "hover:shadow-lg hover:shadow-purple-500/35",
+      ].join(" ");
+
+    case "ocupado":
+      return [
+        "bg-gradient-slot-occupied text-slot-occupied-foreground border-transparent",
+        "shadow-sm shadow-red-500/25",
+        "hover:shadow-lg hover:shadow-red-500/35",
+      ].join(" ");
+
+    default:
+      return [
+        "bg-secondary text-secondary-foreground border-border",
+        "hover:bg-muted",
+      ].join(" ");
+  }
+};
 
           return (
             <Tooltip key={location.id}>
@@ -73,11 +99,7 @@ export function SlotGrid({ rack, nivel, onSlotClick }: SlotGridProps) {
                   variant="outline"
                   size="sm"
                   onClick={() => onSlotClick(location, hasProduct)}
-                  className={`
-                    h-12 w-full flex flex-col items-center justify-center text-xs font-medium
-                    transition-all duration-300 hover:scale-105 hover:shadow-md
-                    ${getSlotStyles()}
-                  `}
+                  className={`h-14 w-full flex flex-col items-center justify-center rounded-xl text-xs font-bold tracking-wide transition-all duration-300 hover:scale-[1.03] border ${getSlotStyles()}`}
                 >
                   <span className="text-[10px] font-bold">{location.slot}</span>
                   {hasProduct && (
