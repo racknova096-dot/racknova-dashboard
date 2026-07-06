@@ -144,19 +144,19 @@ const getStockBadge = (product: Product) => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <Link to="/">
-            <Button variant="outline" size="sm">
+            <But  ton variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver al Dashboard
             </Button>
           </Link>
-          <h1 className="text-3xl font-bold text-foreground">
+          <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
             Listado de Productos
           </h1>
         </div>
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="racknova-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
@@ -216,7 +216,7 @@ const getStockBadge = (product: Product) => {
       </Card>
 
       {/* Products Table */}
-      <Card>
+      <Card className="racknova-card">
         <CardHeader>
           <CardTitle>
             Productos ({filteredProducts.length} de{" "}
