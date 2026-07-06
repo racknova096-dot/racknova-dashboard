@@ -146,7 +146,7 @@ export function InventoryDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-foreground">
+          <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
             Inventario por Rack y Nivel
           </h1>
 
@@ -213,7 +213,7 @@ export function InventoryDashboard() {
 
       {/* Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
+       <Card className="racknova-card racknova-metric-info">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Total de Productos
@@ -228,7 +228,7 @@ export function InventoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="racknova-card racknova-metric-warning">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Stock Bajo</CardTitle>
             <AlertTriangle className="h-4 w-4 text-muted-foreground" />
@@ -243,7 +243,7 @@ export function InventoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="racknova-card racknova-metric-success">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
               Slots Ocupados
@@ -258,7 +258,7 @@ export function InventoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="racknova-card racknova-metric-info">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Rack Actual</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
@@ -276,7 +276,7 @@ export function InventoryDashboard() {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <CardTitle>Rack {selectedRack} - Todos los Niveles</CardTitle>
+           <Card className="racknova-card">
             <div className="space-y-2">
               <label className="text-sm font-medium">Seleccionar Rack</label>
               <Select
