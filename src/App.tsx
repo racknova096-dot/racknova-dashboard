@@ -44,6 +44,7 @@ const App = () => (
                 {/* 🔐 Grupo de rutas protegidas */}
                 <Route element={<ProtectedLayout />}>
                   <Route path="/" element={<Index />} />
+                  <Route path="/add" element={<AddProduct />} />
                   <Route path="/add-product" element={<AddProduct />} />
                   <Route path="/products" element={<ProductList />} />
                   <Route path="/tracking" element={<Tracking />} />
