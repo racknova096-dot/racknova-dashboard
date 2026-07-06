@@ -250,7 +250,7 @@ export default function Reportes() {
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
             <BarChart3 className="h-8 w-8" />
             Reportes de Inventario
           </h1>
@@ -260,7 +260,7 @@ export default function Reportes() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card>
+          <Card className="racknova-card racknova-metric-success">
             <CardHeader>
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
@@ -272,7 +272,7 @@ export default function Reportes() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="racknova-card racknova-metric-warning">
             <CardHeader>
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <TrendingDown className="h-4 w-4" />
@@ -284,7 +284,7 @@ export default function Reportes() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="racknova-card racknova-metric-warning">
             <CardHeader>
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <CalendarClock className="h-4 w-4" />
@@ -296,7 +296,7 @@ export default function Reportes() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="racknova-card racknova-metric-danger">
             <CardHeader>
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4" />
@@ -308,7 +308,7 @@ export default function Reportes() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="racknova-card racknova-metric-warning">
             <CardHeader>
               <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                 <Boxes className="h-4 w-4" />
