@@ -2,116 +2,337 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/*
+  RackNova Design System
+  - Modo claro: blanco como base principal.
+  - Modo oscuro: azul profundo como base.
+  - Colores semánticos para inventario, finanzas, alertas y reportes.
+  - Todos los colores están en HSL.
 */
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 220 13% 13%;
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 13% 13%;
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 13% 13%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 220 13% 13%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 220 13% 13%;
+    --secondary: 214 32% 94%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
+    --muted: 214 32% 94%;
+    --muted-foreground: 215 16% 42%;
 
-    --accent: 163 94% 93%;
-    --accent-foreground: 220 13% 13%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 220 13% 13%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 221 83% 53%;
 
-    /* Inventory specific colors */
-    --slot-free: 142 76% 36%;
-    --slot-free-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+
+    --profit: 160 84% 39%;
+    --profit-foreground: 0 0% 100%;
+
+    --cost: 0 84% 60%;
+    --cost-foreground: 0 0% 100%;
+
+    --chart-blue: 221 83% 53%;
+    --chart-green: 142 71% 45%;
+    --chart-orange: 24 95% 53%;
+    --chart-red: 0 84% 60%;
+    --chart-purple: 262 83% 58%;
+    --chart-cyan: 199 89% 48%;
+
+    --slot-free: 142 71% 45%;
+    --slot-free-foreground: 0 0% 100%;
+
+    --slot-placing: 38 92% 50%;
+    --slot-placing-foreground: 222 47% 11%;
+
     --slot-occupied: 0 84% 60%;
-    --slot-occupied-foreground: 0 0% 98%;
-    --slot-hover: 220 13% 25%;
-    
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(220 13% 13%), hsl(220 13% 25%));
-    --gradient-slot-free: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 76% 42%));
-    --gradient-slot-occupied: linear-gradient(135deg, hsl(0 84% 60%), hsl(0 84% 66%));
+    --slot-occupied-foreground: 0 0% 100%;
 
-    --radius: 0.5rem;
+    --slot-removing: 262 83% 58%;
+    --slot-removing-foreground: 0 0% 100%;
 
-    --sidebar-background: 0 0% 98%;
+    --slot-hover: 221 83% 53%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(221 83% 53%),
+      hsl(199 89% 48%)
+    );
 
-    --sidebar-primary: 240 5.9% 10%;
+    --gradient-dashboard: radial-gradient(
+        circle at top left,
+        hsl(199 89% 48% / 0.12),
+        transparent 32%
+      ),
+      radial-gradient(
+        circle at top right,
+        hsl(262 83% 58% / 0.1),
+        transparent 30%
+      ),
+      linear-gradient(180deg, hsl(210 40% 98%), hsl(214 32% 96%));
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    --gradient-card: linear-gradient(
+      180deg,
+      hsl(0 0% 100%),
+      hsl(210 40% 99%)
+    );
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    --gradient-slot-free: linear-gradient(
+      135deg,
+      hsl(142 71% 45%),
+      hsl(160 84% 39%)
+    );
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --gradient-slot-placing: linear-gradient(
+      135deg,
+      hsl(38 92% 50%),
+      hsl(24 95% 53%)
+    );
 
-    --sidebar-border: 220 13% 91%;
+    --gradient-slot-occupied: linear-gradient(
+      135deg,
+      hsl(0 84% 60%),
+      hsl(340 82% 52%)
+    );
 
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --gradient-slot-removing: linear-gradient(
+      135deg,
+      hsl(262 83% 58%),
+      hsl(221 83% 53%)
+    );
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 214 32% 94%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 88%;
+    --sidebar-ring: 221 83% 53%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 222 84% 5%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 222 58% 9%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 222 58% 9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 199 89% 58%;
+    --primary-foreground: 222 84% 5%;
 
-    --secondary: 217.2 32.6% 17.5%;
+    --secondary: 221 39% 16%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 221 39% 16%;
+    --muted-foreground: 215 20% 72%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 221 83% 60%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 221 39% 20%;
+    --input: 221 39% 20%;
+    --ring: 199 89% 58%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 222 84% 5%;
+
+    --info: 199 89% 58%;
+    --info-foreground: 222 84% 5%;
+
+    --profit: 160 84% 45%;
+    --profit-foreground: 0 0% 100%;
+
+    --cost: 0 72% 55%;
+    --cost-foreground: 0 0% 100%;
+
+    --chart-blue: 199 89% 58%;
+    --chart-green: 142 71% 50%;
+    --chart-orange: 38 92% 55%;
+    --chart-red: 0 72% 55%;
+    --chart-purple: 262 83% 68%;
+    --chart-cyan: 187 92% 60%;
+
+    --slot-free: 142 71% 45%;
+    --slot-free-foreground: 0 0% 100%;
+
+    --slot-placing: 38 92% 55%;
+    --slot-placing-foreground: 222 84% 5%;
+
+    --slot-occupied: 0 72% 55%;
+    --slot-occupied-foreground: 0 0% 100%;
+
+    --slot-removing: 262 83% 68%;
+    --slot-removing-foreground: 0 0% 100%;
+
+    --slot-hover: 199 89% 58%;
+
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(221 83% 60%),
+      hsl(199 89% 58%)
+    );
+
+    --gradient-dashboard: radial-gradient(
+        circle at top left,
+        hsl(199 89% 58% / 0.22),
+        transparent 30%
+      ),
+      radial-gradient(
+        circle at top right,
+        hsl(262 83% 68% / 0.16),
+        transparent 32%
+      ),
+      linear-gradient(180deg, hsl(222 84% 5%), hsl(222 64% 8%));
+
+    --gradient-card: linear-gradient(
+      180deg,
+      hsl(222 58% 10%),
+      hsl(222 58% 8%)
+    );
+
+    --gradient-slot-free: linear-gradient(
+      135deg,
+      hsl(142 71% 40%),
+      hsl(160 84% 35%)
+    );
+
+    --gradient-slot-placing: linear-gradient(
+      135deg,
+      hsl(38 92% 55%),
+      hsl(24 95% 53%)
+    );
+
+    --gradient-slot-occupied: linear-gradient(
+      135deg,
+      hsl(0 72% 55%),
+      hsl(340 82% 52%)
+    );
+
+    --gradient-slot-removing: linear-gradient(
+      135deg,
+      hsl(262 83% 68%),
+      hsl(221 83% 60%)
+    );
+
+    --sidebar-background: 222 58% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 199 89% 58%;
+    --sidebar-primary-foreground: 222 84% 5%;
+    --sidebar-accent: 221 39% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 221 39% 20%;
+    --sidebar-ring: 199 89% 58%;
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image: var(--gradient-dashboard);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .racknova-card {
+    background-image: var(--gradient-card);
+    @apply border border-border/80 shadow-sm transition-all duration-300;
+  }
+
+  .racknova-card:hover {
+    @apply shadow-lg -translate-y-0.5;
+  }
+
+  .racknova-page-title {
+    @apply bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent;
+  }
+
+  .racknova-soft-panel {
+    @apply rounded-xl border border-border/80 bg-card/80 shadow-sm backdrop-blur;
+  }
+
+  .racknova-metric-success {
+    @apply border-l-4;
+    border-left-color: hsl(var(--success));
+  }
+
+  .racknova-metric-warning {
+    @apply border-l-4;
+    border-left-color: hsl(var(--warning));
+  }
+
+  .racknova-metric-info {
+    @apply border-l-4;
+    border-left-color: hsl(var(--info));
+  }
+
+  .racknova-metric-danger {
+    @apply border-l-4;
+    border-left-color: hsl(var(--destructive));
+  }
+
+  .racknova-table-header {
+    background: hsl(var(--secondary));
+  }
+
+  .dark .racknova-table-header {
+    background: hsl(var(--secondary) / 0.72);
+  }
+
+  .recharts-cartesian-grid line {
+    stroke: hsl(var(--border));
+  }
+
+  .recharts-text {
+    fill: hsl(var(--muted-foreground));
+  }
+
+  .recharts-default-tooltip {
+    background: hsl(var(--popover)) !important;
+    border: 1px solid hsl(var(--border)) !important;
+    border-radius: 0.75rem !important;
+    color: hsl(var(--popover-foreground)) !important;
+    box-shadow: 0 18px 45px hsl(222 47% 11% / 0.18) !important;
   }
 }
