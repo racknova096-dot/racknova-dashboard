@@ -272,31 +272,31 @@ export default function Finanzas() {
                 <Legend />
 
                 <Line
-                  type="monotone"
-                  dataKey="ingresos"
-                  name="Ingresos"
-                  stroke="#22c55e"
-                  strokeWidth={3}
-                  dot={{ r: 4 }}
-                />
+  type="monotone"
+  dataKey="ingresos"
+  name="Ingresos"
+  stroke="hsl(var(--chart-green))"
+  strokeWidth={3}
+  dot={{ r: 4 }}
+/>
 
-                <Line
-                  type="monotone"
-                  dataKey="costos"
-                  name="Costos"
-                  stroke="#ef4444"
-                  strokeWidth={3}
-                  dot={{ r: 4 }}
-                />
+<Line
+  type="monotone"
+  dataKey="costos"
+  name="Costos"
+  stroke="hsl(var(--chart-red))"
+  strokeWidth={3}
+  dot={{ r: 4 }}
+/>
 
-                <Line
-                  type="monotone"
-                  dataKey="ganancia"
-                  name="Ganancia"
-                  stroke="#3b82f6"
-                  strokeWidth={3}
-                  dot={{ r: 4 }}
-                />
+<Line
+  type="monotone"
+  dataKey="ganancia"
+  name="Ganancia"
+  stroke="hsl(var(--chart-blue))"
+  strokeWidth={3}
+  dot={{ r: 4 }}
+/>
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
