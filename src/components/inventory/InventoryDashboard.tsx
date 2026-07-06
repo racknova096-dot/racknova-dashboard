@@ -273,12 +273,15 @@ export function InventoryDashboard() {
       </div>
 
       {/* Rack Selector */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-           <Card className="racknova-card">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Seleccionar Rack</label>
+{/* Rack Selector */}
+
+<Card className="racknova-card">
+  <CardHeader>
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <CardTitle>Rack {selectedRack} - Todos los Niveles</CardTitle>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Seleccionar Rack</label>
               <Select
                 value={selectedRack}
                 onValueChange={(value) => setSelectedRack(value as Rack)}
