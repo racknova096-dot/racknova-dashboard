@@ -117,7 +117,7 @@ const matchesDate =
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
+          <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
             <Activity className="h-8 w-8" />
             Historial de Movimientos
           </h1>
@@ -126,7 +126,7 @@ const matchesDate =
           </p>
         </div>
 
-        <Card>
+        <Card className="racknova-card">
           <CardHeader>
             <CardTitle>Filtros</CardTitle>
           </CardHeader>
@@ -172,7 +172,7 @@ const matchesDate =
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="racknova-card">
           <CardHeader>
             <CardTitle>
               Mostrando {filteredMovements.length} de {movements.length}{" "}
