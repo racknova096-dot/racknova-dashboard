@@ -1050,7 +1050,7 @@ export default function Reportes() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lightbulb className="h-5 w-5" />
-              RackNova iA - Recomendaciones inteligentes
+              RackNova IA - Recomendaciones inteligentes
             </CardTitle>
 
             <p className="text-sm text-muted-foreground">
