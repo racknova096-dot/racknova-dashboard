@@ -1,5 +1,10 @@
 import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,14 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useInventory } from "@/context/InventoryContext";
-import { Rack, Nivel } from "@/types/inventory";
 import { useToast } from "@/hooks/use-toast";
 import { QRConfirmationModal } from "./QRConfirmationModal";
 import { Package, Plus, MapPin } from "lucide-react";
@@ -29,13 +27,15 @@ export function InventoryForm() {
   const [cantidad, setCantidad] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [costoProveedor, setCostoProveedor] = useState("");
+  const [precioVentaSugerido, setPrecioVentaSugerido] = useState("");
   const [caducidad, setCaducidad] = useState("");
-const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
-const [stockMinimo, setStockMinimo] = useState("");
-  const [selectedRack, setSelectedRack] = useState<string>("");
-  const [selectedNivel, setSelectedNivel] = useState<string>("");
-  const [selectedSlot, setSelectedSlot] = useState<string>("");
+  const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
+  const [stockMinimo, setStockMinimo] = useState("");
+  const [selectedRack, setSelectedRack] = useState("");
+  const [selectedNivel, setSelectedNivel] = useState("");
+  const [selectedSlot, setSelectedSlot] = useState("");
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
+
   const [lastAddedProduct, setLastAddedProduct] = useState<{
     sku: string;
     nombre: string;
@@ -48,14 +48,31 @@ const [stockMinimo, setStockMinimo] = useState("");
   const { locations, addProduct, getProductByLocation } = useInventory();
   const { toast } = useToast();
 
-  // Get available slots for selected rack and nivel
   const availableSlots = locations.filter((loc) => {
     if (!selectedRack || !selectedNivel) return false;
+
     const isCorrectLocation =
       loc.rack === selectedRack && loc.nivel.toString() === selectedNivel;
+
     const hasProduct = getProductByLocation(loc.id);
+
     return isCorrectLocation && !hasProduct;
   });
+
+  const resetForm = () => {
+    setSku("");
+    setNombre("");
+    setCantidad("");
+    setDescripcion("");
+    setCostoProveedor("");
+    setPrecioVentaSugerido("");
+    setCaducidad("");
+    setCaducidadNoAplica(true);
+    setStockMinimo("");
+    setSelectedRack("");
+    setSelectedNivel("");
+    setSelectedSlot("");
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,42 +83,62 @@ const [stockMinimo, setStockMinimo] = useState("");
         description: "Debe seleccionar rack, nivel y slot",
         variant: "destructive",
       });
+
       return;
     }
 
     const cantidadNum = parseInt(cantidad);
+
     if (isNaN(cantidadNum) || cantidadNum <= 0) {
       toast({
         title: "Error",
         description: "La cantidad debe ser un número positivo",
         variant: "destructive",
       });
+
       return;
     }
+
     const costoProveedorNum = parseFloat(costoProveedor);
+
     if (isNaN(costoProveedorNum) || costoProveedorNum < 0) {
       toast({
         title: "Error",
         description: "El costo proveedor debe ser un número válido",
         variant: "destructive",
       });
+
       return;
     }
+
+    const precioVentaSugeridoNum = parseFloat(precioVentaSugerido);
+
+    if (isNaN(precioVentaSugeridoNum) || precioVentaSugeridoNum < 0) {
+      toast({
+        title: "Error",
+        description: "El precio de venta sugerido debe ser un número válido",
+        variant: "destructive",
+      });
+
+      return;
+    }
+
     const stockMinimoNum =
-  stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
+      stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
 
-if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
-  toast({
-    title: "Error",
-    description: "El stock crítico debe ser un número mayor a 0.",
-    variant: "destructive",
-  });
-  return;
-}
+    if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
+      toast({
+        title: "Error",
+        description: "El stock crítico debe ser un número mayor a 0.",
+        variant: "destructive",
+      });
 
-const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
+      return;
+    }
+
+    const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
+
     const locationId = `${selectedRack}-${selectedNivel}-${selectedSlot}`;
-   
 
     addProduct({
       locationId,
@@ -109,11 +146,11 @@ const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
       nombre,
       cantidad: cantidadNum,
       costo_proveedor: costoProveedorNum,
+      precio_venta_sugerido: precioVentaSugeridoNum,
       caducidad: caducidadValue,
-  stock_minimo: stockMinimoNum,
+      stock_minimo: stockMinimoNum,
     });
 
-    // Prepare data for QR generation
     setLastAddedProduct({
       sku,
       nombre,
@@ -123,46 +160,36 @@ const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
       timestamp: new Date(),
     });
 
-    // Show QR confirmation modal
     setShowQRConfirmation(true);
 
-    // Reset form
-    setSku("");
-    setNombre("");
-    setCantidad("");
-    setDescripcion("");
-    setCostoProveedor("");
-    setCaducidad("");
-setCaducidadNoAplica(true);
-setStockMinimo("");
-    setSelectedRack("");
-    setSelectedNivel("");
-    setSelectedSlot("");
+    resetForm();
   };
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="racknova-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
+            <Package className="h-5 w-5" />
             Agregar Nuevo Producto
           </CardTitle>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Product Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Package className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                     Información del Producto
                   </CardTitle>
                 </CardHeader>
+
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="sku">SKU *</Label>
+
                     <Input
                       id="sku"
                       value={sku}
@@ -174,6 +201,7 @@ setStockMinimo("");
 
                   <div className="space-y-2">
                     <Label htmlFor="nombre">Nombre del Producto *</Label>
+
                     <Input
                       id="nombre"
                       value={nombre}
@@ -185,6 +213,7 @@ setStockMinimo("");
 
                   <div className="space-y-2">
                     <Label htmlFor="cantidad">Cantidad *</Label>
+
                     <Input
                       id="cantidad"
                       type="number"
@@ -198,6 +227,7 @@ setStockMinimo("");
 
                   <div className="space-y-2">
                     <Label htmlFor="descripcion">Descripción (Opcional)</Label>
+
                     <Textarea
                       id="descripcion"
                       value={descripcion}
@@ -206,9 +236,12 @@ setStockMinimo("");
                       rows={3}
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label htmlFor="costoProveedor">Costo proveedor unitario *</Label>
+                    <Label htmlFor="costoProveedor">
+                      Costo proveedor unitario *
+                    </Label>
+
                     <Input
                       id="costoProveedor"
                       type="number"
@@ -219,55 +252,90 @@ setStockMinimo("");
                       step="0.01"
                       required
                     />
+
+                    <p className="text-xs text-muted-foreground">
+                      Costo real de compra por unidad.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
-  <Label htmlFor="caducidad">Caducidad</Label>
+                    <Label htmlFor="precioVentaSugerido">
+                      Precio de venta sugerido *
+                    </Label>
 
-  <div className="flex items-center gap-2">
-    <input
-      id="caducidadNoAplica"
-      type="checkbox"
-      checked={caducidadNoAplica}
-      onChange={(e) => {
-        setCaducidadNoAplica(e.target.checked);
-        if (e.target.checked) setCaducidad("");
-      }}
-    />
-    <Label htmlFor="caducidadNoAplica" className="text-sm font-normal">
-      No aplica
-    </Label>
-  </div>
+                    <Input
+                      id="precioVentaSugerido"
+                      type="number"
+                      value={precioVentaSugerido}
+                      onChange={(e) => setPrecioVentaSugerido(e.target.value)}
+                      placeholder="Ej: 120.00"
+                      min="0"
+                      step="0.01"
+                      required
+                    />
 
-  <Input
-    id="caducidad"
-    type="date"
-    value={caducidad}
-    onChange={(e) => setCaducidad(e.target.value)}
-    disabled={caducidadNoAplica}
-  />
-</div>
+                    <p className="text-xs text-muted-foreground">
+                      Este precio se cargará automáticamente al registrar una
+                      salida, pero podrá modificarse manualmente.
+                    </p>
+                  </div>
 
-<div className="space-y-2">
-  <Label htmlFor="stockMinimo">Stock crítico personalizado</Label>
-  <Input
-    id="stockMinimo"
-    type="number"
-    value={stockMinimo}
-    onChange={(e) => setStockMinimo(e.target.value)}
-    placeholder="Opcional. Por defecto: 10"
-    min="1"
-  />
-  <p className="text-xs text-muted-foreground">
-    Si lo dejas vacío, el sistema usará 10. El producto será crítico cuando la
-    cantidad sea menor a este valor.
-  </p>
-</div>
-                  
+                  <div className="space-y-2">
+                    <Label htmlFor="caducidad">Caducidad</Label>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="caducidadNoAplica"
+                        type="checkbox"
+                        checked={caducidadNoAplica}
+                        onChange={(e) => {
+                          setCaducidadNoAplica(e.target.checked);
+
+                          if (e.target.checked) {
+                            setCaducidad("");
+                          }
+                        }}
+                      />
+
+                      <Label
+                        htmlFor="caducidadNoAplica"
+                        className="text-sm font-normal"
+                      >
+                        No aplica
+                      </Label>
+                    </div>
+
+                    <Input
+                      id="caducidad"
+                      type="date"
+                      value={caducidad}
+                      onChange={(e) => setCaducidad(e.target.value)}
+                      disabled={caducidadNoAplica}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="stockMinimo">
+                      Stock crítico personalizado
+                    </Label>
+
+                    <Input
+                      id="stockMinimo"
+                      type="number"
+                      value={stockMinimo}
+                      onChange={(e) => setStockMinimo(e.target.value)}
+                      placeholder="Opcional. Por defecto: 10"
+                      min="1"
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      Si lo dejas vacío, el sistema usará 10. El producto será
+                      crítico cuando la cantidad sea menor a este valor.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
 
-              {/* Location Selection */}
               <Card>
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -275,9 +343,11 @@ setStockMinimo("");
                     Ubicación en Inventario
                   </CardTitle>
                 </CardHeader>
+
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="rack">Rack *</Label>
+
                     <Select
                       value={selectedRack}
                       onValueChange={(value) => {
@@ -289,6 +359,7 @@ setStockMinimo("");
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar Rack" />
                       </SelectTrigger>
+
                       <SelectContent>
                         <SelectItem value="A">Rack A</SelectItem>
                         <SelectItem value="B">Rack B</SelectItem>
@@ -301,6 +372,7 @@ setStockMinimo("");
 
                   <div className="space-y-2">
                     <Label htmlFor="nivel">Nivel *</Label>
+
                     <Select
                       value={selectedNivel}
                       onValueChange={(value) => {
@@ -312,6 +384,7 @@ setStockMinimo("");
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar Nivel" />
                       </SelectTrigger>
+
                       <SelectContent>
                         <SelectItem value="1">Nivel 1</SelectItem>
                         <SelectItem value="2">Nivel 2</SelectItem>
@@ -322,6 +395,7 @@ setStockMinimo("");
 
                   <div className="space-y-2">
                     <Label htmlFor="slot">Slot *</Label>
+
                     <Select
                       value={selectedSlot}
                       onValueChange={setSelectedSlot}
@@ -330,6 +404,7 @@ setStockMinimo("");
                       <SelectTrigger>
                         <SelectValue placeholder="Seleccionar Slot" />
                       </SelectTrigger>
+
                       <SelectContent>
                         {availableSlots.length === 0 ? (
                           <SelectItem value="none" disabled>
@@ -356,9 +431,11 @@ setStockMinimo("");
                       <p className="text-sm text-muted-foreground">
                         <strong>Ubicación seleccionada:</strong>
                       </p>
+
                       <p className="font-mono text-sm">
                         {selectedRack}-{selectedNivel}-{selectedSlot || "?"}
                       </p>
+
                       <p className="text-xs text-muted-foreground mt-1">
                         {availableSlots.length} slots disponibles en este nivel
                       </p>
@@ -368,34 +445,17 @@ setStockMinimo("");
               </Card>
             </div>
 
-            {/* Submit Button */}
             <div className="flex justify-end space-x-4 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setSku("");
-                  setNombre("");
-                  setCantidad("");
-                  setDescripcion("");
-                  setCostoProveedor("");
-                  setCaducidad("");
-                  setCaducidadNoAplica(true);
-                  setStockMinimo("");
-                  setSelectedRack("");
-                  setSelectedNivel("");
-                  setSelectedSlot("");
-                }}
-              >
+              <Button type="button" variant="outline" onClick={resetForm}>
                 Limpiar Formulario
               </Button>
+
               <Button type="submit">Agregar Producto</Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      {/* QR Confirmation Modal */}
       <QRConfirmationModal
         isOpen={showQRConfirmation}
         onClose={() => setShowQRConfirmation(false)}
