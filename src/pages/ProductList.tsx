@@ -144,7 +144,7 @@ const getStockBadge = (product: Product) => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <Link to="/">
-            <But  ton variant="outline" size="sm">
+            <Button variant="outline" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver al Dashboard
             </Button>
