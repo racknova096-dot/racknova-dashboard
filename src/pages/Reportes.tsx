@@ -975,7 +975,7 @@ export default function Reportes() {
           <div>
             <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
               <BarChart3 className="h-8 w-8" />
-              RackNova iA
+              RackNova IA
             </h1>
 
             <p className="text-muted-foreground">
