@@ -36,6 +36,7 @@ import {
   Percent,
   Lightbulb,
   Calculator,
+  MapPin,
 } from "lucide-react";
 
 type VentaProducto = {
@@ -68,6 +69,7 @@ type CaducidadProducto = {
 type ProductoAnalizado = {
   sku: string;
   nombre: string;
+  locationId: string;
   cantidadActual: number;
   stockMinimo: number;
   caducidad: string | null;
@@ -79,6 +81,10 @@ type ProductoAnalizado = {
   costoTotal: number;
   gananciaTotal: number;
 
+  primeraVenta: Date | null;
+  ultimaVenta: Date | null;
+  diasSinVenta: number | null;
+
   diasAnalizados: number;
   demandaDiaria: number;
   diasCobertura: number | null;
@@ -89,8 +95,16 @@ type ProductoAnalizado = {
   sellThrough: number;
   rotacionInventario: number;
   margen: number;
-  piezasDiariasParaEvitarCaducidad: number | null;
+
+  costoProveedorUnitario: number;
+  precioPromedioVenta: number;
   descuentoSugerido: number;
+  precioConDescuento: number;
+  costoInventarioActual: number;
+  recuperacionEstimada: number;
+  resultadoConDescuento: number;
+  porcentajeRecuperacionCosto: number;
+  piezasDiariasParaEvitarCaducidad: number | null;
 };
 
 type Recomendacion = {
@@ -100,13 +114,22 @@ type Recomendacion = {
     | "CADUCIDAD"
     | "STOCK"
     | "ROTACION"
-    | "RENTABLE";
+    | "RENTABLE"
+    | "UBICACION";
   prioridad: "Alta" | "Media" | "Baja";
   sku: string;
   nombre: string;
   mensaje: string;
   accion: string;
   valorReferencia: string;
+
+  descuentoSugerido?: number;
+  precioConDescuento?: number;
+  recuperacionEstimada?: number;
+  resultadoConDescuento?: number;
+  porcentajeRecuperacionCosto?: number;
+  ubicacionActual?: string;
+  ubicacionSugerida?: string;
 };
 
 const COLORS = [
@@ -184,11 +207,7 @@ function daysBetween(start: Date | null, end: Date | null) {
     start.getDate()
   );
 
-  const endClean = new Date(
-    end.getFullYear(),
-    end.getMonth(),
-    end.getDate()
-  );
+  const endClean = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
   const diffMs = endClean.getTime() - startClean.getTime();
   const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24)) + 1;
@@ -196,10 +215,26 @@ function daysBetween(start: Date | null, end: Date | null) {
   return Math.max(days, 1);
 }
 
+function daysSince(date: Date | null) {
+  if (!date) return null;
+
+  const today = new Date();
+  const todayClean = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+
+  const dateClean = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  const diffMs = todayClean.getTime() - dateClean.getTime();
+  return Math.max(Math.floor(diffMs / (1000 * 60 * 60 * 24)), 0);
+}
+
 function ExpirationBadge({ days }: { days: number }) {
   if (days < 0) return <Badge variant="destructive">Vencido</Badge>;
   if (days === 0) return <Badge variant="destructive">Caduca hoy</Badge>;
-  if (days <= 7) return <Badge variant="destructive">Urgente</Badge>;
+  if (days <= 5) return <Badge variant="destructive">Urgente</Badge>;
   if (days <= 30) return <Badge variant="secondary">Próximo</Badge>;
 
   return <Badge variant="outline">Vigente</Badge>;
@@ -220,6 +255,7 @@ function TypeBadge({ tipo }: { tipo: Recomendacion["tipo"] }) {
     STOCK: "Stock",
     ROTACION: "Rotación",
     RENTABLE: "Rentable",
+    UBICACION: "Ubicación",
   };
 
   return <Badge variant="outline">{labels[tipo]}</Badge>;
@@ -235,17 +271,30 @@ function EmptyState({ text }: { text: string }) {
 
 function getDiscountSuggestion(daysToExpiration: number | null) {
   if (daysToExpiration === null) return 0;
-  if (daysToExpiration < 0) return 40;
-  if (daysToExpiration <= 3) return 30;
-  if (daysToExpiration <= 7) return 20;
-  if (daysToExpiration <= 15) return 10;
-  if (daysToExpiration <= 30) return 5;
+
+  // Vencido: no sugerir descuento, sugerir retirar/eliminar.
+  if (daysToExpiration < 0) return 0;
+
+  if (daysToExpiration <= 5) return 40;
+  if (daysToExpiration <= 10) return 30;
+  if (daysToExpiration <= 15) return 20;
+  if (daysToExpiration <= 30) return 10;
 
   return 0;
 }
 
+function parseLocationId(locationId: string) {
+  const [rack, nivelRaw, slotRaw] = locationId.split("-");
+
+  return {
+    rack,
+    nivel: Number(nivelRaw),
+    slot: Number(slotRaw),
+  };
+}
+
 export default function Reportes() {
-  const { products, movements } = useInventory();
+  const { products, locations, movements } = useInventory();
 
   const { ventasOrdenadas, ventasMap } = useMemo(() => {
     const map = new Map<string, VentaProducto>();
@@ -328,6 +377,59 @@ export default function Reportes() {
     return map;
   }, [movements]);
 
+  const productoMasVendidoColocado = useMemo(() => {
+    for (const venta of ventasOrdenadas) {
+      const productoColocado = products.find((p) => p.sku === venta.sku);
+
+      if (productoColocado) {
+        return {
+          ...venta,
+          locationId: productoColocado.locationId,
+        };
+      }
+    }
+
+    return null;
+  }, [ventasOrdenadas, products]);
+
+  const occupiedLocationIds = useMemo(() => {
+    return new Set(products.map((product) => product.locationId));
+  }, [products]);
+
+  const getSuggestedVisibleLocation = (currentLocationId: string) => {
+    const emptyLocations = locations.filter(
+      (location) => !occupiedLocationIds.has(location.id)
+    );
+
+    if (emptyLocations.length === 0) {
+      return null;
+    }
+
+    if (!productoMasVendidoColocado) {
+      return emptyLocations[0]?.id ?? null;
+    }
+
+    const reference = parseLocationId(productoMasVendidoColocado.locationId);
+
+    const ranked = [...emptyLocations].sort((a, b) => {
+      const aDistance =
+        (a.rack === reference.rack ? 0 : 100) +
+        (Number(a.nivel) === reference.nivel ? 0 : 20) +
+        Math.abs(Number(a.slot) - reference.slot);
+
+      const bDistance =
+        (b.rack === reference.rack ? 0 : 100) +
+        (Number(b.nivel) === reference.nivel ? 0 : 20) +
+        Math.abs(Number(b.slot) - reference.slot);
+
+      return aDistance - bDistance;
+    });
+
+    const suggested = ranked.find((location) => location.id !== currentLocationId);
+
+    return suggested?.id ?? ranked[0]?.id ?? null;
+  };
+
   const productosAnalizados: ProductoAnalizado[] = useMemo(() => {
     const today = new Date();
 
@@ -362,8 +464,7 @@ export default function Reportes() {
 
       const stockSeguridad = demandaDiaria * SAFETY_DAYS;
 
-      const puntoReorden =
-        demandaDiaria * LEAD_TIME_DAYS + stockSeguridad;
+      const puntoReorden = demandaDiaria * LEAD_TIME_DAYS + stockSeguridad;
 
       const stockObjetivo = demandaDiaria * TARGET_COVERAGE_DAYS;
 
@@ -385,8 +486,7 @@ export default function Reportes() {
       const rotacionInventario =
         cantidadVendida > 0 ? cantidadVendida / stockPromedio : 0;
 
-      const margen =
-        ingresoTotal > 0 ? (gananciaTotal / ingresoTotal) * 100 : 0;
+      const margen = ingresoTotal > 0 ? (gananciaTotal / ingresoTotal) * 100 : 0;
 
       const piezasDiariasParaEvitarCaducidad =
         diasCaducidad !== null && diasCaducidad > 0
@@ -397,18 +497,50 @@ export default function Reportes() {
 
       const descuentoSugerido = getDiscountSuggestion(diasCaducidad);
 
+      const costoProveedorUnitario = Number(product.costo_proveedor ?? 0);
+
+      const precioPromedioVenta =
+        cantidadVendida > 0 ? ingresoTotal / cantidadVendida : 0;
+
+      const precioConDescuento =
+        precioPromedioVenta > 0 && descuentoSugerido > 0
+          ? precioPromedioVenta * (1 - descuentoSugerido / 100)
+          : 0;
+
+      const costoInventarioActual = costoProveedorUnitario * product.cantidad;
+
+      const recuperacionEstimada =
+        precioConDescuento > 0 ? precioConDescuento * product.cantidad : 0;
+
+      const resultadoConDescuento =
+        recuperacionEstimada > 0
+          ? recuperacionEstimada - costoInventarioActual
+          : 0;
+
+      const porcentajeRecuperacionCosto =
+        costoInventarioActual > 0 && recuperacionEstimada > 0
+          ? (recuperacionEstimada / costoInventarioActual) * 100
+          : 0;
+
       return {
         sku: product.sku,
         nombre: product.nombre,
+        locationId: product.locationId,
         cantidadActual: product.cantidad,
         stockMinimo,
         caducidad,
         diasCaducidad,
+
         cantidadIngresada,
         cantidadVendida,
         ingresoTotal,
         costoTotal,
         gananciaTotal,
+
+        primeraVenta: venta?.primeraVenta ?? null,
+        ultimaVenta: venta?.ultimaVenta ?? null,
+        diasSinVenta: daysSince(venta?.ultimaVenta ?? null),
+
         diasAnalizados,
         demandaDiaria,
         diasCobertura,
@@ -419,11 +551,35 @@ export default function Reportes() {
         sellThrough,
         rotacionInventario,
         margen,
-        piezasDiariasParaEvitarCaducidad,
+
+        costoProveedorUnitario,
+        precioPromedioVenta,
         descuentoSugerido,
+        precioConDescuento,
+        costoInventarioActual,
+        recuperacionEstimada,
+        resultadoConDescuento,
+        porcentajeRecuperacionCosto,
+        piezasDiariasParaEvitarCaducidad,
       };
     });
   }, [products, ventasMap, ingresosMap]);
+
+  const productosSinVentaODemorados = useMemo(() => {
+    return [...productosAnalizados]
+      .filter((product) => product.cantidadActual > 0)
+      .sort((a, b) => {
+        const aScore =
+          a.diasSinVenta === null ? 999999 : Number(a.diasSinVenta);
+        const bScore =
+          b.diasSinVenta === null ? 999999 : Number(b.diasSinVenta);
+
+        if (aScore !== bScore) return bScore - aScore;
+
+        return b.cantidadActual - a.cantidadActual;
+      })
+      .slice(0, 2);
+  }, [productosAnalizados]);
 
   const recomendaciones = useMemo(() => {
     const lista: Recomendacion[] = [];
@@ -464,7 +620,7 @@ export default function Reportes() {
       const caducaUrgente =
         product.diasCaducidad !== null &&
         product.diasCaducidad >= 0 &&
-        product.diasCaducidad <= 7;
+        product.diasCaducidad <= 5;
 
       const rentable =
         product.cantidadVendida > 0 &&
@@ -505,27 +661,63 @@ export default function Reportes() {
         });
       }
 
-      if (caducado || proximoCaducar) {
+      if (caducado) {
+        const ubicacionSugerida = getSuggestedVisibleLocation(product.locationId);
+
         lista.push({
           tipo: "CADUCIDAD",
-          prioridad: caducado || caducaUrgente ? "Alta" : "Media",
+          prioridad: "Alta",
           sku: product.sku,
           nombre: product.nombre,
-          mensaje: caducado
-            ? `Producto vencido hace ${Math.abs(
-                product.diasCaducidad ?? 0
-              )} día(s).`
-            : `Caduca en ${product.diasCaducidad} día(s).`,
+          mensaje: `Producto vencido hace ${Math.abs(
+            product.diasCaducidad ?? 0
+          )} día(s). No se recomienda descuento.`,
           accion:
-            product.descuentoSugerido > 0
-              ? `Priorizar salida. Descuento sugerido: ${product.descuentoSugerido}%.`
-              : "Priorizar salida o revisar ubicación.",
-          valorReferencia:
-            product.piezasDiariasParaEvitarCaducidad !== null
-              ? `Debe vender aprox. ${formatNumber(
-                  product.piezasDiariasParaEvitarCaducidad
-                )} pz/día para evitar pérdida.`
-              : "Sin cálculo de caducidad.",
+            "Retirar/eliminar del inventario y registrar merma. Si aún debe revisarse físicamente, mover temporalmente a una zona visible para control inmediato.",
+          valorReferencia: ubicacionSugerida
+            ? `Ubicación actual: ${product.locationId} | Posición visible sugerida: ${ubicacionSugerida}`
+            : `Ubicación actual: ${product.locationId} | Sin espacio vacío sugerido.`,
+          ubicacionActual: product.locationId,
+          ubicacionSugerida: ubicacionSugerida ?? undefined,
+        });
+      } else if (proximoCaducar) {
+        const ubicacionSugerida = getSuggestedVisibleLocation(product.locationId);
+
+        const resultadoTexto =
+          product.precioPromedioVenta <= 0
+            ? "No hay historial de venta suficiente para estimar recuperación."
+            : product.resultadoConDescuento >= 0
+            ? `Con el descuento se estima utilidad de ${formatMoney(
+                product.resultadoConDescuento
+              )}.`
+            : `Con el descuento se estima pérdida de ${formatMoney(
+                Math.abs(product.resultadoConDescuento)
+              )}, recuperando aprox. ${formatPercent(
+                product.porcentajeRecuperacionCosto
+              )} del costo.`;
+
+        lista.push({
+          tipo: "CADUCIDAD",
+          prioridad: caducaUrgente ? "Alta" : "Media",
+          sku: product.sku,
+          nombre: product.nombre,
+          mensaje: `Caduca en ${product.diasCaducidad} día(s). Descuento sugerido: ${product.descuentoSugerido}%.`,
+          accion:
+            product.precioPromedioVenta > 0
+              ? `Priorizar salida, mover a posición visible y aplicar descuento calculado. ${resultadoTexto}`
+              : "Priorizar salida, mover a posición visible y evaluar descuento manualmente.",
+          valorReferencia: ubicacionSugerida
+            ? `Ubicación actual: ${product.locationId} | Posición visible sugerida: ${ubicacionSugerida}`
+            : `Debe vender aprox. ${formatNumber(
+                product.piezasDiariasParaEvitarCaducidad ?? 0
+              )} pz/día para evitar pérdida.`,
+          descuentoSugerido: product.descuentoSugerido,
+          precioConDescuento: product.precioConDescuento,
+          recuperacionEstimada: product.recuperacionEstimada,
+          resultadoConDescuento: product.resultadoConDescuento,
+          porcentajeRecuperacionCosto: product.porcentajeRecuperacionCosto,
+          ubicacionActual: product.locationId,
+          ubicacionSugerida: ubicacionSugerida ?? undefined,
         });
       }
 
@@ -540,22 +732,14 @@ export default function Reportes() {
           )}.`,
           accion:
             product.descuentoSugerido > 0
-              ? `Aplicar descuento sugerido de ${product.descuentoSugerido}%.`
-              : "Aplicar promoción por volumen o revisar precio.",
+              ? `Aplicar descuento sugerido de ${product.descuentoSugerido}% y mover a zona visible.`
+              : "Aplicar promoción por volumen, revisar precio o mover a zona visible.",
           valorReferencia: `Stock actual: ${product.cantidadActual} | Vendidas: ${product.cantidadVendida}`,
-        });
-      }
-
-      if (sinVentas && product.cantidadActual > 0) {
-        lista.push({
-          tipo: "ROTACION",
-          prioridad:
-            product.cantidadActual >= product.stockMinimo * 2 ? "Media" : "Baja",
-          sku: product.sku,
-          nombre: product.nombre,
-          mensaje: "No registra ventas en el historial actual.",
-          accion: "Revisar precio, ubicación, demanda o promoción.",
-          valorReferencia: `Stock actual: ${product.cantidadActual}`,
+          descuentoSugerido: product.descuentoSugerido,
+          precioConDescuento: product.precioConDescuento,
+          recuperacionEstimada: product.recuperacionEstimada,
+          resultadoConDescuento: product.resultadoConDescuento,
+          porcentajeRecuperacionCosto: product.porcentajeRecuperacionCosto,
         });
       }
 
@@ -580,6 +764,38 @@ export default function Reportes() {
       }
     });
 
+    productosSinVentaODemorados.forEach((product) => {
+      const ubicacionSugerida = getSuggestedVisibleLocation(product.locationId);
+
+      const mensaje =
+        product.diasSinVenta === null
+          ? "Producto sin ventas registradas en el historial actual."
+          : `Producto con baja rotación. Lleva ${product.diasSinVenta} día(s) sin venta.`;
+
+      const productoReferencia = productoMasVendidoColocado
+        ? `${productoMasVendidoColocado.nombre} (${productoMasVendidoColocado.sku})`
+        : "producto más vendido";
+
+      lista.push({
+        tipo: "UBICACION",
+        prioridad:
+          product.cantidadActual >= product.stockMinimo * 2 ? "Media" : "Baja",
+        sku: product.sku,
+        nombre: product.nombre,
+        mensaje,
+        accion: ubicacionSugerida
+          ? `Mover a ${ubicacionSugerida}, cerca de ${productoReferencia}. Evaluar descuento si continúa sin rotación.`
+          : "Mover a una posición más visible y evaluar descuento si continúa sin rotación.",
+        valorReferencia: `Ubicación actual: ${product.locationId}${
+          productoMasVendidoColocado
+            ? ` | Más vendido ubicado en ${productoMasVendidoColocado.locationId}`
+            : ""
+        }`,
+        ubicacionActual: product.locationId,
+        ubicacionSugerida: ubicacionSugerida ?? undefined,
+      });
+    });
+
     const priorityOrder = {
       Alta: 0,
       Media: 1,
@@ -589,7 +805,13 @@ export default function Reportes() {
     return lista.sort(
       (a, b) => priorityOrder[a.prioridad] - priorityOrder[b.prioridad]
     );
-  }, [productosAnalizados]);
+  }, [
+    productosAnalizados,
+    productosSinVentaODemorados,
+    productoMasVendidoColocado,
+    locations,
+    products,
+  ]);
 
   const productosMasVendidos = ventasOrdenadas.slice(0, 8);
 
@@ -654,6 +876,10 @@ export default function Reportes() {
     .filter((item) => item.tipo === "DESCUENTO" || item.tipo === "CADUCIDAD")
     .slice(0, 10);
 
+  const ubicacionSugerida = recomendaciones
+    .filter((item) => item.tipo === "UBICACION")
+    .slice(0, 10);
+
   const productosSinVentas = productosAnalizados.filter(
     (product) => product.cantidadVendida === 0 && product.cantidadActual > 0
   ).length;
@@ -688,6 +914,13 @@ export default function Reportes() {
       "mensaje",
       "accion",
       "referencia",
+      "descuento_sugerido",
+      "precio_con_descuento",
+      "recuperacion_estimada",
+      "resultado_estimado",
+      "porcentaje_recuperacion_costo",
+      "ubicacion_actual",
+      "ubicacion_sugerida",
     ];
 
     const rows = recomendaciones.map((item) => [
@@ -698,6 +931,13 @@ export default function Reportes() {
       item.mensaje,
       item.accion,
       item.valorReferencia,
+      item.descuentoSugerido ?? "",
+      item.precioConDescuento ?? "",
+      item.recuperacionEstimada ?? "",
+      item.resultadoConDescuento ?? "",
+      item.porcentajeRecuperacionCosto ?? "",
+      item.ubicacionActual ?? "",
+      item.ubicacionSugerida ?? "",
     ]);
 
     const csvContent = [headers, ...rows]
@@ -716,7 +956,7 @@ export default function Reportes() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `racknova-reporte-${new Date()
+    link.download = `racknova-ia-reporte-${new Date()
       .toISOString()
       .slice(0, 10)}.csv`;
 
@@ -735,12 +975,12 @@ export default function Reportes() {
           <div>
             <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
               <BarChart3 className="h-8 w-8" />
-              Reportes e Insights
+              RackNova iA
             </h1>
 
             <p className="text-muted-foreground">
-              Análisis visual, recomendaciones matemáticas y reportes ejecutivos
-              del inventario.
+              Modelo inteligente de análisis, predicción y recomendaciones para
+              compras, descuentos, caducidad, ubicación y rotación.
             </p>
           </div>
 
@@ -766,13 +1006,13 @@ export default function Reportes() {
 
             <p className="text-sm text-muted-foreground">
               El sistema calcula demanda diaria, punto de reorden, stock de
-              seguridad, sell-through, rotación, margen y compra sugerida para
-              apoyar decisiones de inventario.
+              seguridad, sell-through, rotación, margen, recuperación con
+              descuento y ubicación sugerida.
             </p>
           </CardHeader>
 
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
               <div className="rounded-xl border bg-card p-4">
                 <p className="font-semibold">Punto de reorden</p>
                 <p className="text-muted-foreground mt-1">
@@ -790,10 +1030,16 @@ export default function Reportes() {
               </div>
 
               <div className="rounded-xl border bg-card p-4">
-                <p className="font-semibold">Sell-through</p>
+                <p className="font-semibold">Descuento con recuperación</p>
                 <p className="text-muted-foreground mt-1">
-                  Porcentaje vendido respecto a lo ingresado. Ayuda a medir
-                  rotación real.
+                  Estima cuánto dinero se recupera y si la pérdida es aceptable.
+                </p>
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <p className="font-semibold">Ubicación inteligente</p>
+                <p className="text-muted-foreground mt-1">
+                  Sugiere mover productos lentos cerca del producto más vendido.
                 </p>
               </div>
             </div>
@@ -804,12 +1050,12 @@ export default function Reportes() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lightbulb className="h-5 w-5" />
-              RackNova Insights
+              RackNova iA - Recomendaciones inteligentes
             </CardTitle>
 
             <p className="text-sm text-muted-foreground">
-              Recomendaciones automáticas basadas en ventas, stock, caducidad y
-              rentabilidad.
+              Recomendaciones automáticas basadas en ventas, stock, caducidad,
+              recuperación económica, rentabilidad y ubicación.
             </p>
           </CardHeader>
 
@@ -1061,7 +1307,7 @@ export default function Reportes() {
 
             <CardContent>
               {descuentosSugeridos.length === 0 ? (
-                <EmptyState text="No hay productos con recomendación de descuento." />
+                <EmptyState text="No hay productos con recomendación de descuento o caducidad." />
               ) : (
                 <Table>
                   <TableHeader>
@@ -1070,7 +1316,9 @@ export default function Reportes() {
                       <TableHead>SKU</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Motivo</TableHead>
-                      <TableHead>Acción</TableHead>
+                      <TableHead>Descuento</TableHead>
+                      <TableHead>Recuperación</TableHead>
+                      <TableHead>Resultado</TableHead>
                     </TableRow>
                   </TableHeader>
 
@@ -1091,7 +1339,35 @@ export default function Reportes() {
 
                         <TableCell>{item.mensaje}</TableCell>
 
-                        <TableCell>{item.accion}</TableCell>
+                        <TableCell>
+                          {item.descuentoSugerido
+                            ? `${item.descuentoSugerido}%`
+                            : "No aplica"}
+                        </TableCell>
+
+                        <TableCell>
+                          {item.recuperacionEstimada
+                            ? formatMoney(item.recuperacionEstimada)
+                            : "-"}
+                        </TableCell>
+
+                        <TableCell>
+                          {item.resultadoConDescuento !== undefined &&
+                          item.resultadoConDescuento !== 0 ? (
+                            <span
+                              className={
+                                item.resultadoConDescuento >= 0
+                                  ? "font-semibold text-green-600"
+                                  : "font-semibold text-red-600"
+                              }
+                            >
+                              {item.resultadoConDescuento >= 0 ? "+" : "-"}
+                              {formatMoney(Math.abs(item.resultadoConDescuento))}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1100,6 +1376,69 @@ export default function Reportes() {
             </CardContent>
           </Card>
         </div>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MapPin className="h-5 w-5" />
+              Optimización de ubicación
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Muestra los 2 productos sin venta o con más tiempo sin vender y
+              sugiere moverlos cerca del producto más vendido.
+            </p>
+          </CardHeader>
+
+          <CardContent>
+            {ubicacionSugerida.length === 0 ? (
+              <EmptyState text="No hay recomendaciones de ubicación por ahora." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Prioridad</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Diagnóstico</TableHead>
+                    <TableHead>Ubicación actual</TableHead>
+                    <TableHead>Ubicación sugerida</TableHead>
+                    <TableHead>Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {ubicacionSugerida.map((item, index) => (
+                    <TableRow key={`ubicacion-${item.sku}-${index}`}>
+                      <TableCell>
+                        <PriorityBadge prioridad={item.prioridad} />
+                      </TableCell>
+
+                      <TableCell>
+                        <Badge variant="outline">{item.sku}</Badge>
+                      </TableCell>
+
+                      <TableCell className="font-medium">
+                        {item.nombre}
+                      </TableCell>
+
+                      <TableCell>{item.mensaje}</TableCell>
+
+                      <TableCell>{item.ubicacionActual ?? "-"}</TableCell>
+
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {item.ubicacionSugerida ?? "Revisar manualmente"}
+                        </Badge>
+                      </TableCell>
+
+                      <TableCell>{item.accion}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Card className="racknova-card">
@@ -1269,7 +1608,7 @@ export default function Reportes() {
           <CardHeader>
             <CardTitle>Reporte ejecutivo de recomendaciones</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Tabla general para revisar decisiones sugeridas por el sistema.
+              Tabla general para revisar decisiones sugeridas por RackNova iA.
             </p>
           </CardHeader>
 
