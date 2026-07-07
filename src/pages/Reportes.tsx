@@ -35,6 +35,7 @@ import {
   ShoppingCart,
   Percent,
   Lightbulb,
+  Calculator,
 } from "lucide-react";
 
 type VentaProducto = {
@@ -46,6 +47,14 @@ type VentaProducto = {
   gananciaTotal: number;
   primeraVenta: Date | null;
   ultimaVenta: Date | null;
+};
+
+type IngresoProducto = {
+  sku: string;
+  nombre: string;
+  cantidadIngresada: number;
+  primeraEntrada: Date | null;
+  ultimaEntrada: Date | null;
 };
 
 type CaducidadProducto = {
@@ -63,13 +72,25 @@ type ProductoAnalizado = {
   stockMinimo: number;
   caducidad: string | null;
   diasCaducidad: number | null;
+
+  cantidadIngresada: number;
   cantidadVendida: number;
   ingresoTotal: number;
   costoTotal: number;
   gananciaTotal: number;
-  promedioVentaDiaria: number;
-  diasEstimadosStock: number | null;
+
+  diasAnalizados: number;
+  demandaDiaria: number;
+  diasCobertura: number | null;
+  stockSeguridad: number;
+  puntoReorden: number;
+  stockObjetivo: number;
+  compraSugerida: number;
+  sellThrough: number;
+  rotacionInventario: number;
   margen: number;
+  piezasDiariasParaEvitarCaducidad: number | null;
+  descuentoSugerido: number;
 };
 
 type Recomendacion = {
@@ -99,6 +120,10 @@ const COLORS = [
   "#be185d",
 ];
 
+const LEAD_TIME_DAYS = 5;
+const SAFETY_DAYS = 3;
+const TARGET_COVERAGE_DAYS = 15;
+
 function getStockMinimo(product: Product) {
   return Number((product as any).stock_minimo ?? 10);
 }
@@ -118,6 +143,10 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat("es-MX", {
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+}
+
+function formatPercent(value: number) {
+  return `${formatNumber(value)}%`;
 }
 
 function formatDate(dateValue: string) {
@@ -168,33 +197,17 @@ function daysBetween(start: Date | null, end: Date | null) {
 }
 
 function ExpirationBadge({ days }: { days: number }) {
-  if (days < 0) {
-    return <Badge variant="destructive">Vencido</Badge>;
-  }
-
-  if (days === 0) {
-    return <Badge variant="destructive">Caduca hoy</Badge>;
-  }
-
-  if (days <= 7) {
-    return <Badge variant="destructive">Urgente</Badge>;
-  }
-
-  if (days <= 30) {
-    return <Badge variant="secondary">Próximo</Badge>;
-  }
+  if (days < 0) return <Badge variant="destructive">Vencido</Badge>;
+  if (days === 0) return <Badge variant="destructive">Caduca hoy</Badge>;
+  if (days <= 7) return <Badge variant="destructive">Urgente</Badge>;
+  if (days <= 30) return <Badge variant="secondary">Próximo</Badge>;
 
   return <Badge variant="outline">Vigente</Badge>;
 }
 
 function PriorityBadge({ prioridad }: { prioridad: Recomendacion["prioridad"] }) {
-  if (prioridad === "Alta") {
-    return <Badge variant="destructive">Alta</Badge>;
-  }
-
-  if (prioridad === "Media") {
-    return <Badge variant="secondary">Media</Badge>;
-  }
+  if (prioridad === "Alta") return <Badge variant="destructive">Alta</Badge>;
+  if (prioridad === "Media") return <Badge variant="secondary">Media</Badge>;
 
   return <Badge variant="outline">Baja</Badge>;
 }
@@ -218,6 +231,17 @@ function EmptyState({ text }: { text: string }) {
       <p className="text-sm text-muted-foreground">{text}</p>
     </div>
   );
+}
+
+function getDiscountSuggestion(daysToExpiration: number | null) {
+  if (daysToExpiration === null) return 0;
+  if (daysToExpiration < 0) return 40;
+  if (daysToExpiration <= 3) return 30;
+  if (daysToExpiration <= 7) return 20;
+  if (daysToExpiration <= 15) return 10;
+  if (daysToExpiration <= 30) return 5;
+
+  return 0;
 }
 
 export default function Reportes() {
@@ -270,9 +294,47 @@ export default function Reportes() {
     };
   }, [movements]);
 
-  const productosAnalizados = useMemo(() => {
+  const ingresosMap = useMemo(() => {
+    const map = new Map<string, IngresoProducto>();
+
+    movements
+      .filter((movement) => movement.action === "Ingreso")
+      .forEach((movement) => {
+        const sku = movement.productSku;
+        const fecha = new Date(movement.timestamp);
+        const current = map.get(sku);
+
+        if (current) {
+          current.cantidadIngresada += Number(movement.quantity ?? 0);
+
+          if (!current.primeraEntrada || fecha < current.primeraEntrada) {
+            current.primeraEntrada = fecha;
+          }
+
+          if (!current.ultimaEntrada || fecha > current.ultimaEntrada) {
+            current.ultimaEntrada = fecha;
+          }
+        } else {
+          map.set(sku, {
+            sku,
+            nombre: movement.productName,
+            cantidadIngresada: Number(movement.quantity ?? 0),
+            primeraEntrada: fecha,
+            ultimaEntrada: fecha,
+          });
+        }
+      });
+
+    return map;
+  }, [movements]);
+
+  const productosAnalizados: ProductoAnalizado[] = useMemo(() => {
+    const today = new Date();
+
     return products.map((product) => {
       const venta = ventasMap.get(product.sku);
+      const ingreso = ingresosMap.get(product.sku);
+
       const stockMinimo = getStockMinimo(product);
       const caducidad = getCaducidad(product);
       const diasCaducidad = caducidad ? getDaysToExpiration(caducidad) : null;
@@ -282,21 +344,58 @@ export default function Reportes() {
       const costoTotal = venta?.costoTotal ?? 0;
       const gananciaTotal = venta?.gananciaTotal ?? 0;
 
-      const periodoVentaDias = daysBetween(
-        venta?.primeraVenta ?? null,
-        venta?.ultimaVenta ?? null
+      const cantidadIngresada =
+        ingreso?.cantidadIngresada && ingreso.cantidadIngresada > 0
+          ? ingreso.cantidadIngresada
+          : product.cantidad + cantidadVendida;
+
+      const diasAnalizados =
+        cantidadVendida > 0
+          ? daysBetween(venta?.primeraVenta ?? null, today)
+          : 1;
+
+      const demandaDiaria =
+        cantidadVendida > 0 ? cantidadVendida / diasAnalizados : 0;
+
+      const diasCobertura =
+        demandaDiaria > 0 ? product.cantidad / demandaDiaria : null;
+
+      const stockSeguridad = demandaDiaria * SAFETY_DAYS;
+
+      const puntoReorden =
+        demandaDiaria * LEAD_TIME_DAYS + stockSeguridad;
+
+      const stockObjetivo = demandaDiaria * TARGET_COVERAGE_DAYS;
+
+      const compraSugerida = Math.max(
+        Math.ceil(stockObjetivo - product.cantidad),
+        product.cantidad < stockMinimo ? stockMinimo - product.cantidad : 0,
+        0
       );
 
-      const promedioVentaDiaria =
-        cantidadVendida > 0 ? cantidadVendida / periodoVentaDias : 0;
+      const sellThrough =
+        cantidadIngresada > 0 ? (cantidadVendida / cantidadIngresada) * 100 : 0;
 
-      const diasEstimadosStock =
-        promedioVentaDiaria > 0
-          ? product.cantidad / promedioVentaDiaria
-          : null;
+      const stockInicialEstimado = product.cantidad + cantidadVendida;
+      const stockPromedio = Math.max(
+        (stockInicialEstimado + product.cantidad) / 2,
+        1
+      );
+
+      const rotacionInventario =
+        cantidadVendida > 0 ? cantidadVendida / stockPromedio : 0;
 
       const margen =
         ingresoTotal > 0 ? (gananciaTotal / ingresoTotal) * 100 : 0;
+
+      const piezasDiariasParaEvitarCaducidad =
+        diasCaducidad !== null && diasCaducidad > 0
+          ? product.cantidad / diasCaducidad
+          : diasCaducidad !== null && diasCaducidad <= 0
+          ? product.cantidad
+          : null;
+
+      const descuentoSugerido = getDiscountSuggestion(diasCaducidad);
 
       return {
         sku: product.sku,
@@ -305,34 +404,50 @@ export default function Reportes() {
         stockMinimo,
         caducidad,
         diasCaducidad,
+        cantidadIngresada,
         cantidadVendida,
         ingresoTotal,
         costoTotal,
         gananciaTotal,
-        promedioVentaDiaria,
-        diasEstimadosStock,
+        diasAnalizados,
+        demandaDiaria,
+        diasCobertura,
+        stockSeguridad,
+        puntoReorden,
+        stockObjetivo,
+        compraSugerida,
+        sellThrough,
+        rotacionInventario,
         margen,
+        piezasDiariasParaEvitarCaducidad,
+        descuentoSugerido,
       };
     });
-  }, [products, ventasMap]);
+  }, [products, ventasMap, ingresosMap]);
 
   const recomendaciones = useMemo(() => {
     const lista: Recomendacion[] = [];
 
     productosAnalizados.forEach((product) => {
       const stockBajo = product.cantidadActual < product.stockMinimo;
-      const stockCritico =
-        product.diasEstimadosStock !== null &&
-        product.diasEstimadosStock <= 7;
 
-      const stockCorto =
-        product.diasEstimadosStock !== null &&
-        product.diasEstimadosStock > 7 &&
-        product.diasEstimadosStock <= 14;
+      const bajoPuntoReorden =
+        product.demandaDiaria > 0 &&
+        product.cantidadActual <= product.puntoReorden;
+
+      const coberturaCritica =
+        product.diasCobertura !== null && product.diasCobertura <= 7;
+
+      const coberturaMedia =
+        product.diasCobertura !== null &&
+        product.diasCobertura > 7 &&
+        product.diasCobertura <= 14;
+
+      const altaRotacion = product.sellThrough >= 70;
+      const bajaRotacion =
+        product.cantidadVendida > 0 && product.sellThrough < 30;
 
       const sinVentas = product.cantidadVendida === 0;
-      const bajaRotacion =
-        product.cantidadVendida > 0 && product.promedioVentaDiaria < 0.25;
 
       const stockAlto =
         product.cantidadActual >= product.stockMinimo * 3 &&
@@ -356,27 +471,37 @@ export default function Reportes() {
         product.gananciaTotal > 0 &&
         product.margen >= 30;
 
-      if (stockBajo || stockCritico || stockCorto) {
-        const ventaBase = Math.max(product.promedioVentaDiaria, 1);
-        const cantidadSugerida = Math.max(
-          Math.ceil(ventaBase * 14 + product.stockMinimo - product.cantidadActual),
-          product.stockMinimo - product.cantidadActual,
-          1
-        );
+      if (
+        stockBajo ||
+        bajoPuntoReorden ||
+        coberturaCritica ||
+        coberturaMedia
+      ) {
+        const compraSugerida =
+          product.compraSugerida > 0
+            ? product.compraSugerida
+            : Math.max(product.stockMinimo - product.cantidadActual, 1);
 
         lista.push({
           tipo: "COMPRA",
-          prioridad: stockBajo || stockCritico ? "Alta" : "Media",
+          prioridad:
+            stockBajo || bajoPuntoReorden || coberturaCritica
+              ? "Alta"
+              : "Media",
           sku: product.sku,
           nombre: product.nombre,
           mensaje:
-            product.diasEstimadosStock !== null
-              ? `Riesgo de agotamiento en ${formatNumber(
-                  product.diasEstimadosStock
-                )} día(s).`
+            product.diasCobertura !== null
+              ? `Cobertura estimada de ${formatNumber(
+                  product.diasCobertura
+                )} día(s). Punto de reorden: ${formatNumber(
+                  product.puntoReorden
+                )} piezas.`
               : "El producto está por debajo del stock crítico.",
-          accion: `Sugerencia: comprar aproximadamente ${cantidadSugerida} pieza(s).`,
-          valorReferencia: `Stock actual: ${product.cantidadActual} / mínimo: ${product.stockMinimo}`,
+          accion: `Comprar aproximadamente ${compraSugerida} pieza(s) para cubrir ${TARGET_COVERAGE_DAYS} días de demanda.`,
+          valorReferencia: `Demanda diaria: ${formatNumber(
+            product.demandaDiaria
+          )} pz/día | Stock actual: ${product.cantidadActual}`,
         });
       }
 
@@ -391,12 +516,16 @@ export default function Reportes() {
                 product.diasCaducidad ?? 0
               )} día(s).`
             : `Caduca en ${product.diasCaducidad} día(s).`,
-          accion: caducado
-            ? "Sugerencia: retirar, revisar o dar prioridad inmediata."
-            : "Sugerencia: priorizar salida o aplicar promoción.",
-          valorReferencia: product.caducidad
-            ? `Caducidad: ${formatDate(product.caducidad)}`
-            : "Sin caducidad",
+          accion:
+            product.descuentoSugerido > 0
+              ? `Priorizar salida. Descuento sugerido: ${product.descuentoSugerido}%.`
+              : "Priorizar salida o revisar ubicación.",
+          valorReferencia:
+            product.piezasDiariasParaEvitarCaducidad !== null
+              ? `Debe vender aprox. ${formatNumber(
+                  product.piezasDiariasParaEvitarCaducidad
+                )} pz/día para evitar pérdida.`
+              : "Sin cálculo de caducidad.",
         });
       }
 
@@ -406,41 +535,47 @@ export default function Reportes() {
           prioridad: proximoCaducar ? "Alta" : "Media",
           sku: product.sku,
           nombre: product.nombre,
-          mensaje:
-            "Tiene stock alto y baja rotación. Puede ocupar espacio innecesario.",
-          accion: proximoCaducar
-            ? "Sugerencia: descuento de 15% a 25%."
-            : "Sugerencia: descuento de 10% a 15% o promoción por volumen.",
-          valorReferencia: `Stock actual: ${product.cantidadActual}`,
+          mensaje: `Stock alto con baja rotación. Sell-through: ${formatPercent(
+            product.sellThrough
+          )}.`,
+          accion:
+            product.descuentoSugerido > 0
+              ? `Aplicar descuento sugerido de ${product.descuentoSugerido}%.`
+              : "Aplicar promoción por volumen o revisar precio.",
+          valorReferencia: `Stock actual: ${product.cantidadActual} | Vendidas: ${product.cantidadVendida}`,
         });
       }
 
       if (sinVentas && product.cantidadActual > 0) {
         lista.push({
           tipo: "ROTACION",
-          prioridad: product.cantidadActual >= product.stockMinimo * 2 ? "Media" : "Baja",
+          prioridad:
+            product.cantidadActual >= product.stockMinimo * 2 ? "Media" : "Baja",
           sku: product.sku,
           nombre: product.nombre,
           mensaje: "No registra ventas en el historial actual.",
-          accion: "Sugerencia: revisar precio, ubicación o demanda.",
+          accion: "Revisar precio, ubicación, demanda o promoción.",
           valorReferencia: `Stock actual: ${product.cantidadActual}`,
         });
       }
 
-      if (rentable) {
+      if (rentable || (altaRotacion && product.margen > 0)) {
         lista.push({
           tipo: "RENTABLE",
-          prioridad: product.cantidadActual < product.stockMinimo * 2 ? "Media" : "Baja",
+          prioridad:
+            product.cantidadActual <= product.puntoReorden ? "Media" : "Baja",
           sku: product.sku,
           nombre: product.nombre,
-          mensaje: `Producto rentable con margen aproximado de ${formatNumber(
+          mensaje: `Producto de buen desempeño. Margen: ${formatPercent(
             product.margen
-          )}%.`,
+          )}, sell-through: ${formatPercent(product.sellThrough)}.`,
           accion:
-            product.cantidadActual < product.stockMinimo * 2
-              ? "Sugerencia: mantener inventario suficiente."
-              : "Sugerencia: mantener seguimiento de ventas.",
-          valorReferencia: `Ganancia: ${formatMoney(product.gananciaTotal)}`,
+            product.cantidadActual <= product.puntoReorden
+              ? "Mantener inventario suficiente. Considerar recompra."
+              : "Mantener seguimiento de ventas y rentabilidad.",
+          valorReferencia: `Ganancia acumulada: ${formatMoney(
+            product.gananciaTotal
+          )}`,
         });
       }
     });
@@ -459,7 +594,7 @@ export default function Reportes() {
   const productosMasVendidos = ventasOrdenadas.slice(0, 8);
 
   const productosMenosVendidos = useMemo(() => {
-    return productosAnalizados
+    return [...productosAnalizados]
       .sort((a, b) => {
         if (a.cantidadVendida !== b.cantidadVendida) {
           return a.cantidadVendida - b.cantidadVendida;
@@ -497,6 +632,17 @@ export default function Reportes() {
   const productosStockAlto = useMemo(() => {
     return [...productosAnalizados]
       .sort((a, b) => b.cantidadActual - a.cantidadActual)
+      .slice(0, 10);
+  }, [productosAnalizados]);
+
+  const productosParaReabastecer = useMemo(() => {
+    return [...productosAnalizados]
+      .filter(
+        (product) =>
+          product.compraSugerida > 0 ||
+          product.cantidadActual <= product.puntoReorden
+      )
+      .sort((a, b) => b.compraSugerida - a.compraSugerida)
       .slice(0, 10);
   }, [productosAnalizados]);
 
@@ -557,7 +703,7 @@ export default function Reportes() {
     const csvContent = [headers, ...rows]
       .map((row) =>
         row
-          .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
+          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
           .join(",")
       )
       .join("\n");
@@ -575,7 +721,6 @@ export default function Reportes() {
       .slice(0, 10)}.csv`;
 
     link.click();
-
     URL.revokeObjectURL(url);
   };
 
@@ -594,7 +739,7 @@ export default function Reportes() {
             </h1>
 
             <p className="text-muted-foreground">
-              Análisis visual, recomendaciones predictivas y reportes ejecutivos
+              Análisis visual, recomendaciones matemáticas y reportes ejecutivos
               del inventario.
             </p>
           </div>
@@ -615,14 +760,56 @@ export default function Reportes() {
         <Card className="racknova-card border-primary/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Modelo matemático de inventario
+            </CardTitle>
+
+            <p className="text-sm text-muted-foreground">
+              El sistema calcula demanda diaria, punto de reorden, stock de
+              seguridad, sell-through, rotación, margen y compra sugerida para
+              apoyar decisiones de inventario.
+            </p>
+          </CardHeader>
+
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="rounded-xl border bg-card p-4">
+                <p className="font-semibold">Punto de reorden</p>
+                <p className="text-muted-foreground mt-1">
+                  Demanda diaria × {LEAD_TIME_DAYS} días de entrega + stock de
+                  seguridad.
+                </p>
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <p className="font-semibold">Compra sugerida</p>
+                <p className="text-muted-foreground mt-1">
+                  Stock objetivo para cubrir {TARGET_COVERAGE_DAYS} días menos
+                  stock actual.
+                </p>
+              </div>
+
+              <div className="rounded-xl border bg-card p-4">
+                <p className="font-semibold">Sell-through</p>
+                <p className="text-muted-foreground mt-1">
+                  Porcentaje vendido respecto a lo ingresado. Ayuda a medir
+                  rotación real.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
               <Lightbulb className="h-5 w-5" />
               RackNova Insights
             </CardTitle>
 
             <p className="text-sm text-muted-foreground">
-              Motor predictivo basado en reglas: analiza ventas, stock,
-              caducidad y rentabilidad para sugerir decisiones de compra,
-              descuento y prioridad de salida.
+              Recomendaciones automáticas basadas en ventas, stock, caducidad y
+              rentabilidad.
             </p>
           </CardHeader>
 
@@ -737,6 +924,83 @@ export default function Reportes() {
           </Card>
         </div>
 
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle>Modelo predictivo de reabastecimiento</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Tabla matemática para decidir cuándo comprar y cuánto comprar.
+            </p>
+          </CardHeader>
+
+          <CardContent>
+            {productosParaReabastecer.length === 0 ? (
+              <EmptyState text="No hay productos con recomendación matemática de compra." />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Demanda diaria</TableHead>
+                    <TableHead>Días cobertura</TableHead>
+                    <TableHead>Punto reorden</TableHead>
+                    <TableHead>Sell-through</TableHead>
+                    <TableHead>Margen</TableHead>
+                    <TableHead>Compra sugerida</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {productosParaReabastecer.map((product) => (
+                    <TableRow key={`modelo-${product.sku}`}>
+                      <TableCell>
+                        <Badge variant="outline">{product.sku}</Badge>
+                      </TableCell>
+
+                      <TableCell className="font-medium">
+                        {product.nombre}
+                      </TableCell>
+
+                      <TableCell>{product.cantidadActual}</TableCell>
+
+                      <TableCell>
+                        {formatNumber(product.demandaDiaria)} pz/día
+                      </TableCell>
+
+                      <TableCell>
+                        {product.diasCobertura === null
+                          ? "Sin ventas"
+                          : `${formatNumber(product.diasCobertura)} días`}
+                      </TableCell>
+
+                      <TableCell>
+                        {formatNumber(product.puntoReorden)} pz
+                      </TableCell>
+
+                      <TableCell>{formatPercent(product.sellThrough)}</TableCell>
+
+                      <TableCell>{formatPercent(product.margen)}</TableCell>
+
+                      <TableCell>
+                        <Badge
+                          variant={
+                            product.compraSugerida > 0
+                              ? "destructive"
+                              : "outline"
+                          }
+                        >
+                          Comprar {product.compraSugerida}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Card className="racknova-card">
             <CardHeader>
@@ -744,10 +1008,6 @@ export default function Reportes() {
                 <ShoppingCart className="h-5 w-5" />
                 Recomendación de compra
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Productos con riesgo de agotamiento o por debajo del stock
-                crítico.
-              </p>
             </CardHeader>
 
             <CardContent>
@@ -797,9 +1057,6 @@ export default function Reportes() {
                 <Percent className="h-5 w-5" />
                 Descuentos / prioridad de salida
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Productos con baja rotación, stock alto o cercanos a caducar.
-              </p>
             </CardHeader>
 
             <CardContent>
