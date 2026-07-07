@@ -303,7 +303,9 @@ export default function Reportes() {
 
   const productoMasVendidoColocado = useMemo(() => {
     for (const venta of ventasOrdenadas) {
-      const productoColocado = products.find((product) => product.sku === venta.sku);
+      const productoColocado = products.find(
+        (product) => product.sku === venta.sku
+      );
 
       if (productoColocado) {
         return {
@@ -557,7 +559,7 @@ export default function Reportes() {
           prioridad: proximoCaducar ? "Alta" : "Media",
           sku: product.sku,
           nombre: product.nombre,
-          mensaje: `Stock alto con baja rotación. Sell-through: ${formatPercent(
+          mensaje: `Stock alto con baja rotación. Porcentaje vendido del inventario estimado: ${formatPercent(
             product.sellThrough
           )}.`,
           accion:
@@ -594,7 +596,9 @@ export default function Reportes() {
           nombre: product.nombre,
           mensaje: `Producto rentable. Margen: ${formatPercent(
             product.margen
-          )}, sell-through: ${formatPercent(product.sellThrough)}.`,
+          )}, porcentaje vendido del inventario estimado: ${formatPercent(
+            product.sellThrough
+          )}.`,
           accion: "Mantener seguimiento de ventas, precio y rentabilidad.",
           valorReferencia: `Ganancia acumulada: ${formatMoney(
             product.gananciaTotal
