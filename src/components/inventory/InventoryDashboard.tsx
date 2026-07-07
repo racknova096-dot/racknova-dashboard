@@ -272,7 +272,6 @@ export function InventoryDashboard() {
         </Card>
       </div>
 
-      {/* Rack Selector */}
 {/* Rack Selector */}
 
 <Card className="racknova-card">
@@ -282,25 +281,28 @@ export function InventoryDashboard() {
 
       <div className="space-y-2">
         <label className="text-sm font-medium">Seleccionar Rack</label>
-              <Select
-                value={selectedRack}
-                onValueChange={(value) => setSelectedRack(value as Rack)}
-              >
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="A">A</SelectItem>
-                  <SelectItem value="B">B</SelectItem>
-                  <SelectItem value="C">C</SelectItem>
-                  <SelectItem value="D">D</SelectItem>
-                  <SelectItem value="E">E</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-8">
+
+        <Select
+          value={selectedRack}
+          onValueChange={(value) => setSelectedRack(value as Rack)}
+        >
+          <SelectTrigger className="w-24">
+            <SelectValue />
+          </SelectTrigger>
+
+          <SelectContent>
+            <SelectItem value="A">A</SelectItem>
+            <SelectItem value="B">B</SelectItem>
+            <SelectItem value="C">C</SelectItem>
+            <SelectItem value="D">D</SelectItem>
+            <SelectItem value="E">E</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  </CardHeader>
+
+  <CardContent className="space-y-8">
           {/* Nivel 1 */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
