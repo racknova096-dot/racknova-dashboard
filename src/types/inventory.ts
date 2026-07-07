@@ -1,4 +1,4 @@
-export type SlotStatus = 'libre' | 'en_proceso' | 'ocupado'| 'quitando';
+export type SlotStatus = "libre" | "en_proceso" | "ocupado" | "quitando";
 
 export interface Location {
   id: string;
@@ -14,9 +14,14 @@ export interface Product {
   sku: string;
   nombre: string;
   cantidad: number;
-  //Nuevo campo financiero
+
+  // Campo financiero de compra
   costo_proveedor: number;
-  // Nuevos campos
+
+  // Campo financiero de venta
+  precio_venta_sugerido?: number;
+
+  // Campos de control de inventario
   caducidad?: string | null;
   stock_minimo?: number;
 }
@@ -25,5 +30,5 @@ export interface ProductWithLocation extends Product {
   location: Location;
 }
 
-export type Rack = 'A' | 'B' | 'C' | 'D' | 'E';
+export type Rack = "A" | "B" | "C" | "D" | "E";
 export type Nivel = 1 | 2 | 3;
