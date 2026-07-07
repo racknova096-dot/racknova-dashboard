@@ -19,27 +19,24 @@ import { SaleData } from "@/types/finance";
 
 /**
  * MODO PRUEBA:
- * true  = NO conecta MQTT y permite registrar sin confirmación física.
+ * true = NO conecta MQTT y permite registrar sin confirmación física.
  * false = usa MQTT normal con ESP32.
  */
-const TEST_MODE_NO_MQTT = true;// MUY IMPORTANTE AJUA
+const TEST_MODE_NO_MQTT = true;
 
 interface InventoryContextType {
   products: Product[];
   locations: Location[];
   movements: MovementRecord[];
-
   addProduct: (product: Omit<Product, "id">) => Promise<void>;
- updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (sku: string, venta?: SaleData) => Promise<void>;
-
   clearRack: (rack: Rack) => void;
   getProductByLocation: (locationId: string) => Product | undefined;
   getProductsWithLocation: () => ProductWithLocation[];
   getTotalProducts: () => number;
   getLowStockProducts: () => Product[];
   getMovements: () => MovementRecord[];
-
   updateSlotStatus: (locationId: string, status: SlotStatus) => void;
   startProductPlacement: (locationId: string) => void;
   confirmProductPlacement: (locationId: string) => void;
@@ -134,17 +131,18 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         const data = await resp.json();
 
         const loaded: Product[] = data.map((p: any) => ({
-  id: String(
-    p.id_producto ?? p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`
-  ),
-    sku: p.sku,
-    nombre: p.nombre,
-    cantidad: Number(p.cantidad ?? 0),
-    costo_proveedor: Number(p.costo_proveedor ?? 0),
-    caducidad: p.caducidad ?? null,
-    stock_minimo: Number(p.stock_minimo ?? 10),
-    locationId: `${p.rack}-${p.nivel}-${p.slot}`,
-  }));
+          id: String(
+            p.id_producto ?? p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`
+          ),
+          sku: p.sku,
+          nombre: p.nombre,
+          cantidad: Number(p.cantidad ?? 0),
+          costo_proveedor: Number(p.costo_proveedor ?? 0),
+          precio_venta_sugerido: Number(p.precio_venta_sugerido ?? 0),
+          caducidad: p.caducidad ?? null,
+          stock_minimo: Number(p.stock_minimo ?? 10),
+          locationId: `${p.rack}-${p.nivel}-${p.slot}`,
+        }));
 
         setProducts(loaded);
         productsRef.current = loaded;
@@ -192,7 +190,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           location: m.ubicacion,
           user: m.usuario,
           timestamp: new Date(m.fecha),
-
           costo_proveedor: Number(m.costo_proveedor ?? 0),
           precio_venta: Number(m.precio_venta ?? 0),
           ingreso_total: Number(m.ingreso_total ?? 0),
@@ -235,7 +232,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           cantidad: movement.quantity,
           ubicacion: movement.location,
           usuario: movement.user ?? "Admin",
-
           costo_proveedor: movement.costo_proveedor ?? 0,
           precio_venta: movement.precio_venta ?? 0,
           ingreso_total: movement.ingreso_total ?? 0,
@@ -261,9 +257,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const yaExiste = products.some(
-        (p) => p.locationId === product.locationId
-      );
+      const yaExiste = products.some((p) => p.locationId === product.locationId);
 
       if (yaExiste) {
         alert("❌ Este slot ya tiene un producto. Primero elimínalo.");
@@ -271,12 +265,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       }
 
       const newProduct: Product = {
-  ...product,
-  costo_proveedor: Number(product.costo_proveedor ?? 0),
-  caducidad: product.caducidad ?? null,
-  stock_minimo: Number(product.stock_minimo ?? 10),
-  id: Date.now().toString(),
-};
+        ...product,
+        costo_proveedor: Number(product.costo_proveedor ?? 0),
+        precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
+        caducidad: product.caducidad ?? null,
+        stock_minimo: Number(product.stock_minimo ?? 10),
+        id: Date.now().toString(),
+      };
 
       /**
        * MODO PRUEBA SIN MQTT:
@@ -285,18 +280,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (TEST_MODE_NO_MQTT) {
         const [rack, nivelStr, slotStr] = product.locationId.split("-");
 
-const nuevoProductoBackend = {
-  sku: product.sku,
-  nombre: product.nombre,
-  cantidad: product.cantidad,
-  costo_proveedor: Number(product.costo_proveedor ?? 0),
-  caducidad: product.caducidad || null,
-  stock_minimo: Number(product.stock_minimo ?? 10),
-  descripcion: "Agregado desde modo prueba RackNova",
-  rack,
-  nivel: nivelStr,
-  slot: slotStr,
-};
+        const nuevoProductoBackend = {
+          sku: product.sku,
+          nombre: product.nombre,
+          cantidad: product.cantidad,
+          costo_proveedor: Number(product.costo_proveedor ?? 0),
+          precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
+          caducidad: product.caducidad || null,
+          stock_minimo: Number(product.stock_minimo ?? 10),
+          descripcion: "Agregado desde modo prueba RackNova",
+          rack,
+          nivel: nivelStr,
+          slot: slotStr,
+        };
 
         const resp = await fetch(`${API_URL}/productos`, {
           method: "POST",
@@ -325,24 +321,23 @@ const nuevoProductoBackend = {
           )
         );
 
-const costoProveedorIngreso = Number(product.costo_proveedor ?? 0);
-const cantidadIngreso = Number(product.cantidad ?? 0);
-const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
+        const costoProveedorIngreso = Number(product.costo_proveedor ?? 0);
+        const cantidadIngreso = Number(product.cantidad ?? 0);
+        const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
 
-await addMovement({
-  action: "Ingreso",
-  productSku: product.sku,
-  productName: product.nombre,
-  quantity: cantidadIngreso,
-  location: product.locationId,
-  user: "Admin",
-
-  costo_proveedor: costoProveedorIngreso,
-  precio_venta: 0,
-  ingreso_total: 0,
-  costo_total: costoTotalIngreso,
-  ganancia: 0,
-});
+        await addMovement({
+          action: "Ingreso",
+          productSku: product.sku,
+          productName: product.nombre,
+          quantity: cantidadIngreso,
+          location: product.locationId,
+          user: "Admin",
+          costo_proveedor: costoProveedorIngreso,
+          precio_venta: 0,
+          ingreso_total: 0,
+          costo_total: costoTotalIngreso,
+          ganancia: 0,
+        });
 
         console.log("[MODO PRUEBA] Producto registrado sin MQTT:", newProduct);
         return;
@@ -399,81 +394,89 @@ await addMovement({
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
-  const originalProduct = products.find((p) => p.id === id);
+    const originalProduct = products.find((p) => p.id === id);
 
-  if (!originalProduct) {
-    console.warn("Producto no encontrado para actualizar:", id);
-    return;
-  }
+    if (!originalProduct) {
+      console.warn("Producto no encontrado para actualizar:", id);
+      return;
+    }
 
-  const updatedProduct: Product = {
-    ...originalProduct,
-    ...updates,
-    costo_proveedor: Number(
-      updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0
-    ),
-    caducidad: updates.caducidad ?? originalProduct.caducidad ?? null,
-    stock_minimo: Number(
-      updates.stock_minimo ?? originalProduct.stock_minimo ?? 10
-    ),
-  };
+    const updatedProduct: Product = {
+      ...originalProduct,
+      ...updates,
+      costo_proveedor: Number(
+        updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0
+      ),
+      precio_venta_sugerido: Number(
+        updates.precio_venta_sugerido ??
+          originalProduct.precio_venta_sugerido ??
+          0
+      ),
+      caducidad: updates.caducidad ?? originalProduct.caducidad ?? null,
+      stock_minimo: Number(
+        updates.stock_minimo ?? originalProduct.stock_minimo ?? 10
+      ),
+    };
 
-  const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
+    const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
 
-  const resp = await fetch(`${API_URL}/productos/${originalProduct.sku}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      sku: updatedProduct.sku,
-      nombre: updatedProduct.nombre,
-      cantidad: updatedProduct.cantidad,
-      descripcion: "Actualizado desde RackNova",
-      rack,
-      nivel: nivelStr,
-      slot: slotStr,
-      costo_proveedor: Number(updatedProduct.costo_proveedor ?? 0),
-      caducidad: updatedProduct.caducidad || null,
-      stock_minimo: Number(updatedProduct.stock_minimo ?? 10),
-    }),
-  });
+    const resp = await fetch(`${API_URL}/productos/${originalProduct.sku}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sku: updatedProduct.sku,
+        nombre: updatedProduct.nombre,
+        cantidad: updatedProduct.cantidad,
+        descripcion: "Actualizado desde RackNova",
+        rack,
+        nivel: nivelStr,
+        slot: slotStr,
+        costo_proveedor: Number(updatedProduct.costo_proveedor ?? 0),
+        precio_venta_sugerido: Number(
+          updatedProduct.precio_venta_sugerido ?? 0
+        ),
+        caducidad: updatedProduct.caducidad || null,
+        stock_minimo: Number(updatedProduct.stock_minimo ?? 10),
+      }),
+    });
 
-  if (!resp.ok) {
-    const errorText = await resp.text();
-    console.error("❌ Error actualizando producto:", resp.status, errorText);
-    throw new Error("No se pudo actualizar el producto en backend.");
-  }
+    if (!resp.ok) {
+      const errorText = await resp.text();
+      console.error("❌ Error actualizando producto:", resp.status, errorText);
+      throw new Error("No se pudo actualizar el producto en backend.");
+    }
 
-  setProducts((prev) =>
-    prev.map((p) => (p.id === id ? updatedProduct : p))
-  );
-
-  if (updates.cantidad !== undefined) {
-    const location = locations.find(
-      (loc) => loc.id === originalProduct.locationId
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? updatedProduct : p))
     );
 
-    if (location) {
-      addMovement({
-        action: "Edición",
-        productSku: originalProduct.sku,
-        productName: originalProduct.nombre,
-        quantity: updates.cantidad,
-        location: `${location.rack}-${location.nivel}-${location.slot}`,
-        user: "Admin",
-        previousQuantity: originalProduct.cantidad,
-        newQuantity: updates.cantidad,
-        costo_proveedor:
-          updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
-        precio_venta: 0,
-        ingreso_total: 0,
-        costo_total: 0,
-        ganancia: 0,
-      });
+    if (updates.cantidad !== undefined) {
+      const location = locations.find(
+        (loc) => loc.id === originalProduct.locationId
+      );
+
+      if (location) {
+        addMovement({
+          action: "Edición",
+          productSku: originalProduct.sku,
+          productName: originalProduct.nombre,
+          quantity: updates.cantidad,
+          location: `${location.rack}-${location.nivel}-${location.slot}`,
+          user: "Admin",
+          previousQuantity: originalProduct.cantidad,
+          newQuantity: updates.cantidad,
+          costo_proveedor:
+            updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
+          precio_venta: 0,
+          ingreso_total: 0,
+          costo_total: 0,
+          ganancia: 0,
+        });
+      }
     }
-  }
-};
+  };
 
   const deleteProduct = async (sku: string, venta?: SaleData) => {
     try {
@@ -535,11 +538,13 @@ await addMovement({
           });
         } else if (!salidaResp.ok) {
           const errorText = await salidaResp.text();
+
           console.error(
             "❌ Error guardando salida financiera:",
             salidaResp.status,
             errorText
           );
+
           alert("No se pudo registrar la salida en backend.");
           return;
         }
@@ -551,7 +556,6 @@ await addMovement({
           quantity: cantidadVendida,
           location: product.locationId,
           user: "Admin",
-
           costo_proveedor: costoProveedor,
           precio_venta: precioVenta,
           ingreso_total: ingresoTotal,
@@ -568,9 +572,7 @@ await addMovement({
 
           setLocations((prev) =>
             prev.map((loc) =>
-              loc.id === product.locationId
-                ? { ...loc, status: "libre" }
-                : loc
+              loc.id === product.locationId ? { ...loc, status: "libre" } : loc
             )
           );
         } else {
@@ -680,7 +682,6 @@ await addMovement({
           quantity: product.cantidad,
           location: `${location.rack}-${location.nivel}-${location.slot}`,
           user: "Admin",
-
           costo_proveedor: product.costo_proveedor ?? 0,
           precio_venta: 0,
           ingreso_total: 0,
@@ -715,7 +716,7 @@ await addMovement({
   const getTotalProducts = () => products.length;
 
   const getLowStockProducts = () =>
-  products.filter((p) => p.cantidad < Number(p.stock_minimo ?? 10));
+    products.filter((p) => p.cantidad < Number(p.stock_minimo ?? 10));
 
   const getMovements = () =>
     [...movements].sort(
@@ -860,18 +861,21 @@ await addMovement({
             try {
               const [rack, nivelStr, slotStr] = slotId.split("-");
 
-const nuevoProducto = {
-  sku: pending.sku,
-  nombre: pending.nombre,
-  cantidad: pending.cantidad,
-  costo_proveedor: Number(pending.costo_proveedor ?? 0),
-  caducidad: pending.caducidad || null,
-  stock_minimo: Number(pending.stock_minimo ?? 10),
-  descripcion: "Agregado desde interfaz RackNova",
-  rack,
-  nivel: nivelStr,
-  slot: slotStr,
-};
+              const nuevoProducto = {
+                sku: pending.sku,
+                nombre: pending.nombre,
+                cantidad: pending.cantidad,
+                costo_proveedor: Number(pending.costo_proveedor ?? 0),
+                precio_venta_sugerido: Number(
+                  pending.precio_venta_sugerido ?? 0
+                ),
+                caducidad: pending.caducidad || null,
+                stock_minimo: Number(pending.stock_minimo ?? 10),
+                descripcion: "Agregado desde interfaz RackNova",
+                rack,
+                nivel: nivelStr,
+                slot: slotStr,
+              };
 
               const resp = await fetch(`${API_URL}/productos`, {
                 method: "POST",
@@ -895,24 +899,23 @@ const nuevoProducto = {
             }
           })();
 
-const costoProveedorIngreso = Number(pending.costo_proveedor ?? 0);
-const cantidadIngreso = Number(pending.cantidad ?? 0);
-const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
+          const costoProveedorIngreso = Number(pending.costo_proveedor ?? 0);
+          const cantidadIngreso = Number(pending.cantidad ?? 0);
+          const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
 
-addMovement({
-  action: "Ingreso",
-  productSku: pending.sku,
-  productName: pending.nombre,
-  quantity: cantidadIngreso,
-  location: slotId,
-  user: "Admin",
-
-  costo_proveedor: costoProveedorIngreso,
-  precio_venta: 0,
-  ingreso_total: 0,
-  costo_total: costoTotalIngreso,
-  ganancia: 0,
-});
+          addMovement({
+            action: "Ingreso",
+            productSku: pending.sku,
+            productName: pending.nombre,
+            quantity: cantidadIngreso,
+            location: slotId,
+            user: "Admin",
+            costo_proveedor: costoProveedorIngreso,
+            precio_venta: 0,
+            ingreso_total: 0,
+            costo_total: costoTotalIngreso,
+            ganancia: 0,
+          });
 
           console.log("Ingreso registrado correctamente:", slotId);
         }
@@ -940,7 +943,6 @@ addMovement({
 
             const precioVenta = deletion.venta?.precio_venta ?? 0;
             const costoProveedor = product.costo_proveedor ?? 0;
-
             const ingresoTotal = precioVenta * cantidadVendida;
             const costoTotal = costoProveedor * cantidadVendida;
             const ganancia = ingresoTotal - costoTotal;
@@ -991,7 +993,6 @@ addMovement({
               quantity: cantidadVendida,
               location: slotId,
               user: "Admin",
-
               costo_proveedor: costoProveedor,
               precio_venta: precioVenta,
               ingreso_total: ingresoTotal,
@@ -1032,7 +1033,7 @@ addMovement({
 
   useEffect(() => {
     if (TEST_MODE_NO_MQTT) {
-      console.warn("🟡 MODO PRUEBA ACTIVO: MQTT desactivado.");
+      console.warn("MODO PRUEBA ACTIVO: MQTT desactivado.");
       return;
     }
 
