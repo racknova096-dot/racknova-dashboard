@@ -129,8 +129,10 @@ export function InventoryForm() {
   const clearHistoricalSelection = () => {
     setSelectedCatalogProduct(null);
     setCatalogResults([]);
+
     setSku("");
     setNombre("");
+    setCantidad("");
     setDescripcion("");
     setCostoProveedor("");
     setPrecioVentaSugerido("");
@@ -138,18 +140,19 @@ export function InventoryForm() {
     setCaducidadNoAplica(true);
     setStockMinimo("");
     setStockAlto("");
+
     setSelectedRack("");
     setSelectedNivel("");
     setSelectedSlot("");
   };
 
   const handleSelectCatalogProduct = (item: ProductoCatalogo) => {
+    const itemSku = item.sku?.trim().toLowerCase() ?? "";
+    const itemName = item.nombre?.trim().toLowerCase() ?? "";
+
     const currentProduct = products.find((product) => {
       const productSku = product.sku.trim().toLowerCase();
       const productName = product.nombre.trim().toLowerCase();
-
-      const itemSku = item.sku.trim().toLowerCase();
-      const itemName = item.nombre.trim().toLowerCase();
 
       return productSku === itemSku || productName === itemName;
     });
@@ -159,6 +162,8 @@ export function InventoryForm() {
     setSku(currentProduct?.sku ?? item.sku ?? "");
     setNombre(currentProduct?.nombre ?? item.nombre ?? "");
     setDescripcion(currentProduct?.descripcion ?? item.descripcion ?? "");
+
+    setCantidad("");
 
     const costoSugerido =
       currentProduct?.costo_proveedor ??
@@ -236,10 +241,11 @@ export function InventoryForm() {
 
         setCatalogResults(results);
 
+        const term = searchTerm.trim().toLowerCase();
+
         const exactMatch = results.find((item) => {
           const itemSku = item.sku?.trim().toLowerCase();
           const itemNombre = item.nombre?.trim().toLowerCase();
-          const term = searchTerm.trim().toLowerCase();
 
           return itemSku === term || itemNombre === term;
         });
@@ -256,7 +262,7 @@ export function InventoryForm() {
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [searchTerm]);
+  }, [searchTerm, products]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -324,8 +330,7 @@ export function InventoryForm() {
     if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
       toast({
         title: "Error",
-        description:
-          "El stock alto debe ser mayor que el stock bajo/mínimo.",
+        description: "El stock alto debe ser mayor que el stock bajo/mínimo.",
         variant: "destructive",
       });
       return;
@@ -426,9 +431,8 @@ export function InventoryForm() {
                         Catálogo histórico
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Escribe un SKU o nombre. Si el producto ya existe en el
-                        histórico, RackNova rellenará la información
-                        automáticamente.
+                        Escribe un SKU o nombre. Si el producto ya existe,
+                        RackNova rellenará la información automáticamente.
                       </p>
                     </div>
                   </div>
@@ -491,9 +495,9 @@ export function InventoryForm() {
                             Producto cargado desde histórico
                           </p>
                           <p className="text-xs mt-1">
-                            SKU, nombre y descripción quedan bloqueados para
-                            evitar duplicados. Puedes modificar cantidad,
-                            costos, precios, stock y caducidad.
+                            SKU, nombre, descripción y ubicación quedan
+                            bloqueados para evitar duplicados. Puedes modificar
+                            cantidad, costos, precios, stock y caducidad.
                           </p>
                         </div>
 
@@ -567,8 +571,8 @@ export function InventoryForm() {
                     />
                     {isRestock && (
                       <p className="text-xs text-muted-foreground">
-                        Stock actual: {existingInventoryProduct?.cantidad} pieza(s).
-                        Se sumará la cantidad nueva.
+                        Stock actual: {existingInventoryProduct?.cantidad}{" "}
+                        pieza(s). Se sumará la cantidad nueva.
                       </p>
                     )}
                   </div>
@@ -608,8 +612,8 @@ export function InventoryForm() {
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Este precio se cargará automáticamente al registrar una
-                      salida, pero podrá modificarse manualmente.
+                      Se cargará automáticamente al registrar una salida, pero
+                      podrá modificarse.
                     </p>
                   </div>
 
@@ -690,8 +694,8 @@ export function InventoryForm() {
                     />
                     {isHistoricalProduct && (
                       <p className="text-xs text-muted-foreground">
-                        La descripción viene del histórico y no se puede editar
-                        para mantener la identidad del producto.
+                        La descripción pertenece a la identidad histórica del
+                        producto y no se puede editar en restock.
                       </p>
                     )}
                   </div>
@@ -723,14 +727,6 @@ export function InventoryForm() {
                   </div>
                 ) : (
                   <>
-                    {isHistoricalProduct && (
-                      <div className="rounded-md border bg-amber-50 border-amber-200 p-3 text-sm text-amber-950">
-                        Este producto existe en el histórico, pero no está
-                        colocado actualmente en inventario. Selecciona una
-                        ubicación disponible para ingresarlo de nuevo.
-                      </div>
-                    )}
-
                     <div className="space-y-2">
                       <Label htmlFor="rack">Rack *</Label>
                       <Select
@@ -817,7 +813,8 @@ export function InventoryForm() {
                         </p>
 
                         <p className="text-xs text-muted-foreground mt-1">
-                          {availableSlots.length} slots disponibles en este nivel
+                          {availableSlots.length} slots disponibles en este
+                          nivel
                         </p>
                       </div>
                     )}
