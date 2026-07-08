@@ -86,6 +86,7 @@ const mapBackendProduct = (p: any): Product => {
     id: String(p.id_producto ?? p.id ?? `${p.sku}-${rack}-${nivel}-${slot}`),
     sku: p.sku,
     nombre: p.nombre,
+    descripcion: p.descripcion ?? null,
     cantidad: Number(p.cantidad ?? 0),
     costo_proveedor: Number(p.costo_proveedor ?? 0),
     precio_venta_sugerido: Number(p.precio_venta_sugerido ?? 0),
@@ -298,15 +299,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const productoBackend = {
         sku: product.sku,
         nombre: product.nombre,
+        descripcion: product.descripcion ?? null,
         cantidad: Number(product.cantidad ?? 0),
         costo_proveedor: Number(product.costo_proveedor ?? 0),
         precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
         caducidad: product.caducidad || null,
         stock_minimo: Number(product.stock_minimo ?? 10),
         stock_alto: Number(product.stock_alto ?? 30),
-        descripcion: esRestock
-          ? "Restock desde RackNova"
-          : "Agregado desde RackNova",
         rack,
         nivel: nivelStr,
         slot: slotStr,
@@ -316,6 +315,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ...product,
         id: productoExistente?.id ?? Date.now().toString(),
         locationId: finalLocationId,
+        descripcion: product.descripcion ?? null,
         costo_proveedor: Number(product.costo_proveedor ?? 0),
         precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
         caducidad: product.caducidad ?? null,
@@ -455,6 +455,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const updatedProduct: Product = {
       ...originalProduct,
       ...updates,
+      descripcion: updates.descripcion ?? originalProduct.descripcion ?? null,
       costo_proveedor: Number(
         updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0
       ),
@@ -480,8 +481,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({
         sku: updatedProduct.sku,
         nombre: updatedProduct.nombre,
+        descripcion: updatedProduct.descripcion ?? null,
         cantidad: updatedProduct.cantidad,
-        descripcion: "Actualizado desde RackNova",
         rack,
         nivel: nivelStr,
         slot: slotStr,
