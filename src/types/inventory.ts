@@ -15,19 +15,35 @@ export interface Product {
   nombre: string;
   cantidad: number;
 
-  // Campo financiero de compra
   costo_proveedor: number;
-
-  // Campo financiero de venta
   precio_venta_sugerido?: number;
 
-  // Campos de control de inventario
   caducidad?: string | null;
   stock_minimo?: number;
+  stock_alto?: number;
 }
 
 export interface ProductWithLocation extends Product {
   location: Location;
+}
+
+export interface ProductoCatalogo {
+  id_catalogo?: number;
+  sku: string;
+  nombre: string;
+  descripcion?: string | null;
+
+  ultimo_costo_proveedor?: number;
+  costo_promedio?: number;
+  precio_venta_sugerido?: number;
+
+  caducidad?: string | null;
+  stock_minimo?: number;
+  stock_alto?: number;
+
+  total_ingresado?: number;
+  total_vendido?: number;
+  ultima_actualizacion?: string;
 }
 
 export type Rack = "A" | "B" | "C" | "D" | "E";
