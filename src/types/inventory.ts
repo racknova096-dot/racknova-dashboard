@@ -13,6 +13,7 @@ export interface Product {
   locationId: string;
   sku: string;
   nombre: string;
+  descripcion?: string | null;
   cantidad: number;
 
   costo_proveedor: number;
