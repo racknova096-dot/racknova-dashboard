@@ -68,11 +68,20 @@ export function InventoryForm() {
 
   const existingInventoryProduct = useMemo(() => {
     const skuClean = sku.trim().toLowerCase();
+    const nombreClean = nombre.trim().toLowerCase();
 
-    if (!skuClean) return undefined;
+    if (!skuClean && !nombreClean) return undefined;
 
-    return products.find((product) => product.sku.trim().toLowerCase() === skuClean);
-  }, [products, sku]);
+    return products.find((product) => {
+      const productSku = product.sku.trim().toLowerCase();
+      const productName = product.nombre.trim().toLowerCase();
+
+      return (
+        (!!skuClean && productSku === skuClean) ||
+        (!!nombreClean && productName === nombreClean)
+      );
+    });
+  }, [products, sku, nombre]);
 
   const isHistoricalProduct = Boolean(selectedCatalogProduct);
   const isRestock = Boolean(existingInventoryProduct);
@@ -96,6 +105,107 @@ export function InventoryForm() {
 
     return skuClean || nombreClean;
   }, [sku, nombre, selectedCatalogProduct]);
+
+  const resetForm = () => {
+    setSku("");
+    setNombre("");
+    setCantidad("");
+    setDescripcion("");
+    setCostoProveedor("");
+    setPrecioVentaSugerido("");
+    setCaducidad("");
+    setCaducidadNoAplica(true);
+    setStockMinimo("");
+    setStockAlto("");
+
+    setSelectedRack("");
+    setSelectedNivel("");
+    setSelectedSlot("");
+
+    setCatalogResults([]);
+    setSelectedCatalogProduct(null);
+  };
+
+  const clearHistoricalSelection = () => {
+    setSelectedCatalogProduct(null);
+    setCatalogResults([]);
+    setSku("");
+    setNombre("");
+    setDescripcion("");
+    setCostoProveedor("");
+    setPrecioVentaSugerido("");
+    setCaducidad("");
+    setCaducidadNoAplica(true);
+    setStockMinimo("");
+    setStockAlto("");
+    setSelectedRack("");
+    setSelectedNivel("");
+    setSelectedSlot("");
+  };
+
+  const handleSelectCatalogProduct = (item: ProductoCatalogo) => {
+    const currentProduct = products.find((product) => {
+      const productSku = product.sku.trim().toLowerCase();
+      const productName = product.nombre.trim().toLowerCase();
+
+      const itemSku = item.sku.trim().toLowerCase();
+      const itemName = item.nombre.trim().toLowerCase();
+
+      return productSku === itemSku || productName === itemName;
+    });
+
+    setSelectedCatalogProduct(item);
+
+    setSku(currentProduct?.sku ?? item.sku ?? "");
+    setNombre(currentProduct?.nombre ?? item.nombre ?? "");
+    setDescripcion(currentProduct?.descripcion ?? item.descripcion ?? "");
+
+    const costoSugerido =
+      currentProduct?.costo_proveedor ??
+      item.ultimo_costo_proveedor ??
+      item.costo_promedio ??
+      0;
+
+    setCostoProveedor(Number(costoSugerido).toString());
+
+    setPrecioVentaSugerido(
+      Number(
+        currentProduct?.precio_venta_sugerido ??
+          item.precio_venta_sugerido ??
+          0
+      ).toString()
+    );
+
+    if (currentProduct?.caducidad || item.caducidad) {
+      setCaducidad(currentProduct?.caducidad ?? item.caducidad ?? "");
+      setCaducidadNoAplica(false);
+    } else {
+      setCaducidad("");
+      setCaducidadNoAplica(true);
+    }
+
+    setStockMinimo(
+      Number(currentProduct?.stock_minimo ?? item.stock_minimo ?? 10).toString()
+    );
+
+    setStockAlto(
+      Number(currentProduct?.stock_alto ?? item.stock_alto ?? 30).toString()
+    );
+
+    if (currentProduct) {
+      const [rack, nivel, slot] = currentProduct.locationId.split("-");
+
+      setSelectedRack(rack);
+      setSelectedNivel(nivel);
+      setSelectedSlot(slot);
+    } else {
+      setSelectedRack("");
+      setSelectedNivel("");
+      setSelectedSlot("");
+    }
+
+    setCatalogResults([]);
+  };
 
   useEffect(() => {
     if (!searchTerm || searchTerm.length < 2) {
@@ -147,89 +257,6 @@ export function InventoryForm() {
 
     return () => clearTimeout(timeout);
   }, [searchTerm]);
-
-  const resetForm = () => {
-    setSku("");
-    setNombre("");
-    setCantidad("");
-    setDescripcion("");
-    setCostoProveedor("");
-    setPrecioVentaSugerido("");
-    setCaducidad("");
-    setCaducidadNoAplica(true);
-    setStockMinimo("");
-    setStockAlto("");
-
-    setSelectedRack("");
-    setSelectedNivel("");
-    setSelectedSlot("");
-
-    setCatalogResults([]);
-    setSelectedCatalogProduct(null);
-  };
-
-  const clearHistoricalSelection = () => {
-    setSelectedCatalogProduct(null);
-    setCatalogResults([]);
-    setSku("");
-    setNombre("");
-    setDescripcion("");
-    setCostoProveedor("");
-    setPrecioVentaSugerido("");
-    setCaducidad("");
-    setCaducidadNoAplica(true);
-    setStockMinimo("");
-    setStockAlto("");
-    setSelectedRack("");
-    setSelectedNivel("");
-    setSelectedSlot("");
-  };
-
-  const handleSelectCatalogProduct = (item: ProductoCatalogo) => {
-    setSelectedCatalogProduct(item);
-
-    setSku(item.sku ?? "");
-    setNombre(item.nombre ?? "");
-    setDescripcion(item.descripcion ?? "");
-
-    const costoSugerido =
-      item.ultimo_costo_proveedor ??
-      item.costo_promedio ??
-      0;
-
-    setCostoProveedor(Number(costoSugerido).toString());
-    setPrecioVentaSugerido(Number(item.precio_venta_sugerido ?? 0).toString());
-
-    if (item.caducidad) {
-      setCaducidad(item.caducidad);
-      setCaducidadNoAplica(false);
-    } else {
-      setCaducidad("");
-      setCaducidadNoAplica(true);
-    }
-
-    setStockMinimo(Number(item.stock_minimo ?? 10).toString());
-    setStockAlto(Number(item.stock_alto ?? 30).toString());
-
-    const currentProduct = products.find(
-      (product) =>
-        product.sku.trim().toLowerCase() === item.sku.trim().toLowerCase()
-    );
-
-    if (currentProduct) {
-      const [rack, nivel, slot] = currentProduct.locationId.split("-");
-
-      setSelectedRack(rack);
-      setSelectedNivel(nivel);
-      setSelectedSlot(slot);
-    } else {
-      setSelectedRack("");
-      setSelectedNivel("");
-      setSelectedSlot("");
-    }
-
-    setCatalogResults([]);
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -331,6 +358,7 @@ export function InventoryForm() {
         locationId,
         sku: skuClean,
         nombre: nombreClean,
+        descripcion: descripcion.trim() || null,
         cantidad: cantidadNum,
         costo_proveedor: costoProveedorNum,
         precio_venta_sugerido: precioVentaSugeridoNum,
@@ -463,9 +491,9 @@ export function InventoryForm() {
                             Producto cargado desde histórico
                           </p>
                           <p className="text-xs mt-1">
-                            SKU y nombre quedan bloqueados para evitar
-                            duplicados. Puedes modificar costos, precios, stock,
-                            caducidad y cantidad.
+                            SKU, nombre y descripción quedan bloqueados para
+                            evitar duplicados. Puedes modificar cantidad,
+                            costos, precios, stock y caducidad.
                           </p>
                         </div>
 
@@ -651,14 +679,21 @@ export function InventoryForm() {
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="descripcion">Descripción opcional</Label>
+                    <Label htmlFor="descripcion">Descripción</Label>
                     <Textarea
                       id="descripcion"
                       value={descripcion}
                       onChange={(e) => setDescripcion(e.target.value)}
                       placeholder="Descripción adicional del producto..."
                       rows={3}
+                      disabled={isHistoricalProduct}
                     />
+                    {isHistoricalProduct && (
+                      <p className="text-xs text-muted-foreground">
+                        La descripción viene del histórico y no se puede editar
+                        para mantener la identidad del producto.
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -688,6 +723,14 @@ export function InventoryForm() {
                   </div>
                 ) : (
                   <>
+                    {isHistoricalProduct && (
+                      <div className="rounded-md border bg-amber-50 border-amber-200 p-3 text-sm text-amber-950">
+                        Este producto existe en el histórico, pero no está
+                        colocado actualmente en inventario. Selecciona una
+                        ubicación disponible para ingresarlo de nuevo.
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <Label htmlFor="rack">Rack *</Label>
                       <Select
