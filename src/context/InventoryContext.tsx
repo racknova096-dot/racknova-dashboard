@@ -84,16 +84,21 @@ const mapBackendProduct = (p: any): Product => {
 
   return {
     id: String(p.id_producto ?? p.id ?? `${p.sku}-${rack}-${nivel}-${slot}`),
+    locationId: `${rack}-${nivel}-${slot}`,
+
     sku: p.sku,
     nombre: p.nombre,
     descripcion: p.descripcion ?? null,
+
     cantidad: Number(p.cantidad ?? 0),
+
     costo_proveedor: Number(p.costo_proveedor ?? 0),
     precio_venta_sugerido: Number(p.precio_venta_sugerido ?? 0),
+
     caducidad: p.caducidad ?? null,
+
     stock_minimo: Number(p.stock_minimo ?? 10),
     stock_alto: Number(p.stock_alto ?? 30),
-    locationId: `${rack}-${nivel}-${slot}`,
   };
 };
 
@@ -262,10 +267,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const addProduct = async (product: Omit<Product, "id">) => {
     try {
       const productoExistente = products.find(
-        (p) => p.sku.trim().toLowerCase() === product.sku.trim().toLowerCase()
+        (p) =>
+          p.sku.trim().toLowerCase() === product.sku.trim().toLowerCase()
       );
 
-      const finalLocationId = productoExistente?.locationId ?? product.locationId;
+      const finalLocationId =
+        productoExistente?.locationId ?? product.locationId;
+
       const location = locations.find((loc) => loc.id === finalLocationId);
 
       if (!location) {
@@ -273,11 +281,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      /**
-       * Si el SKU ya existe, es RESTOCK:
-       * - Se conserva la ubicación actual.
-       * - El backend suma cantidad y calcula costo promedio.
-       */
       const esRestock = Boolean(productoExistente);
 
       if (!esRestock) {
@@ -286,7 +289,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const slotOcupado = products.some((p) => p.locationId === finalLocationId);
+        const slotOcupado = products.some(
+          (p) => p.locationId === finalLocationId
+        );
 
         if (slotOcupado) {
           alert("❌ Este slot ya tiene un producto. Primero elimínalo.");
@@ -344,9 +349,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
         setProducts((prev) => {
           const updated = [
-            ...prev.filter((p) => p.sku !== savedProduct.sku),
+            ...prev.filter(
+              (p) =>
+                p.sku.trim().toLowerCase() !==
+                savedProduct.sku.trim().toLowerCase()
+            ),
             savedProduct,
           ];
+
           productsRef.current = updated;
           return updated;
         });
@@ -387,11 +397,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      /**
-       * MODO NORMAL CON MQTT:
-       * - Si es producto nuevo, manda COLOCANDO.
-       * - Si es restock de producto existente, por ahora guarda pendiente sobre la misma ubicación.
-       */
       const nivel = parseInt(nivelStr);
       const slot = parseInt(slotStr);
 
@@ -468,7 +473,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       stock_minimo: Number(
         updates.stock_minimo ?? originalProduct.stock_minimo ?? 10
       ),
-      stock_alto: Number(updates.stock_alto ?? originalProduct.stock_alto ?? 30),
+      stock_alto: Number(
+        updates.stock_alto ?? originalProduct.stock_alto ?? 30
+      ),
     };
 
     const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
@@ -619,6 +626,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
                 ? { ...p, cantidad: p.cantidad - cantidadVendida }
                 : p
             );
+
             productsRef.current = updated;
             return updated;
           });
