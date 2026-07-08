@@ -11,15 +11,18 @@ export interface Location {
 export interface Product {
   id: string;
   locationId: string;
+
   sku: string;
   nombre: string;
   descripcion?: string | null;
+
   cantidad: number;
 
   costo_proveedor: number;
   precio_venta_sugerido?: number;
 
   caducidad?: string | null;
+
   stock_minimo?: number;
   stock_alto?: number;
 }
@@ -30,6 +33,7 @@ export interface ProductWithLocation extends Product {
 
 export interface ProductoCatalogo {
   id_catalogo?: number;
+
   sku: string;
   nombre: string;
   descripcion?: string | null;
@@ -39,11 +43,14 @@ export interface ProductoCatalogo {
   precio_venta_sugerido?: number;
 
   caducidad?: string | null;
+
   stock_minimo?: number;
   stock_alto?: number;
 
   total_ingresado?: number;
   total_vendido?: number;
+
+  fecha_creacion?: string;
   ultima_actualizacion?: string;
 }
 
