@@ -5,6 +5,8 @@ import React, {
   useState,
   ReactNode,
   useEffect,
+  useRef,
+  useCallback,
 } from "react";
 import {
   Product,
@@ -28,15 +30,18 @@ interface InventoryContextType {
   products: Product[];
   locations: Location[];
   movements: MovementRecord[];
+
   addProduct: (product: Omit<Product, "id">) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (sku: string, venta?: SaleData) => Promise<void>;
+
   clearRack: (rack: Rack) => void;
   getProductByLocation: (locationId: string) => Product | undefined;
   getProductsWithLocation: () => ProductWithLocation[];
   getTotalProducts: () => number;
   getLowStockProducts: () => Product[];
   getMovements: () => MovementRecord[];
+
   updateSlotStatus: (locationId: string, status: SlotStatus) => void;
   startProductPlacement: (locationId: string) => void;
   confirmProductPlacement: (locationId: string) => void;
@@ -72,6 +77,25 @@ const generateLocations = (): Location[] => {
   return locations;
 };
 
+const mapBackendProduct = (p: any): Product => {
+  const rack = p.rack ?? "A";
+  const nivel = p.nivel ?? "1";
+  const slot = p.slot ?? "1";
+
+  return {
+    id: String(p.id_producto ?? p.id ?? `${p.sku}-${rack}-${nivel}-${slot}`),
+    sku: p.sku,
+    nombre: p.nombre,
+    cantidad: Number(p.cantidad ?? 0),
+    costo_proveedor: Number(p.costo_proveedor ?? 0),
+    precio_venta_sugerido: Number(p.precio_venta_sugerido ?? 0),
+    caducidad: p.caducidad ?? null,
+    stock_minimo: Number(p.stock_minimo ?? 10),
+    stock_alto: Number(p.stock_alto ?? 30),
+    locationId: `${rack}-${nivel}-${slot}`,
+  };
+};
+
 async function sendMQTT(topic: string, message: string) {
   if (TEST_MODE_NO_MQTT) {
     console.log("[MODO PRUEBA] MQTT desactivado:", topic, message);
@@ -92,12 +116,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  const productsRef = React.useRef(products);
-  const pendingProductsRef = React.useRef(pendingProducts);
-  const pendingDeletionsRef = React.useRef(pendingDeletions);
-  const locationsRef = React.useRef(locations);
-  const processedIngresosRef = React.useRef(processedIngresos);
-  const lastEventTimeRef = React.useRef(0);
+  const productsRef = useRef<Product[]>(products);
+  const pendingProductsRef = useRef<Product[]>(pendingProducts);
+  const pendingDeletionsRef = useRef<PendingDeletion[]>(pendingDeletions);
+  const locationsRef = useRef<Location[]>(locations);
+  const processedIngresosRef = useRef<string[]>(processedIngresos);
+  const lastEventTimeRef = useRef(0);
 
   useEffect(() => {
     productsRef.current = products;
@@ -129,20 +153,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }
 
         const data = await resp.json();
-
-        const loaded: Product[] = data.map((p: any) => ({
-          id: String(
-            p.id_producto ?? p.id ?? `${p.sku}-${p.rack}-${p.nivel}-${p.slot}`
-          ),
-          sku: p.sku,
-          nombre: p.nombre,
-          cantidad: Number(p.cantidad ?? 0),
-          costo_proveedor: Number(p.costo_proveedor ?? 0),
-          precio_venta_sugerido: Number(p.precio_venta_sugerido ?? 0),
-          caducidad: p.caducidad ?? null,
-          stock_minimo: Number(p.stock_minimo ?? 10),
-          locationId: `${p.rack}-${p.nivel}-${p.slot}`,
-        }));
+        const loaded: Product[] = data.map(mapBackendProduct);
 
         setProducts(loaded);
         productsRef.current = loaded;
@@ -153,11 +164,11 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
               (prod) => prod.locationId === loc.id
             );
 
-            if (hayProducto && loc.status !== "ocupado") {
+            if (hayProducto) {
               return { ...loc, status: "ocupado" };
             }
 
-            return loc;
+            return { ...loc, status: "libre" };
           })
         );
 
@@ -198,7 +209,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }));
 
         setMovements(mapped);
-
         console.log("Movimientos cargados desde MySQL:", mapped);
       } catch (err) {
         console.error("❌ Error al cargar movimientos:", err);
@@ -250,56 +260,76 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const addProduct = async (product: Omit<Product, "id">) => {
     try {
-      const location = locations.find((loc) => loc.id === product.locationId);
+      const productoExistente = products.find(
+        (p) => p.sku.trim().toLowerCase() === product.sku.trim().toLowerCase()
+      );
 
-      if (location && location.status !== "libre") {
-        alert("❌ El slot no está libre.");
+      const finalLocationId = productoExistente?.locationId ?? product.locationId;
+      const location = locations.find((loc) => loc.id === finalLocationId);
+
+      if (!location) {
+        alert("❌ La ubicación seleccionada no existe.");
         return;
       }
 
-      const yaExiste = products.some((p) => p.locationId === product.locationId);
+      /**
+       * Si el SKU ya existe, es RESTOCK:
+       * - Se conserva la ubicación actual.
+       * - El backend suma cantidad y calcula costo promedio.
+       */
+      const esRestock = Boolean(productoExistente);
 
-      if (yaExiste) {
-        alert("❌ Este slot ya tiene un producto. Primero elimínalo.");
-        return;
+      if (!esRestock) {
+        if (location.status !== "libre") {
+          alert("❌ El slot no está libre.");
+          return;
+        }
+
+        const slotOcupado = products.some((p) => p.locationId === finalLocationId);
+
+        if (slotOcupado) {
+          alert("❌ Este slot ya tiene un producto. Primero elimínalo.");
+          return;
+        }
       }
+
+      const [rack, nivelStr, slotStr] = finalLocationId.split("-");
+
+      const productoBackend = {
+        sku: product.sku,
+        nombre: product.nombre,
+        cantidad: Number(product.cantidad ?? 0),
+        costo_proveedor: Number(product.costo_proveedor ?? 0),
+        precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
+        caducidad: product.caducidad || null,
+        stock_minimo: Number(product.stock_minimo ?? 10),
+        stock_alto: Number(product.stock_alto ?? 30),
+        descripcion: esRestock
+          ? "Restock desde RackNova"
+          : "Agregado desde RackNova",
+        rack,
+        nivel: nivelStr,
+        slot: slotStr,
+      };
 
       const newProduct: Product = {
         ...product,
+        id: productoExistente?.id ?? Date.now().toString(),
+        locationId: finalLocationId,
         costo_proveedor: Number(product.costo_proveedor ?? 0),
         precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
         caducidad: product.caducidad ?? null,
         stock_minimo: Number(product.stock_minimo ?? 10),
-        id: Date.now().toString(),
+        stock_alto: Number(product.stock_alto ?? 30),
       };
 
-      /**
-       * MODO PRUEBA SIN MQTT:
-       * Guarda directo en backend y actualiza la interfaz sin esperar ESP32.
-       */
       if (TEST_MODE_NO_MQTT) {
-        const [rack, nivelStr, slotStr] = product.locationId.split("-");
-
-        const nuevoProductoBackend = {
-          sku: product.sku,
-          nombre: product.nombre,
-          cantidad: product.cantidad,
-          costo_proveedor: Number(product.costo_proveedor ?? 0),
-          precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
-          caducidad: product.caducidad || null,
-          stock_minimo: Number(product.stock_minimo ?? 10),
-          descripcion: "Agregado desde modo prueba RackNova",
-          rack,
-          nivel: nivelStr,
-          slot: slotStr,
-        };
-
         const resp = await fetch(`${API_URL}/productos`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(nuevoProductoBackend),
+          body: JSON.stringify(productoBackend),
         });
 
         if (!resp.ok) {
@@ -309,15 +339,23 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        const saved = await resp.json();
+        const savedProduct = mapBackendProduct(saved);
+
         setProducts((prev) => {
-          const updated = [...prev, newProduct];
+          const updated = [
+            ...prev.filter((p) => p.sku !== savedProduct.sku),
+            savedProduct,
+          ];
           productsRef.current = updated;
           return updated;
         });
 
         setLocations((prev) =>
           prev.map((loc) =>
-            loc.id === product.locationId ? { ...loc, status: "ocupado" } : loc
+            loc.id === savedProduct.locationId
+              ? { ...loc, status: "ocupado" }
+              : loc
           )
         );
 
@@ -327,10 +365,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
         await addMovement({
           action: "Ingreso",
-          productSku: product.sku,
-          productName: product.nombre,
+          productSku: savedProduct.sku,
+          productName: savedProduct.nombre,
           quantity: cantidadIngreso,
-          location: product.locationId,
+          location: savedProduct.locationId,
           user: "Admin",
           costo_proveedor: costoProveedorIngreso,
           precio_venta: 0,
@@ -339,15 +377,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           ganancia: 0,
         });
 
-        console.log("[MODO PRUEBA] Producto registrado sin MQTT:", newProduct);
+        console.log(
+          esRestock
+            ? "[MODO PRUEBA] Restock registrado sin MQTT:"
+            : "[MODO PRUEBA] Producto registrado sin MQTT:",
+          savedProduct
+        );
+
         return;
       }
 
       /**
        * MODO NORMAL CON MQTT:
-       * Envía comando al ESP32 y espera confirmación física.
+       * - Si es producto nuevo, manda COLOCANDO.
+       * - Si es restock de producto existente, por ahora guarda pendiente sobre la misma ubicación.
        */
-      const [, nivelStr, slotStr] = product.locationId.split("-");
       const nivel = parseInt(nivelStr);
       const slot = parseInt(slotStr);
 
@@ -369,14 +413,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const topicCorrecto = nivelToTopic[nivel];
       const pin = pinMap[slot];
 
-      if (pin && topicCorrecto) {
+      if (pin && topicCorrecto && !esRestock) {
         const comando = `p${pin}c`;
         await sendMQTT(topicCorrecto, comando);
         console.log(`Enviado a ESP32 → ${topicCorrecto} → ${comando}`);
+      } else if (esRestock) {
+        console.log(
+          "Restock detectado. Se conserva ubicación actual:",
+          finalLocationId
+        );
       } else {
         console.warn(
           "⚠️ No existe pin o topic para esta ubicación:",
-          product.locationId
+          finalLocationId
         );
       }
 
@@ -386,7 +435,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return updated;
       });
 
-      startProductPlacement(product.locationId);
+      if (!esRestock) {
+        startProductPlacement(finalLocationId);
+      }
     } catch (error) {
       console.error("❌ Error al preparar producto:", error);
       alert("Error al preparar producto.");
@@ -416,6 +467,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       stock_minimo: Number(
         updates.stock_minimo ?? originalProduct.stock_minimo ?? 10
       ),
+      stock_alto: Number(updates.stock_alto ?? originalProduct.stock_alto ?? 30),
     };
 
     const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
@@ -439,6 +491,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         ),
         caducidad: updatedProduct.caducidad || null,
         stock_minimo: Number(updatedProduct.stock_minimo ?? 10),
+        stock_alto: Number(updatedProduct.stock_alto ?? 30),
       }),
     });
 
@@ -448,33 +501,30 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       throw new Error("No se pudo actualizar el producto en backend.");
     }
 
+    const saved = await resp.json();
+    const savedProduct = mapBackendProduct(saved);
+
     setProducts((prev) =>
-      prev.map((p) => (p.id === id ? updatedProduct : p))
+      prev.map((p) => (p.id === id ? savedProduct : p))
     );
 
     if (updates.cantidad !== undefined) {
-      const location = locations.find(
-        (loc) => loc.id === originalProduct.locationId
-      );
-
-      if (location) {
-        addMovement({
-          action: "Edición",
-          productSku: originalProduct.sku,
-          productName: originalProduct.nombre,
-          quantity: updates.cantidad,
-          location: `${location.rack}-${location.nivel}-${location.slot}`,
-          user: "Admin",
-          previousQuantity: originalProduct.cantidad,
-          newQuantity: updates.cantidad,
-          costo_proveedor:
-            updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
-          precio_venta: 0,
-          ingreso_total: 0,
-          costo_total: 0,
-          ganancia: 0,
-        });
-      }
+      await addMovement({
+        action: "Edición",
+        productSku: originalProduct.sku,
+        productName: originalProduct.nombre,
+        quantity: Number(updates.cantidad),
+        location: originalProduct.locationId,
+        user: "Admin",
+        previousQuantity: originalProduct.cantidad,
+        newQuantity: Number(updates.cantidad),
+        costo_proveedor:
+          updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
+        precio_venta: 0,
+        ingreso_total: 0,
+        costo_total: 0,
+        ganancia: 0,
+      });
     }
   };
 
@@ -487,10 +537,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      /**
-       * MODO PRUEBA SIN MQTT:
-       * Registra la salida inmediatamente, sin esperar estado LIBRE del ESP32.
-       */
       if (TEST_MODE_NO_MQTT) {
         const cantidadVendida = venta?.cantidad_vendida ?? product.cantidad;
         const precioVenta = venta?.precio_venta ?? 0;
@@ -528,23 +574,13 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           }
         );
 
-        if (salidaResp.status === 404) {
-          console.warn(
-            "⚠️ Endpoint /salida no existe. Usando DELETE anterior sin finanzas completas."
-          );
-
-          await fetch(`${API_URL}/productos/sku/${product.sku}`, {
-            method: "DELETE",
-          });
-        } else if (!salidaResp.ok) {
+        if (!salidaResp.ok) {
           const errorText = await salidaResp.text();
-
           console.error(
             "❌ Error guardando salida financiera:",
             salidaResp.status,
             errorText
           );
-
           alert("No se pudo registrar la salida en backend.");
           return;
         }
@@ -582,7 +618,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
                 ? { ...p, cantidad: p.cantidad - cantidadVendida }
                 : p
             );
-
             productsRef.current = updated;
             return updated;
           });
@@ -600,10 +635,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      /**
-       * MODO NORMAL CON MQTT:
-       * Envía QUITANDO al ESP32 y espera confirmación física LIBRE.
-       */
       const [, nivelStr, slotStr] = product.locationId.split("-");
       const nivel = parseInt(nivelStr);
       const slot = parseInt(slotStr);
@@ -672,23 +703,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     });
 
     rackProducts.forEach((product) => {
-      const location = locations.find((loc) => loc.id === product.locationId);
-
-      if (location) {
-        addMovement({
-          action: "Egreso",
-          productSku: product.sku,
-          productName: product.nombre,
-          quantity: product.cantidad,
-          location: `${location.rack}-${location.nivel}-${location.slot}`,
-          user: "Admin",
-          costo_proveedor: product.costo_proveedor ?? 0,
-          precio_venta: 0,
-          ingreso_total: 0,
-          costo_total: 0,
-          ganancia: 0,
-        });
-      }
+      addMovement({
+        action: "Egreso",
+        productSku: product.sku,
+        productName: product.nombre,
+        quantity: product.cantidad,
+        location: product.locationId,
+        user: "Admin",
+        costo_proveedor: product.costo_proveedor ?? 0,
+        precio_venta: 0,
+        ingreso_total: 0,
+        costo_total: 0,
+        ganancia: 0,
+      });
     });
 
     const rackLocationIds = locations
@@ -700,7 +727,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     );
 
     setLocations((prev) =>
-      prev.map((loc) => (loc.rack === rack ? { ...loc, status: "libre" } : loc))
+      prev.map((loc) =>
+        loc.rack === rack ? { ...loc, status: "libre" } : loc
+      )
     );
   };
 
@@ -716,7 +745,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const getTotalProducts = () => products.length;
 
   const getLowStockProducts = () =>
-    products.filter((p) => p.cantidad < Number(p.stock_minimo ?? 10));
+    products.filter((p) => p.cantidad <= Number(p.stock_minimo ?? 10));
 
   const getMovements = () =>
     [...movements].sort(
@@ -735,7 +764,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const confirmProductPlacement = (locationId: string) =>
     updateSlotStatus(locationId, "ocupado");
 
-  const handleMQTT = React.useCallback((topic: string, data: any) => {
+  const handleMQTT = useCallback((topic: string, data: any) => {
     if (TEST_MODE_NO_MQTT) {
       return;
     }
@@ -806,219 +835,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
             return loc;
           })
         );
-
-        if (estado === "ocupado") {
-          const slotEstadoUI = locationsRef.current.find(
-            (loc) => loc.id === slotId
-          );
-
-          if (pendingProductsRef.current.length === 0) {
-            console.log("⏭ No hay productos pendientes. Ingreso ignorado.");
-            return;
-          }
-
-          if (slotEstadoUI?.status !== "en_proceso") {
-            console.log("⏭ Slot no estaba en proceso. Ignorando ingreso.");
-            return;
-          }
-
-          if (processedIngresosRef.current.includes(slotId)) {
-            console.log("⏭ Ingreso ya procesado antes:", slotId);
-            return;
-          }
-
-          const pending = pendingProductsRef.current.find(
-            (p) => p.locationId === slotId
-          );
-
-          if (!pending) return;
-
-          setProcessedIngresos((prev) => {
-            if (prev.includes(slotId)) return prev;
-
-            const updated = [...prev, slotId];
-            processedIngresosRef.current = updated;
-            return updated;
-          });
-
-          setProducts((prev) => {
-            const updated = [
-              ...prev.filter((p) => p.locationId !== slotId),
-              pending,
-            ];
-
-            productsRef.current = updated;
-            return updated;
-          });
-
-          setPendingProducts((prev) => {
-            const updated = prev.filter((p) => p.locationId !== slotId);
-            pendingProductsRef.current = updated;
-            return updated;
-          });
-
-          (async () => {
-            try {
-              const [rack, nivelStr, slotStr] = slotId.split("-");
-
-              const nuevoProducto = {
-                sku: pending.sku,
-                nombre: pending.nombre,
-                cantidad: pending.cantidad,
-                costo_proveedor: Number(pending.costo_proveedor ?? 0),
-                precio_venta_sugerido: Number(
-                  pending.precio_venta_sugerido ?? 0
-                ),
-                caducidad: pending.caducidad || null,
-                stock_minimo: Number(pending.stock_minimo ?? 10),
-                descripcion: "Agregado desde interfaz RackNova",
-                rack,
-                nivel: nivelStr,
-                slot: slotStr,
-              };
-
-              const resp = await fetch(`${API_URL}/productos`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify(nuevoProducto),
-              });
-
-              if (!resp.ok) {
-                console.error(
-                  "❌ Error guardando producto en backend:",
-                  resp.status
-                );
-              } else {
-                const saved = await resp.json();
-                console.log("Producto guardado una sola vez:", saved);
-              }
-            } catch (e) {
-              console.error("❌ Error en guardado backend tras ingreso:", e);
-            }
-          })();
-
-          const costoProveedorIngreso = Number(pending.costo_proveedor ?? 0);
-          const cantidadIngreso = Number(pending.cantidad ?? 0);
-          const costoTotalIngreso = costoProveedorIngreso * cantidadIngreso;
-
-          addMovement({
-            action: "Ingreso",
-            productSku: pending.sku,
-            productName: pending.nombre,
-            quantity: cantidadIngreso,
-            location: slotId,
-            user: "Admin",
-            costo_proveedor: costoProveedorIngreso,
-            precio_venta: 0,
-            ingreso_total: 0,
-            costo_total: costoTotalIngreso,
-            ganancia: 0,
-          });
-
-          console.log("Ingreso registrado correctamente:", slotId);
-        }
-
-        if (estado === "libre") {
-          const deletion = pendingDeletionsRef.current.find(
-            (item) => item.locationId === slotId
-          );
-
-          if (!deletion) return;
-
-          console.log(`Confirmado egreso de ${slotId}`);
-
-          pendingDeletionsRef.current = pendingDeletionsRef.current.filter(
-            (item) => item.locationId !== slotId
-          );
-
-          const product = productsRef.current.find(
-            (p) => p.locationId === slotId
-          );
-
-          if (product) {
-            const cantidadVendida =
-              deletion.venta?.cantidad_vendida ?? product.cantidad;
-
-            const precioVenta = deletion.venta?.precio_venta ?? 0;
-            const costoProveedor = product.costo_proveedor ?? 0;
-            const ingresoTotal = precioVenta * cantidadVendida;
-            const costoTotal = costoProveedor * cantidadVendida;
-            const ganancia = ingresoTotal - costoTotal;
-
-            (async () => {
-              try {
-                const salidaResp = await fetch(
-                  `${API_URL}/productos/sku/${product.sku}/salida`,
-                  {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                      cantidad_vendida: cantidadVendida,
-                      precio_venta: precioVenta,
-                      costo_proveedor: costoProveedor,
-                      ingreso_total: ingresoTotal,
-                      costo_total: costoTotal,
-                      ganancia,
-                    }),
-                  }
-                );
-
-                if (salidaResp.status === 404) {
-                  console.warn(
-                    "⚠️ Endpoint /salida no existe. Usando DELETE anterior sin finanzas."
-                  );
-
-                  await fetch(`${API_URL}/productos/sku/${product.sku}`, {
-                    method: "DELETE",
-                  });
-                } else if (!salidaResp.ok) {
-                  console.error(
-                    "❌ Error guardando salida financiera:",
-                    salidaResp.status
-                  );
-                }
-              } catch (error) {
-                console.error("❌ Error en salida financiera:", error);
-              }
-            })();
-
-            addMovement({
-              action: "Egreso",
-              productSku: product.sku,
-              productName: product.nombre,
-              quantity: cantidadVendida,
-              location: slotId,
-              user: "Admin",
-              costo_proveedor: costoProveedor,
-              precio_venta: precioVenta,
-              ingreso_total: ingresoTotal,
-              costo_total: costoTotal,
-              ganancia,
-            });
-          }
-
-          setPendingDeletions((prev) => {
-            const updated = prev.filter((item) => item.locationId !== slotId);
-            pendingDeletionsRef.current = updated;
-            return updated;
-          });
-
-          setProducts((prev) => {
-            const updated = prev.filter((p) => p.locationId !== slotId);
-            productsRef.current = updated;
-            return updated;
-          });
-
-          setProcessedIngresos((prev) => {
-            const updated = prev.filter((id) => id !== slotId);
-            processedIngresosRef.current = updated;
-            return updated;
-          });
-        }
       });
     }
 
