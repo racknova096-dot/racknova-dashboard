@@ -10,6 +10,7 @@ import {
   Activity,
   DollarSign,
   BarChart3,
+  BookOpen,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
@@ -50,6 +51,12 @@ const navItems = [
     icon: BarChart3,
     color: "from-pink-500 to-rose-500",
   },
+  {
+  path: "/catalogo",
+  label: "Catálogo",
+  icon: BookOpen,
+  color: "from-sky-500 to-blue-500",
+},
 ];
 
 export function Navigation() {
