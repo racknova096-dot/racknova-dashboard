@@ -170,11 +170,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
               (prod) => prod.locationId === loc.id
             );
 
-            if (hayProducto) {
-              return { ...loc, status: "ocupado" };
-            }
-
-            return { ...loc, status: "libre" };
+            return hayProducto
+              ? { ...loc, status: "ocupado" }
+              : { ...loc, status: "libre" };
           })
         );
 
@@ -266,10 +264,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const addProduct = async (product: Omit<Product, "id">) => {
     try {
-      const productoExistente = products.find(
-        (p) =>
-          p.sku.trim().toLowerCase() === product.sku.trim().toLowerCase()
-      );
+      const productoExistente = products.find((p) => {
+        const skuActual = p.sku.trim().toLowerCase();
+        const nombreActual = p.nombre.trim().toLowerCase();
+
+        const skuNuevo = product.sku.trim().toLowerCase();
+        const nombreNuevo = product.nombre.trim().toLowerCase();
+
+        return skuActual === skuNuevo || nombreActual === nombreNuevo;
+      });
 
       const finalLocationId =
         productoExistente?.locationId ?? product.locationId;
@@ -524,8 +527,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         quantity: Number(updates.cantidad),
         location: originalProduct.locationId,
         user: "Admin",
-        previousQuantity: originalProduct.cantidad,
-        newQuantity: Number(updates.cantidad),
         costo_proveedor:
           updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
         precio_venta: 0,
