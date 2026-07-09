@@ -18,6 +18,7 @@ import Tracking from "./pages/Tracking";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import RackView from "./pages/RackView";
+import Catalogo from "./pages/Catalogo";
 import Usuarios from "./pages/Usuarios";
 import ProtectedRoute from "./pages/ProtectedRoute";
 
@@ -50,6 +51,7 @@ const App = () => {
                   <Route element={<ProtectedLayout />}>
                     <Route path="/" element={<Index />} />
                     <Route path="/add" element={<AddProduct />} />
+                    <Route path="/catalogo" element={<Catalogo />} />
                     <Route path="/add-product" element={<AddProduct />} />
                     <Route path="/products" element={<ProductList />} />
                     <Route path="/tracking" element={<Tracking />} />
