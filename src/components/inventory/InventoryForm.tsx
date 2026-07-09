@@ -30,6 +30,7 @@ import {
   History,
   AlertTriangle,
   Layers,
+  X,
 } from "lucide-react";
 import {
   ProductoCatalogo,
@@ -39,9 +40,18 @@ import {
 
 type SelectedSource = "inventory" | "catalog" | null;
 
+interface FefoNotice {
+  nombre: string;
+  locationId: string;
+  caducidad: string | null;
+  expiresBeforeCurrent: boolean;
+}
+
 const formatDate = (value?: string | null) => {
   if (!value) return "Sin caducidad";
+
   const date = new Date(`${value}T00:00:00`);
+
   return date.toLocaleDateString("es-MX", {
     year: "numeric",
     month: "short",
@@ -76,6 +86,8 @@ export function InventoryForm() {
   const [activeLots, setActiveLots] = useState<ProductoLote[]>([]);
   const [lotsLoading, setLotsLoading] = useState(false);
 
+  const [fefoNotice, setFefoNotice] = useState<FefoNotice | null>(null);
+
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
   const [lastAddedProduct, setLastAddedProduct] = useState<{
     sku: string;
@@ -90,7 +102,8 @@ export function InventoryForm() {
     useInventory();
   const { toast } = useToast();
 
-  const identityLocked = selectedSource === "inventory" || selectedSource === "catalog";
+  const identityLocked =
+    selectedSource === "inventory" || selectedSource === "catalog";
   const locationLocked = selectedSource === "inventory";
   const isRestock = selectedSource === "inventory";
 
@@ -210,7 +223,8 @@ export function InventoryForm() {
   };
 
   const handleSelectCatalogProduct = (item: ProductoCatalogo) => {
-    const inventoryProduct = findInventoryExactMatch(item.sku) || findInventoryExactMatch(item.nombre);
+    const inventoryProduct =
+      findInventoryExactMatch(item.sku) || findInventoryExactMatch(item.nombre);
 
     if (inventoryProduct) {
       handleSelectInventoryProduct(inventoryProduct);
@@ -447,6 +461,9 @@ export function InventoryForm() {
     const caducidadValue =
       caducidadNoAplica || !caducidad ? null : caducidad;
 
+    const shouldShowFefoNotice = isRestock;
+    const shouldWarnFront = newLotExpiresBeforeCurrent;
+
     try {
       await addProduct({
         locationId,
@@ -472,10 +489,19 @@ export function InventoryForm() {
 
       setShowQRConfirmation(true);
 
+      if (shouldShowFefoNotice) {
+        setFefoNotice({
+          nombre: finalNombre,
+          locationId,
+          caducidad: caducidadValue,
+          expiresBeforeCurrent: shouldWarnFront,
+        });
+      }
+
       toast({
         title: isRestock ? "Restock registrado" : "Producto agregado",
         description: isRestock
-          ? `Se sumaron ${cantidadNum} pieza(s) a ${finalNombre}.`
+          ? `Se sumaron ${cantidadNum} pieza(s) a ${finalNombre}. Revisa la regla FEFO en pantalla.`
           : `${finalNombre} fue agregado al inventario.`,
       });
 
@@ -493,6 +519,61 @@ export function InventoryForm() {
 
   return (
     <div className="space-y-6">
+      {fefoNotice && (
+        <Card className="border-amber-300 bg-amber-50 text-amber-950">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 mt-0.5" />
+
+                <div className="space-y-1">
+                  <p className="font-semibold">
+                    Regla FEFO para acomodo físico
+                  </p>
+
+                  <p className="text-sm">
+                    Se registró un nuevo lote para{" "}
+                    <strong>{fefoNotice.nombre}</strong> en la ubicación{" "}
+                    <strong>{fefoNotice.locationId}</strong>.
+                  </p>
+
+                  <p className="text-sm">
+                    RackNova descontará primero el lote que caduca antes. Para
+                    mantener datos correctos, coloca físicamente el producto con
+                    caducidad más próxima al frente y el nuevo lote detrás si
+                    caduca después.
+                  </p>
+
+                  {fefoNotice.caducidad && (
+                    <p className="text-sm">
+                      Caducidad del nuevo lote:{" "}
+                      <strong>{formatDate(fefoNotice.caducidad)}</strong>.
+                    </p>
+                  )}
+
+                  {fefoNotice.expiresBeforeCurrent && (
+                    <p className="text-sm font-semibold text-red-700">
+                      Atención: este nuevo lote caduca antes que los lotes
+                      actuales. Debe colocarse al frente.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setFefoNotice(null)}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cerrar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="racknova-card">
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center gap-2">
@@ -608,21 +689,6 @@ export function InventoryForm() {
                       </p>
                     </div>
                   )}
-
-                  {isRestock && (
-                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                      <p className="font-semibold flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4" />
-                        Regla FEFO de acomodo físico
-                      </p>
-                      <p className="text-xs mt-1">
-                        RackNova descontará primero el lote que caduca antes.
-                        Para mantener datos correctos, coloca físicamente el
-                        producto más próximo a caducar al frente y el nuevo lote
-                        detrás si caduca después.
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 {isRestock && (
@@ -678,14 +744,6 @@ export function InventoryForm() {
                         <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
                           Lote con caducidad más próxima:{" "}
                           <strong>{formatDate(earliestLot.caducidad)}</strong>
-                        </div>
-                      )}
-
-                      {newLotExpiresBeforeCurrent && (
-                        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-900">
-                          Este nuevo lote caduca antes que los lotes actuales.
-                          Debe colocarse físicamente al frente para respetar
-                          FEFO.
                         </div>
                       )}
                     </CardContent>
