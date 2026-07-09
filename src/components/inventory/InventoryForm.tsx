@@ -198,10 +198,7 @@ export function InventoryForm() {
     setNombre(product.nombre ?? "");
     setDescripcion(product.descripcion ?? "");
 
-    /**
-     * Cantidad y caducidad SIEMPRE pertenecen a la nueva entrada/lote.
-     * Por eso no se autollenan.
-     */
+    // Cantidad y caducidad siempre pertenecen al nuevo lote.
     setCantidad("");
     setCaducidad("");
     setCaducidadNoAplica(true);
@@ -239,10 +236,7 @@ export function InventoryForm() {
     setNombre(item.nombre ?? "");
     setDescripcion(item.descripcion ?? "");
 
-    /**
-     * Si solo existe en catálogo, el catálogo NO guarda costos,
-     * precios, stock, ubicación ni caducidad.
-     */
+    // Si solo existe en catálogo, solo autollena identidad.
     setCantidad("");
     setCaducidad("");
     setCaducidadNoAplica(true);
@@ -263,13 +257,6 @@ export function InventoryForm() {
   useEffect(() => {
     if (!searchTerm || searchTerm.length < 2 || selectedSource) {
       setCatalogResults([]);
-      return;
-    }
-
-    const inventoryMatch = findInventoryExactMatch(searchTerm);
-
-    if (inventoryMatch) {
-      handleSelectInventoryProduct(inventoryMatch);
       return;
     }
 
@@ -295,19 +282,6 @@ export function InventoryForm() {
           : data?.productos ?? data?.resultados ?? [];
 
         setCatalogResults(results);
-
-        const term = searchTerm.trim().toLowerCase();
-
-        const exactMatch = results.find((item) => {
-          const itemSku = item.sku?.trim().toLowerCase();
-          const itemNombre = item.nombre?.trim().toLowerCase();
-
-          return itemSku === term || itemNombre === term;
-        });
-
-        if (exactMatch) {
-          handleSelectCatalogProduct(exactMatch);
-        }
       } catch (error) {
         console.error("Error buscando catálogo histórico:", error);
         setCatalogResults([]);
@@ -317,7 +291,7 @@ export function InventoryForm() {
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [searchTerm, products, selectedSource]);
+  }, [searchTerm, selectedSource]);
 
   useEffect(() => {
     const loadLots = async () => {
@@ -353,6 +327,46 @@ export function InventoryForm() {
 
     loadLots();
   }, [selectedInventoryProduct?.sku]);
+
+  const handleAutocompleteEnter = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    term: string
+  ) => {
+    if (e.key !== "Enter") return;
+
+    const cleanTerm = term.trim().toLowerCase();
+
+    if (!cleanTerm) return;
+
+    const inventoryMatch = findInventoryExactMatch(cleanTerm);
+
+    if (inventoryMatch) {
+      e.preventDefault();
+      handleSelectInventoryProduct(inventoryMatch);
+      return;
+    }
+
+    const catalogMatch = catalogResults.find((item) => {
+      const itemSku = item.sku?.trim().toLowerCase();
+      const itemNombre = item.nombre?.trim().toLowerCase();
+
+      return itemSku === cleanTerm || itemNombre === cleanTerm;
+    });
+
+    if (catalogMatch) {
+      e.preventDefault();
+      handleSelectCatalogProduct(catalogMatch);
+      return;
+    }
+
+    e.preventDefault();
+
+    toast({
+      title: "Sin coincidencia exacta",
+      description:
+        "No se encontró un SKU o nombre exacto. Selecciona una coincidencia de la lista o continúa como producto nuevo.",
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -601,9 +615,9 @@ export function InventoryForm() {
                         Catálogo histórico e inventario actual
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Escribe un SKU o nombre. Si existe actualmente en el
-                        rack, RackNova llenará datos de inventario. Si solo
-                        existe en histórico, llenará SKU, nombre y descripción.
+                        Escribe un SKU o nombre. RackNova mostrará coincidencias.
+                        Para autollenar, da click en una coincidencia o presiona
+                        Enter cuando el SKU/nombre esté completo.
                       </p>
                     </div>
                   </div>
@@ -759,6 +773,7 @@ export function InventoryForm() {
                         id="sku"
                         value={sku}
                         onChange={(e) => setSku(e.target.value)}
+                        onKeyDown={(e) => handleAutocompleteEnter(e, sku)}
                         placeholder="Ej: SKU001"
                         className="pl-9"
                         required
@@ -773,6 +788,7 @@ export function InventoryForm() {
                       id="nombre"
                       value={nombre}
                       onChange={(e) => setNombre(e.target.value)}
+                      onKeyDown={(e) => handleAutocompleteEnter(e, nombre)}
                       placeholder="Ej: Coca Cola 600 ml"
                       required
                       disabled={identityLocked}
