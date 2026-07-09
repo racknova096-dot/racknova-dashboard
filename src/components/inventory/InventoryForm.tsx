@@ -28,8 +28,26 @@ import {
   Lock,
   RotateCcw,
   History,
+  AlertTriangle,
+  Layers,
 } from "lucide-react";
-import { ProductoCatalogo } from "@/types/inventory";
+import {
+  ProductoCatalogo,
+  ProductoLote,
+  Product,
+} from "@/types/inventory";
+
+type SelectedSource = "inventory" | "catalog" | null;
+
+const formatDate = (value?: string | null) => {
+  if (!value) return "Sin caducidad";
+  const date = new Date(`${value}T00:00:00`);
+  return date.toLocaleDateString("es-MX", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+};
 
 export function InventoryForm() {
   const [sku, setSku] = useState("");
@@ -50,7 +68,13 @@ export function InventoryForm() {
   const [catalogResults, setCatalogResults] = useState<ProductoCatalogo[]>([]);
   const [selectedCatalogProduct, setSelectedCatalogProduct] =
     useState<ProductoCatalogo | null>(null);
+  const [selectedInventoryProduct, setSelectedInventoryProduct] =
+    useState<Product | null>(null);
+  const [selectedSource, setSelectedSource] = useState<SelectedSource>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
+
+  const [activeLots, setActiveLots] = useState<ProductoLote[]>([]);
+  const [lotsLoading, setLotsLoading] = useState(false);
 
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
   const [lastAddedProduct, setLastAddedProduct] = useState<{
@@ -66,25 +90,9 @@ export function InventoryForm() {
     useInventory();
   const { toast } = useToast();
 
-  const existingInventoryProduct = useMemo(() => {
-    const skuClean = sku.trim().toLowerCase();
-    const nombreClean = nombre.trim().toLowerCase();
-
-    if (!skuClean && !nombreClean) return undefined;
-
-    return products.find((product) => {
-      const productSku = product.sku.trim().toLowerCase();
-      const productName = product.nombre.trim().toLowerCase();
-
-      return (
-        (!!skuClean && productSku === skuClean) ||
-        (!!nombreClean && productName === nombreClean)
-      );
-    });
-  }, [products, sku, nombre]);
-
-  const isHistoricalProduct = Boolean(selectedCatalogProduct);
-  const isRestock = Boolean(existingInventoryProduct);
+  const identityLocked = selectedSource === "inventory" || selectedSource === "catalog";
+  const locationLocked = selectedSource === "inventory";
+  const isRestock = selectedSource === "inventory";
 
   const availableSlots = locations.filter((loc) => {
     if (!selectedRack || !selectedNivel) return false;
@@ -98,13 +106,47 @@ export function InventoryForm() {
   });
 
   const searchTerm = useMemo(() => {
-    if (selectedCatalogProduct) return "";
+    if (selectedSource) return "";
 
     const skuClean = sku.trim();
     const nombreClean = nombre.trim();
 
     return skuClean || nombreClean;
-  }, [sku, nombre, selectedCatalogProduct]);
+  }, [sku, nombre, selectedSource]);
+
+  const earliestLot = useMemo(() => {
+    const lotsWithDate = activeLots
+      .filter((lot) => lot.caducidad && lot.cantidad_actual > 0)
+      .sort(
+        (a, b) =>
+          new Date(`${a.caducidad}T00:00:00`).getTime() -
+          new Date(`${b.caducidad}T00:00:00`).getTime()
+      );
+
+    return lotsWithDate[0] ?? null;
+  }, [activeLots]);
+
+  const newLotExpiresBeforeCurrent = useMemo(() => {
+    if (!caducidad || !earliestLot?.caducidad) return false;
+
+    const nueva = new Date(`${caducidad}T00:00:00`).getTime();
+    const actual = new Date(`${earliestLot.caducidad}T00:00:00`).getTime();
+
+    return nueva < actual;
+  }, [caducidad, earliestLot]);
+
+  const findInventoryExactMatch = (term: string) => {
+    const cleanTerm = term.trim().toLowerCase();
+
+    if (!cleanTerm) return undefined;
+
+    return products.find((product) => {
+      const productSku = product.sku.trim().toLowerCase();
+      const productName = product.nombre.trim().toLowerCase();
+
+      return productSku === cleanTerm || productName === cleanTerm;
+    });
+  };
 
   const resetForm = () => {
     setSku("");
@@ -124,97 +166,96 @@ export function InventoryForm() {
 
     setCatalogResults([]);
     setSelectedCatalogProduct(null);
+    setSelectedInventoryProduct(null);
+    setSelectedSource(null);
+
+    setActiveLots([]);
   };
 
   const clearHistoricalSelection = () => {
-    setSelectedCatalogProduct(null);
-    setCatalogResults([]);
+    resetForm();
+  };
 
-    setSku("");
-    setNombre("");
+  const handleSelectInventoryProduct = (product: Product) => {
+    setSelectedSource("inventory");
+    setSelectedInventoryProduct(product);
+    setSelectedCatalogProduct(null);
+
+    setSku(product.sku ?? "");
+    setNombre(product.nombre ?? "");
+    setDescripcion(product.descripcion ?? "");
+
+    /**
+     * Cantidad y caducidad SIEMPRE pertenecen a la nueva entrada/lote.
+     * Por eso no se autollenan.
+     */
     setCantidad("");
-    setDescripcion("");
-    setCostoProveedor("");
-    setPrecioVentaSugerido("");
     setCaducidad("");
     setCaducidadNoAplica(true);
-    setStockMinimo("");
-    setStockAlto("");
+
+    setCostoProveedor(Number(product.costo_proveedor ?? 0).toString());
+    setPrecioVentaSugerido(
+      Number(product.precio_venta_sugerido ?? 0).toString()
+    );
+    setStockMinimo(Number(product.stock_minimo ?? 10).toString());
+    setStockAlto(Number(product.stock_alto ?? 30).toString());
+
+    const [rack, nivel, slot] = product.locationId.split("-");
+
+    setSelectedRack(rack);
+    setSelectedNivel(nivel);
+    setSelectedSlot(slot);
+
+    setCatalogResults([]);
+  };
+
+  const handleSelectCatalogProduct = (item: ProductoCatalogo) => {
+    const inventoryProduct = findInventoryExactMatch(item.sku) || findInventoryExactMatch(item.nombre);
+
+    if (inventoryProduct) {
+      handleSelectInventoryProduct(inventoryProduct);
+      return;
+    }
+
+    setSelectedSource("catalog");
+    setSelectedCatalogProduct(item);
+    setSelectedInventoryProduct(null);
+
+    setSku(item.sku ?? "");
+    setNombre(item.nombre ?? "");
+    setDescripcion(item.descripcion ?? "");
+
+    /**
+     * Si solo existe en catálogo, el catálogo NO guarda costos,
+     * precios, stock, ubicación ni caducidad.
+     */
+    setCantidad("");
+    setCaducidad("");
+    setCaducidadNoAplica(true);
+
+    setCostoProveedor("");
+    setPrecioVentaSugerido("");
+    setStockMinimo("10");
+    setStockAlto("30");
 
     setSelectedRack("");
     setSelectedNivel("");
     setSelectedSlot("");
-  };
-
-  const handleSelectCatalogProduct = (item: ProductoCatalogo) => {
-    const itemSku = item.sku?.trim().toLowerCase() ?? "";
-    const itemName = item.nombre?.trim().toLowerCase() ?? "";
-
-    const currentProduct = products.find((product) => {
-      const productSku = product.sku.trim().toLowerCase();
-      const productName = product.nombre.trim().toLowerCase();
-
-      return productSku === itemSku || productName === itemName;
-    });
-
-    setSelectedCatalogProduct(item);
-
-    setSku(currentProduct?.sku ?? item.sku ?? "");
-    setNombre(currentProduct?.nombre ?? item.nombre ?? "");
-    setDescripcion(currentProduct?.descripcion ?? item.descripcion ?? "");
-
-    setCantidad("");
-
-    const costoSugerido =
-      currentProduct?.costo_proveedor ??
-      item.ultimo_costo_proveedor ??
-      item.costo_promedio ??
-      0;
-
-    setCostoProveedor(Number(costoSugerido).toString());
-
-    setPrecioVentaSugerido(
-      Number(
-        currentProduct?.precio_venta_sugerido ??
-          item.precio_venta_sugerido ??
-          0
-      ).toString()
-    );
-
-    if (currentProduct?.caducidad || item.caducidad) {
-      setCaducidad(currentProduct?.caducidad ?? item.caducidad ?? "");
-      setCaducidadNoAplica(false);
-    } else {
-      setCaducidad("");
-      setCaducidadNoAplica(true);
-    }
-
-    setStockMinimo(
-      Number(currentProduct?.stock_minimo ?? item.stock_minimo ?? 10).toString()
-    );
-
-    setStockAlto(
-      Number(currentProduct?.stock_alto ?? item.stock_alto ?? 30).toString()
-    );
-
-    if (currentProduct) {
-      const [rack, nivel, slot] = currentProduct.locationId.split("-");
-
-      setSelectedRack(rack);
-      setSelectedNivel(nivel);
-      setSelectedSlot(slot);
-    } else {
-      setSelectedRack("");
-      setSelectedNivel("");
-      setSelectedSlot("");
-    }
 
     setCatalogResults([]);
+    setActiveLots([]);
   };
 
   useEffect(() => {
-    if (!searchTerm || searchTerm.length < 2) {
+    if (!searchTerm || searchTerm.length < 2 || selectedSource) {
       setCatalogResults([]);
+      return;
+    }
+
+    const inventoryMatch = findInventoryExactMatch(searchTerm);
+
+    if (inventoryMatch) {
+      handleSelectInventoryProduct(inventoryMatch);
       return;
     }
 
@@ -262,15 +303,63 @@ export function InventoryForm() {
     }, 400);
 
     return () => clearTimeout(timeout);
-  }, [searchTerm, products]);
+  }, [searchTerm, products, selectedSource]);
+
+  useEffect(() => {
+    const loadLots = async () => {
+      if (!selectedInventoryProduct?.sku) {
+        setActiveLots([]);
+        return;
+      }
+
+      try {
+        setLotsLoading(true);
+
+        const response = await fetch(
+          `${API_URL}/productos/${encodeURIComponent(
+            selectedInventoryProduct.sku
+          )}/lotes`
+        );
+
+        if (!response.ok) {
+          setActiveLots([]);
+          return;
+        }
+
+        const data = await response.json();
+
+        setActiveLots(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Error cargando lotes del producto:", error);
+        setActiveLots([]);
+      } finally {
+        setLotsLoading(false);
+      }
+    };
+
+    loadLots();
+  }, [selectedInventoryProduct?.sku]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const skuClean = sku.trim();
-    const nombreClean = nombre.trim();
+    const finalSku =
+      selectedInventoryProduct?.sku ??
+      selectedCatalogProduct?.sku ??
+      sku.trim();
 
-    if (!skuClean || !nombreClean) {
+    const finalNombre =
+      selectedInventoryProduct?.nombre ??
+      selectedCatalogProduct?.nombre ??
+      nombre.trim();
+
+    const finalDescripcion =
+      selectedInventoryProduct?.descripcion ??
+      selectedCatalogProduct?.descripcion ??
+      descripcion.trim() ??
+      null;
+
+    if (!finalSku || !finalNombre) {
       toast({
         title: "Error",
         description: "El SKU y el nombre son obligatorios.",
@@ -318,7 +407,7 @@ export function InventoryForm() {
     if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
       toast({
         title: "Error",
-        description: "El stock bajo debe ser un número mayor a 0.",
+        description: "El stock crítico debe ser un número mayor a 0.",
         variant: "destructive",
       });
       return;
@@ -330,7 +419,7 @@ export function InventoryForm() {
     if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
       toast({
         title: "Error",
-        description: "El stock alto debe ser mayor que el stock bajo/mínimo.",
+        description: "El stock alto debe ser mayor que el stock crítico.",
         variant: "destructive",
       });
       return;
@@ -338,8 +427,8 @@ export function InventoryForm() {
 
     let locationId = "";
 
-    if (existingInventoryProduct) {
-      locationId = existingInventoryProduct.locationId;
+    if (selectedInventoryProduct) {
+      locationId = selectedInventoryProduct.locationId;
     } else {
       if (!selectedRack || !selectedNivel || !selectedSlot) {
         toast({
@@ -361,9 +450,9 @@ export function InventoryForm() {
     try {
       await addProduct({
         locationId,
-        sku: skuClean,
-        nombre: nombreClean,
-        descripcion: descripcion.trim() || null,
+        sku: finalSku,
+        nombre: finalNombre,
+        descripcion: finalDescripcion || null,
         cantidad: cantidadNum,
         costo_proveedor: costoProveedorNum,
         precio_venta_sugerido: precioVentaSugeridoNum,
@@ -373,8 +462,8 @@ export function InventoryForm() {
       });
 
       setLastAddedProduct({
-        sku: skuClean,
-        nombre: nombreClean,
+        sku: finalSku,
+        nombre: finalNombre,
         rack: finalRack,
         nivel: parseInt(finalNivel),
         slot: parseInt(finalSlot),
@@ -386,8 +475,8 @@ export function InventoryForm() {
       toast({
         title: isRestock ? "Restock registrado" : "Producto agregado",
         description: isRestock
-          ? `Se sumaron ${cantidadNum} pieza(s) a ${nombreClean}.`
-          : `${nombreClean} fue agregado al inventario.`,
+          ? `Se sumaron ${cantidadNum} pieza(s) a ${finalNombre}.`
+          : `${finalNombre} fue agregado al inventario.`,
       });
 
       resetForm();
@@ -428,11 +517,12 @@ export function InventoryForm() {
                     <History className="h-5 w-5 text-primary mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold">
-                        Catálogo histórico
+                        Catálogo histórico e inventario actual
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Escribe un SKU o nombre. Si el producto ya existe,
-                        RackNova rellenará la información automáticamente.
+                        Escribe un SKU o nombre. Si existe actualmente en el
+                        rack, RackNova llenará datos de inventario. Si solo
+                        existe en histórico, llenará SKU, nombre y descripción.
                       </p>
                     </div>
                   </div>
@@ -443,7 +533,7 @@ export function InventoryForm() {
                     </p>
                   )}
 
-                  {!selectedCatalogProduct && catalogResults.length > 0 && (
+                  {!selectedSource && catalogResults.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-muted-foreground">
                         Coincidencias encontradas:
@@ -457,28 +547,18 @@ export function InventoryForm() {
                             onClick={() => handleSelectCatalogProduct(item)}
                             className="w-full text-left p-3 hover:bg-muted border-b last:border-b-0"
                           >
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-sm font-semibold">
-                                  {item.nombre}
+                            <div>
+                              <p className="text-sm font-semibold">
+                                {item.nombre}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                SKU: {item.sku}
+                              </p>
+                              {item.descripcion && (
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {item.descripcion}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                  SKU: {item.sku}
-                                </p>
-                              </div>
-
-                              <div className="text-right text-xs text-muted-foreground">
-                                <p>
-                                  Costo prom.: $
-                                  {Number(item.costo_promedio ?? 0).toFixed(2)}
-                                </p>
-                                <p>
-                                  Venta sug.: $
-                                  {Number(
-                                    item.precio_venta_sugerido ?? 0
-                                  ).toFixed(2)}
-                                </p>
-                              </div>
+                              )}
                             </div>
                           </button>
                         ))}
@@ -486,18 +566,20 @@ export function InventoryForm() {
                     </div>
                   )}
 
-                  {selectedCatalogProduct && (
+                  {selectedSource && (
                     <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-semibold flex items-center gap-2">
                             <Lock className="h-4 w-4" />
-                            Producto cargado desde histórico
+                            {selectedSource === "inventory"
+                              ? "Producto cargado desde inventario actual"
+                              : "Producto cargado desde catálogo histórico"}
                           </p>
                           <p className="text-xs mt-1">
-                            SKU, nombre, descripción y ubicación quedan
-                            bloqueados para evitar duplicados. Puedes modificar
-                            cantidad, costos, precios, stock y caducidad.
+                            SKU, nombre y descripción quedan bloqueados para
+                            evitar duplicados. Cantidad y caducidad pertenecen a
+                            la nueva entrada y deben capturarse manualmente.
                           </p>
                         </div>
 
@@ -514,18 +596,101 @@ export function InventoryForm() {
                     </div>
                   )}
 
-                  {isRestock && (
+                  {isRestock && selectedInventoryProduct && (
                     <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950">
                       <p className="font-semibold">Restock detectado</p>
                       <p className="text-xs mt-1">
                         Este producto ya existe en inventario. RackNova sumará
                         la nueva cantidad, conservará la ubicación{" "}
-                        <strong>{existingInventoryProduct?.locationId}</strong>{" "}
-                        y recalculará el costo promedio.
+                        <strong>{selectedInventoryProduct.locationId}</strong>,
+                        recalculará el costo promedio y creará un lote nuevo con
+                        la caducidad capturada.
+                      </p>
+                    </div>
+                  )}
+
+                  {isRestock && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                      <p className="font-semibold flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Regla FEFO de acomodo físico
+                      </p>
+                      <p className="text-xs mt-1">
+                        RackNova descontará primero el lote que caduca antes.
+                        Para mantener datos correctos, coloca físicamente el
+                        producto más próximo a caducar al frente y el nuevo lote
+                        detrás si caduca después.
                       </p>
                     </div>
                   )}
                 </div>
+
+                {isRestock && (
+                  <Card className="border-dashed">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Layers className="h-4 w-4" />
+                        Lotes activos del producto
+                      </CardTitle>
+                    </CardHeader>
+
+                    <CardContent className="space-y-2">
+                      {lotsLoading && (
+                        <p className="text-sm text-muted-foreground">
+                          Cargando lotes...
+                        </p>
+                      )}
+
+                      {!lotsLoading && activeLots.length === 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          No hay lotes activos registrados todavía.
+                        </p>
+                      )}
+
+                      {!lotsLoading &&
+                        activeLots.map((lot) => (
+                          <div
+                            key={lot.id_lote}
+                            className="flex items-center justify-between rounded-md border p-2 text-sm"
+                          >
+                            <div>
+                              <p className="font-medium">
+                                Lote #{lot.id_lote ?? "N/A"}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Caducidad: {formatDate(lot.caducidad)}
+                              </p>
+                            </div>
+
+                            <div className="text-right">
+                              <p className="font-semibold">
+                                {lot.cantidad_actual} pza(s)
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Costo: $
+                                {Number(lot.costo_unitario ?? 0).toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+
+                      {earliestLot && (
+                        <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">
+                          Lote con caducidad más próxima:{" "}
+                          <strong>{formatDate(earliestLot.caducidad)}</strong>
+                        </div>
+                      )}
+
+                      {newLotExpiresBeforeCurrent && (
+                        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs text-red-900">
+                          Este nuevo lote caduca antes que los lotes actuales.
+                          Debe colocarse físicamente al frente para respetar
+                          FEFO.
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -539,7 +704,7 @@ export function InventoryForm() {
                         placeholder="Ej: SKU001"
                         className="pl-9"
                         required
-                        disabled={isHistoricalProduct}
+                        disabled={identityLocked}
                       />
                     </div>
                   </div>
@@ -550,15 +715,15 @@ export function InventoryForm() {
                       id="nombre"
                       value={nombre}
                       onChange={(e) => setNombre(e.target.value)}
-                      placeholder="Ej: Tomates Cherry"
+                      placeholder="Ej: Coca Cola 600 ml"
                       required
-                      disabled={isHistoricalProduct}
+                      disabled={identityLocked}
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="cantidad">
-                      {isRestock ? "Cantidad a ingresar *" : "Cantidad *"}
+                      {isRestock ? "Cantidad nueva a ingresar *" : "Cantidad *"}
                     </Label>
                     <Input
                       id="cantidad"
@@ -569,10 +734,10 @@ export function InventoryForm() {
                       min="1"
                       required
                     />
-                    {isRestock && (
+                    {isRestock && selectedInventoryProduct && (
                       <p className="text-xs text-muted-foreground">
-                        Stock actual: {existingInventoryProduct?.cantidad}{" "}
-                        pieza(s). Se sumará la cantidad nueva.
+                        Stock actual: {selectedInventoryProduct.cantidad}{" "}
+                        pieza(s). Esta cantidad se sumará al inventario.
                       </p>
                     )}
                   </div>
@@ -592,8 +757,7 @@ export function InventoryForm() {
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Si es restock, este costo se usará para recalcular el costo
-                      promedio.
+                      En restock se usa para recalcular el costo promedio.
                     </p>
                   </div>
 
@@ -612,13 +776,12 @@ export function InventoryForm() {
                       required
                     />
                     <p className="text-xs text-muted-foreground">
-                      Se cargará automáticamente al registrar una salida, pero
-                      podrá modificarse.
+                      Se guardará como precio sugerido más reciente.
                     </p>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="stockMinimo">Stock bajo / mínimo</Label>
+                    <Label htmlFor="stockMinimo">Stock crítico / mínimo</Label>
                     <Input
                       id="stockMinimo"
                       type="number"
@@ -627,9 +790,6 @@ export function InventoryForm() {
                       placeholder="Por defecto: 10"
                       min="1"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Si lo dejas vacío, el sistema usará 10.
-                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -639,17 +799,13 @@ export function InventoryForm() {
                       type="number"
                       value={stockAlto}
                       onChange={(e) => setStockAlto(e.target.value)}
-                      placeholder="Por defecto: stock bajo x 3"
+                      placeholder="Por defecto: stock crítico x 3"
                       min="1"
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Debe ser mayor que el stock bajo. Sirve para detectar
-                      sobreinventario.
-                    </p>
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="caducidad">Caducidad</Label>
+                    <Label htmlFor="caducidad">Caducidad del nuevo lote</Label>
 
                     <div className="flex items-center gap-2">
                       <input
@@ -680,6 +836,11 @@ export function InventoryForm() {
                       onChange={(e) => setCaducidad(e.target.value)}
                       disabled={caducidadNoAplica}
                     />
+
+                    <p className="text-xs text-muted-foreground">
+                      Esta fecha no se mezcla con otros lotes. Se guarda como un
+                      nuevo lote independiente.
+                    </p>
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
@@ -690,12 +851,12 @@ export function InventoryForm() {
                       onChange={(e) => setDescripcion(e.target.value)}
                       placeholder="Descripción adicional del producto..."
                       rows={3}
-                      disabled={isHistoricalProduct}
+                      disabled={identityLocked}
                     />
-                    {isHistoricalProduct && (
+                    {identityLocked && (
                       <p className="text-xs text-muted-foreground">
                         La descripción pertenece a la identidad histórica del
-                        producto y no se puede editar en restock.
+                        producto y no se puede editar desde este formulario.
                       </p>
                     )}
                   </div>
@@ -712,13 +873,13 @@ export function InventoryForm() {
               </CardHeader>
 
               <CardContent className="space-y-4">
-                {isRestock ? (
+                {locationLocked && selectedInventoryProduct ? (
                   <div className="rounded-md border bg-muted/40 p-4">
                     <p className="text-sm font-semibold">
                       Ubicación fija por restock
                     </p>
                     <p className="font-mono text-sm mt-1">
-                      {existingInventoryProduct?.locationId}
+                      {selectedInventoryProduct.locationId}
                     </p>
                     <p className="text-xs text-muted-foreground mt-2">
                       Como el producto ya está en inventario, RackNova usará la
