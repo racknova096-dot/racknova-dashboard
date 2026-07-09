@@ -635,28 +635,31 @@ export function InventoryForm() {
                       </p>
 
                       <div className="max-h-48 overflow-y-auto rounded-md border bg-background">
-                        {catalogResults.map((item) => (
-                          <button
-                            key={`${item.sku}-${item.id_catalogo ?? item.nombre}`}
-                            type="button"
-                            onClick={() => handleSelectCatalogProduct(item)}
-                            className="w-full text-left p-3 hover:bg-muted border-b last:border-b-0"
-                          >
-                            <div>
-                              <p className="text-sm font-semibold">
-                                {item.nombre}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                SKU: {item.sku}
-                              </p>
-                              {item.descripcion && (
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {item.descripcion}
-                                </p>
-                              )}
-                            </div>
-                          </button>
-                        ))}
+                       {catalogResults.map((item) => (
+  <button
+    key={`${item.sku}-${item.id_catalogo ?? item.nombre}`}
+    type="button"
+    onMouseDown={(e) => {
+      e.preventDefault();
+      handleSelectCatalogProduct(item);
+    }}
+    className="w-full text-left p-3 hover:bg-muted border-b last:border-b-0 cursor-pointer"
+  >
+    <div>
+      <p className="text-sm font-semibold">
+        {item.nombre}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        SKU: {item.sku}
+      </p>
+      {item.descripcion && (
+        <p className="text-xs text-muted-foreground mt-1">
+          {item.descripcion}
+        </p>
+      )}
+    </div>
+  </button>
+))}
                       </div>
                     </div>
                   )}
