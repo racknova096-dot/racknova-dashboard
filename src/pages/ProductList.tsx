@@ -113,7 +113,8 @@ export default function ProductList() {
   const [precioVenta, setPrecioVenta] = useState("");
 
   const { products, locations, deleteProduct, buscarFisicamente } =
-  useInventory();
+    useInventory();
+
   const { toast } = useToast();
 
   const productsWithLocation = useMemo(() => {
@@ -123,7 +124,7 @@ export default function ProductList() {
     }));
   }, [products, locations]);
 
-  const getStockStatus = (product: Product) => {
+  const getStockStatus = (product: Product): "bajo" | "normal" | "alto" => {
     const stockMinimo = Number(product.stock_minimo ?? 10);
     const stockAlto = Number(product.stock_alto ?? stockMinimo * 3);
 
@@ -163,15 +164,25 @@ export default function ProductList() {
   };
 
   const handleBuscarFisicamente = async (product: Product) => {
-  const result = await buscarFisicamente(product.locationId);
+    try {
+      const result = await buscarFisicamente(product.locationId);
 
-  toast({
-    title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
-    description: result.mensaje,
-    variant: result.ok ? "default" : "destructive",
-  });
-};
-  
+      toast({
+        title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
+        description: result.mensaje,
+        variant: result.ok ? "default" : "destructive",
+      });
+    } catch (error) {
+      console.error("Error buscando físicamente:", error);
+
+      toast({
+        title: "Error",
+        description: "No se pudo enviar la búsqueda física.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleOpenSale = (product: Product) => {
     setSaleProduct(product);
     setCantidadVendida("1");
@@ -302,7 +313,9 @@ export default function ProductList() {
     }
 
     if (status === "alto") {
-      return <Badge className="bg-blue-600 hover:bg-blue-600">Stock alto</Badge>;
+      return (
+        <Badge className="bg-blue-600 hover:bg-blue-600">Stock alto</Badge>
+      );
     }
 
     return <Badge variant="outline">Stock normal</Badge>;
@@ -344,7 +357,8 @@ export default function ProductList() {
 
           <h1 className="racknova-page-title">Listado de Productos</h1>
           <p className="text-muted-foreground">
-            Consulta productos actuales y registra salidas o ventas.
+            Consulta productos actuales, busca físicamente en el rack y registra
+            salidas o ventas.
           </p>
         </div>
       </div>
@@ -508,33 +522,32 @@ export default function ProductList() {
 
                       <TableCell>
                         <div className="flex justify-end gap-2">
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() => handleBuscarFisicamente(product)}
-  >
-    <LocateFixed className="h-4 w-4 mr-1" />
-    Buscar
-  </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleBuscarFisicamente(product)}
+                          >
+                            <LocateFixed className="h-4 w-4 mr-1" />
+                            Buscar
+                          </Button>
 
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() => handleEdit(product)}
-  >
-    <Pencil className="h-4 w-4 mr-1" />
-    Editar
-  </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleEdit(product)}
+                          >
+                            <Pencil className="h-4 w-4 mr-1" />
+                            Editar
+                          </Button>
 
-  <Button
-    variant="destructive"
-    size="sm"
-    onClick={() => handleOpenSale(product)}
-  >
-    <Trash2 className="h-4 w-4 mr-1" />
-    Salida
-  </Button>
-</div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleOpenSale(product)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Salida
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -732,9 +745,7 @@ export default function ProductList() {
               Cancelar
             </Button>
 
-            <Button onClick={confirmSale}>
-              Confirmar salida
-            </Button>
+            <Button onClick={confirmSale}>Confirmar salida</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
