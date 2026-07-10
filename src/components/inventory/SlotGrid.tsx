@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+
 import { useInventory } from "@/context/InventoryContext";
 import { Location, Nivel } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { onMQTTMessage } from "@/mqtt/mqttClient"; // ✅ Escucha mensajes MQTT
+import { onMQTTMessage } from "@/mqtt/mqttClient";
+import { LocateFixed } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface SlotGridProps {
   rack: string;
@@ -17,24 +20,57 @@ interface SlotGridProps {
 }
 
 export function SlotGrid({ rack, nivel, onSlotClick }: SlotGridProps) {
-  const { locations, getProductByLocation } = useInventory();
+  const { locations, getProductByLocation, buscarFisicamente } =
+    useInventory();
 
-  // 🧠 Nuevo estado local para lo que llegue del ESP32
+  const { toast } = useToast();
+
   const [estadoMQTT, setEstadoMQTT] = useState<any>({});
 
-  // 🛰️ Escucha mensajes del broker (ESP32 → Frontend)
   useEffect(() => {
-    onMQTTMessage((topic, data) => {
+    const cleanup = onMQTTMessage((topic, data) => {
       if (topic.includes("rack/") && topic.includes("buttons/states")) {
-        console.log("📡 Estado MQTT recibido:", data);
-        setEstadoMQTT(data); // Guarda el JSON con p14, p35, etc.
+        console.log("Estado MQTT recibido:", data);
+        setEstadoMQTT(data);
       }
     });
+
+    return () => {
+      if (typeof cleanup === "function") {
+        cleanup();
+      }
+    };
   }, []);
 
   const rackLocations = locations
     .filter((loc) => loc.rack === rack && loc.nivel === nivel)
     .sort((a, b) => a.slot - b.slot);
+
+  const handleBuscarFisicamente = async (
+    event: React.MouseEvent,
+    location: Location
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      const result = await buscarFisicamente(location.id);
+
+      toast({
+        title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
+        description: result.mensaje,
+        variant: result.ok ? "default" : "destructive",
+      });
+    } catch (error) {
+      console.error("Error buscando físicamente:", error);
+
+      toast({
+        title: "Error",
+        description: "No se pudo enviar la búsqueda física.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <TooltipProvider>
@@ -43,109 +79,139 @@ export function SlotGrid({ rack, nivel, onSlotClick }: SlotGridProps) {
           const product = getProductByLocation(location.id);
           const hasProduct = !!product;
 
-          // 🔍 Buscamos si este slot tiene estado MQTT
-          const slotKey = `p${location.slot}`; // Ej: p14, p27...
+          const slotKey = `p${location.slot}`;
           const mqttInfo = estadoMQTT[slotKey];
           const mqttEstado = mqttInfo?.estado?.toLowerCase();
 
-          // 🧩 Prioriza el estado MQTT sobre el local si existe
           const status = mqttEstado || location.status;
 
-          // 🎨 Mantiene tu mismo esquema de colores pero dinámico
           const getSlotStyles = () => {
-  switch (status) {
-    case "libre":
-      return [
-        "bg-gradient-slot-free text-slot-free-foreground border-transparent",
-        "shadow-sm shadow-green-500/20",
-        "hover:shadow-lg hover:shadow-green-500/30",
-      ].join(" ");
+            switch (status) {
+              case "libre":
+                return [
+                  "bg-gradient-slot-free text-slot-free-foreground border-transparent",
+                  "shadow-sm shadow-green-500/20",
+                  "hover:shadow-lg hover:shadow-green-500/30",
+                ].join(" ");
 
-    case "en_proceso":
-    case "colocando":
-      return [
-        "bg-gradient-slot-placing text-slot-placing-foreground border-transparent",
-        "shadow-sm shadow-yellow-500/25 animate-pulse",
-        "hover:shadow-lg hover:shadow-yellow-500/35",
-      ].join(" ");
+              case "en_proceso":
+              case "colocando":
+                return [
+                  "bg-gradient-slot-placing text-slot-placing-foreground border-transparent",
+                  "shadow-sm shadow-yellow-500/25 animate-pulse",
+                  "hover:shadow-lg hover:shadow-yellow-500/35",
+                ].join(" ");
 
-    case "quitando":
-    case "retiro":
-      return [
-        "bg-gradient-slot-removing text-slot-removing-foreground border-transparent",
-        "shadow-sm shadow-purple-500/25 animate-pulse",
-        "hover:shadow-lg hover:shadow-purple-500/35",
-      ].join(" ");
+              case "quitando":
+              case "retiro":
+                return [
+                  "bg-gradient-slot-removing text-slot-removing-foreground border-transparent",
+                  "shadow-sm shadow-purple-500/25 animate-pulse",
+                  "hover:shadow-lg hover:shadow-purple-500/35",
+                ].join(" ");
 
-    case "ocupado":
-      return [
-        "bg-gradient-slot-occupied text-slot-occupied-foreground border-transparent",
-        "shadow-sm shadow-red-500/25",
-        "hover:shadow-lg hover:shadow-red-500/35",
-      ].join(" ");
+              case "ocupado":
+                return [
+                  "bg-gradient-slot-occupied text-slot-occupied-foreground border-transparent",
+                  "shadow-sm shadow-red-500/25",
+                  "hover:shadow-lg hover:shadow-red-500/35",
+                ].join(" ");
 
-    default:
-      return [
-        "bg-secondary text-secondary-foreground border-border",
-        "hover:bg-muted",
-      ].join(" ");
-  }
-};
+              default:
+                return [
+                  "bg-secondary text-secondary-foreground border-border",
+                  "hover:bg-muted",
+                ].join(" ");
+            }
+          };
+
+          const estadoTexto =
+            status === "libre"
+              ? "Libre"
+              : status === "en_proceso" || status === "colocando"
+              ? "En proceso de colocación"
+              : status === "quitando" || status === "retiro"
+              ? "Quitando"
+              : "Ocupado";
 
           return (
-            <Tooltip key={location.id}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onSlotClick(location, hasProduct)}
-                  className={`h-14 w-full flex flex-col items-center justify-center rounded-xl text-xs font-bold tracking-wide transition-all duration-300 hover:scale-[1.03] border ${getSlotStyles()}`}
-                >
-                  <span className="text-[10px] font-bold">{location.slot}</span>
-                  {hasProduct && (
-                    <span className="text-[8px] truncate w-full text-center">
-                      {product.sku}
+            <div key={location.id} className="relative group">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onSlotClick(location, hasProduct)}
+                    className={`h-16 w-full flex flex-col items-center justify-center rounded-xl text-xs font-bold tracking-wide transition-all duration-300 hover:scale-[1.03] border ${getSlotStyles()}`}
+                  >
+                    <span className="text-[10px] font-bold">
+                      {location.slot}
                     </span>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="text-sm">
-                  <p className="font-medium">
-                    Slot {rack}-{nivel}-{location.slot}
-                  </p>
-                  <p className="text-sm">
-                    <strong>Estado:</strong>{" "}
-                    {status === "libre"
-                      ? "Libre"
-                      : status === "en_proceso" || status === "colocando"
-                      ? "En proceso de colocación"
-                      : "Ocupado"}
-                  </p>
-                  {product ? (
-                    <div className="mt-1">
-                      <p>
-                        <strong>SKU:</strong> {product.sku}
-                      </p>
-                      <p>
-                        <strong>Producto:</strong> {product.nombre}
-                      </p>
-                      <p>
-                        <strong>Cantidad:</strong> {product.cantidad}
-                      </p>
-                    </div>
-                  ) : status === "en_proceso" || status === "colocando" ? (
-                    <p className="text-muted-foreground mt-1">
-                      Esperando confirmación del hardware...
+
+                    {hasProduct && product && (
+                      <span className="text-[8px] truncate w-full text-center px-1">
+                        {product.sku}
+                      </span>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+
+                <TooltipContent>
+                  <div className="text-sm">
+                    <p className="font-medium">
+                      Slot {rack}-{nivel}-{location.slot}
                     </p>
-                  ) : (
-                    <p className="text-muted-foreground mt-1">
-                      Slot disponible
+
+                    <p className="text-sm">
+                      <strong>Estado:</strong> {estadoTexto}
                     </p>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+
+                    {product ? (
+                      <div className="mt-1">
+                        <p>
+                          <strong>SKU:</strong> {product.sku}
+                        </p>
+
+                        <p>
+                          <strong>Producto:</strong> {product.nombre}
+                        </p>
+
+                        <p>
+                          <strong>Cantidad:</strong> {product.cantidad}
+                        </p>
+                      </div>
+                    ) : status === "en_proceso" || status === "colocando" ? (
+                      <p className="text-muted-foreground mt-1">
+                        Esperando confirmación del hardware...
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground mt-1">
+                        Slot disponible
+                      </p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(event) =>
+                      handleBuscarFisicamente(event, location)
+                    }
+                    className="absolute -top-2 -right-2 z-10 h-6 w-6 rounded-full bg-background border shadow-md flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity hover:bg-muted"
+                    aria-label={`Buscar físicamente ${location.id}`}
+                  >
+                    <LocateFixed className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+
+                <TooltipContent>
+                  <p>Buscar físicamente {location.id}</p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
           );
         })}
       </div>
