@@ -11,6 +11,7 @@ import {
   DollarSign,
   BarChart3,
   BookOpen,
+  Bot,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
@@ -56,6 +57,12 @@ const navItems = [
   label: "Catálogo",
   icon: BookOpen,
   color: "from-sky-500 to-blue-500",
+},
+  {
+  path: "/racknova-ia",
+  label: "RackNova IA",
+  icon: Bot,
+  color: "from-blue-600 to-cyan-500",
 },
 ];
 
