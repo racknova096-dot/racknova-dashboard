@@ -18,6 +18,7 @@ import Tracking from "./pages/Tracking";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import RackView from "./pages/RackView";
+import RackNovaIA from "./pages/RackNovaIA";
 import Catalogo from "./pages/Catalogo";
 import Usuarios from "./pages/Usuarios";
 import ProtectedRoute from "./pages/ProtectedRoute";
@@ -57,6 +58,7 @@ const App = () => {
                     <Route path="/tracking" element={<Tracking />} />
                     <Route path="/finanzas" element={<Finanzas />} />
                     <Route path="/reportes" element={<Reportes />} />
+                    <Route path="/racknova-ia" element={<RackNovaIA />} />
                     <Route path="/rackview" element={<RackView />} />
                   </Route>
 
