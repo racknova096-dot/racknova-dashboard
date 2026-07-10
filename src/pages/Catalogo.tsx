@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { PageHero } from "@/components/layout/PageHero";
 import { API_URL } from "@/config";
 import { ProductoCatalogo } from "@/types/inventory";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -254,16 +255,37 @@ export default function Catalogo() {
   return (
     <div className="min-h-screen bg-background">
       <main className="p-6 space-y-6">
-        <div>
-          <h1 className="racknova-page-title flex items-center gap-2">
-            <BookOpen className="h-7 w-7 text-primary" />
-            Catálogo
-          </h1>
-          <p className="text-muted-foreground">
-            Administra la identidad histórica de productos: SKU, nombre y
-            descripción.
-          </p>
-        </div>
+       <PageHero
+  badge="Identidad histórica de productos"
+  title="Catálogo"
+  description="Administra los registros base de productos: SKU, nombre y descripción."
+  icon={BookOpen}
+  stats={[
+    {
+      label: "Registros totales",
+      value: items.length,
+      tone: "blue",
+    },
+    {
+      label: "Resultados visibles",
+      value: filteredItems.length,
+      tone: "green",
+    },
+    {
+      label: "Modo",
+      value: editingSku ? "Editando" : "Consulta",
+      tone: editingSku ? "amber" : "purple",
+    },
+    {
+      label: "Datos guardados",
+      value: "SKU / Nombre",
+      tone: "cyan",
+    },
+  ]}
+>
+  El catálogo solo guarda la identidad del producto. Los costos, caducidades,
+  cantidades y ubicaciones se controlan desde inventario y lotes.
+</PageHero>
 
         <Card className="racknova-card">
           <CardHeader>
