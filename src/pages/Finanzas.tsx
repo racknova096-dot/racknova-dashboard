@@ -1,28 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { API_URL } from "@/config";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useMemo, useState } from "react";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  Trophy,
-  AlertTriangle,
-} from "lucide-react";
-import {
-  FinancialChartPoint,
-  FinancialSummary,
-} from "@/types/finance";
-import { useInventory } from "@/context/InventoryContext";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -32,90 +22,331 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useInventory } from "@/context/InventoryContext";
+import {
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  LineChart,
+  Line,
+} from "recharts";
+import {
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Wallet,
+  Receipt,
+  Percent,
+  Trophy,
+  AlertTriangle,
+  Download,
+  Activity,
+  ShoppingCart,
+  Calculator,
+  ArrowUpRight,
+  ArrowDownRight,
+  BarChart3,
+} from "lucide-react";
+
+type PeriodoFiltro = "semana" | "mes" | "anio" | "todo";
 
 interface ProductProfitReport {
   sku: string;
   nombre: string;
   cantidadVendida: number;
+  ventas: number;
   ingresoTotal: number;
   costoTotal: number;
   gananciaTotal: number;
+  margen: number;
+  ultimaVenta: Date | null;
+}
+
+interface FinancialDatePoint {
+  fecha: string;
+  ingresos: number;
+  costos: number;
+  ganancia: number;
+  margen: number;
+  piezasVendidas: number;
+  ventas: number;
+}
+
+const CHART_COLORS = {
+  income: "#10b981",
+  cost: "#f97316",
+  profit: "#2563eb",
+  margin: "#8b5cf6",
+  danger: "#ef4444",
+  neutral: "#64748b",
+};
+
+const TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: "#ffffff",
+  border: "1px solid #cbd5e1",
+  borderRadius: "12px",
+  color: "#0f172a",
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.15)",
+};
+
+const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+  color: "#0f172a",
+  fontWeight: 700,
+};
+
+const TOOLTIP_ITEM_STYLE: React.CSSProperties = {
+  color: "#0f172a",
+  fontWeight: 600,
+};
+
+function money(value: number) {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+  }).format(Number(value || 0));
+}
+
+function numberFormat(value: number) {
+  return new Intl.NumberFormat("es-MX", {
+    maximumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function percent(value: number) {
+  return `${numberFormat(value)}%`;
+}
+
+function formatDate(value: Date | string | null | undefined) {
+  if (!value) return "-";
+
+  const date =
+    value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`);
+
+  return new Intl.DateTimeFormat("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function isMovementInsidePeriod(date: Date, periodo: PeriodoFiltro) {
+  if (periodo === "todo") return true;
+
+  const now = new Date();
+  const current = new Date(date);
+
+  if (periodo === "semana") {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    return current >= sevenDaysAgo;
+  }
+
+  if (periodo === "mes") {
+    return (
+      current.getFullYear() === now.getFullYear() &&
+      current.getMonth() === now.getMonth()
+    );
+  }
+
+  if (periodo === "anio") {
+    return current.getFullYear() === now.getFullYear();
+  }
+
+  return true;
+}
+
+function getPeriodoLabel(periodo: PeriodoFiltro) {
+  if (periodo === "semana") return "Últimos 7 días";
+  if (periodo === "mes") return "Mes actual";
+  if (periodo === "anio") return "Año actual";
+  return "Todo el historial";
+}
+
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="py-10 text-center text-sm text-muted-foreground">
+      {text}
+    </div>
+  );
+}
+
+function getMargin(ingresos: number, ganancia: number) {
+  if (!ingresos || ingresos <= 0) return 0;
+
+  return (ganancia / ingresos) * 100;
+}
+
+function marginBadge(margen: number) {
+  if (margen < 0) {
+    return <Badge variant="destructive">Pérdida</Badge>;
+  }
+
+  if (margen < 15) {
+    return <Badge className="bg-orange-500 hover:bg-orange-500">Bajo</Badge>;
+  }
+
+  if (margen < 35) {
+    return <Badge className="bg-blue-600 hover:bg-blue-600">Aceptable</Badge>;
+  }
+
+  return <Badge className="bg-emerald-600 hover:bg-emerald-600">Alto</Badge>;
 }
 
 export default function Finanzas() {
   const { movements } = useInventory();
+  const [periodo, setPeriodo] = useState<PeriodoFiltro>("mes");
 
-  const [resumen, setResumen] = useState<FinancialSummary>({
-    ingresos: 0,
-    costos: 0,
-    ganancia: 0,
-  });
+  const ventasFiltradas = useMemo(() => {
+    return movements
+      .filter((movement) => movement.action === "Egreso")
+      .filter((movement) =>
+        isMovementInsidePeriod(new Date(movement.timestamp), periodo)
+      );
+  }, [movements, periodo]);
 
-  const [grafica, setGrafica] = useState<FinancialChartPoint[]>([]);
+  const financialByDate = useMemo(() => {
+    const map = new Map<string, FinancialDatePoint>();
 
-  useEffect(() => {
-    const loadFinance = async () => {
-      try {
-        const resumenResp = await fetch(`${API_URL}/finanzas/resumen`);
+    ventasFiltradas.forEach((movement) => {
+      const fecha = new Date(movement.timestamp).toISOString().slice(0, 10);
 
-        if (resumenResp.ok) {
-          const resumenData = await resumenResp.json();
+      const current =
+        map.get(fecha) ??
+        {
+          fecha,
+          ingresos: 0,
+          costos: 0,
+          ganancia: 0,
+          margen: 0,
+          piezasVendidas: 0,
+          ventas: 0,
+        };
 
-          setResumen({
-            ingresos: Number(resumenData.ingresos ?? 0),
-            costos: Number(resumenData.costos ?? 0),
-            ganancia: Number(resumenData.ganancia ?? 0),
-          });
-        }
+      const ingreso = Number(movement.ingreso_total ?? 0);
+      const costo = Number(movement.costo_total ?? 0);
+      const ganancia = ingreso - costo;
 
-        const graficaResp = await fetch(`${API_URL}/finanzas/grafica`);
+      current.ingresos += ingreso;
+      current.costos += costo;
+      current.ganancia += ganancia;
+      current.piezasVendidas += Number(movement.quantity ?? 0);
+      current.ventas += 1;
 
-        if (graficaResp.ok) {
-          const graficaData = await graficaResp.json();
-          setGrafica(graficaData);
-        }
-      } catch (error) {
-        console.error("Error cargando finanzas:", error);
-      }
-    };
+      current.margen = getMargin(current.ingresos, current.ganancia);
 
-    loadFinance();
-  }, []);
+      map.set(fecha, current);
+    });
 
-  const money = (value: number) =>
-    new Intl.NumberFormat("es-MX", {
-      style: "currency",
-      currency: "MXN",
-    }).format(Number(value || 0));
+    return Array.from(map.values()).sort((a, b) =>
+      a.fecha.localeCompare(b.fecha)
+    );
+  }, [ventasFiltradas]);
 
   const productProfitReports = useMemo(() => {
     const map = new Map<string, ProductProfitReport>();
 
-    movements
-      .filter((movement) => movement.action === "Egreso")
-      .forEach((movement) => {
-        const sku = movement.productSku;
-        const current = map.get(sku);
+    ventasFiltradas.forEach((movement) => {
+      const sku = movement.productSku;
+      const fecha = new Date(movement.timestamp);
 
-        if (current) {
-          current.cantidadVendida += Number(movement.quantity ?? 0);
-          current.ingresoTotal += Number(movement.ingreso_total ?? 0);
-          current.costoTotal += Number(movement.costo_total ?? 0);
-          current.gananciaTotal += Number(movement.ganancia ?? 0);
-        } else {
-          map.set(sku, {
-            sku,
-            nombre: movement.productName,
-            cantidadVendida: Number(movement.quantity ?? 0),
-            ingresoTotal: Number(movement.ingreso_total ?? 0),
-            costoTotal: Number(movement.costo_total ?? 0),
-            gananciaTotal: Number(movement.ganancia ?? 0),
-          });
+      const ingreso = Number(movement.ingreso_total ?? 0);
+      const costo = Number(movement.costo_total ?? 0);
+      const ganancia = ingreso - costo;
+
+      const current = map.get(sku);
+
+      if (current) {
+        current.cantidadVendida += Number(movement.quantity ?? 0);
+        current.ventas += 1;
+        current.ingresoTotal += ingreso;
+        current.costoTotal += costo;
+        current.gananciaTotal += ganancia;
+        current.margen = getMargin(current.ingresoTotal, current.gananciaTotal);
+
+        if (!current.ultimaVenta || fecha > current.ultimaVenta) {
+          current.ultimaVenta = fecha;
         }
-      });
+      } else {
+        map.set(sku, {
+          sku,
+          nombre: movement.productName,
+          cantidadVendida: Number(movement.quantity ?? 0),
+          ventas: 1,
+          ingresoTotal: ingreso,
+          costoTotal: costo,
+          gananciaTotal: ganancia,
+          margen: getMargin(ingreso, ganancia),
+          ultimaVenta: fecha,
+        });
+      }
+    });
 
     return Array.from(map.values());
-  }, [movements]);
+  }, [ventasFiltradas]);
+
+  const resumen = useMemo(() => {
+    const ingresos = ventasFiltradas.reduce(
+      (total, movement) => total + Number(movement.ingreso_total ?? 0),
+      0
+    );
+
+    const costos = ventasFiltradas.reduce(
+      (total, movement) => total + Number(movement.costo_total ?? 0),
+      0
+    );
+
+    const ganancia = ingresos - costos;
+    const margen = getMargin(ingresos, ganancia);
+
+    const piezasVendidas = ventasFiltradas.reduce(
+      (total, movement) => total + Number(movement.quantity ?? 0),
+      0
+    );
+
+    const ventaMasAlta = ventasFiltradas.reduce((max, movement) => {
+      const ingreso = Number(movement.ingreso_total ?? 0);
+      return ingreso > max ? ingreso : max;
+    }, 0);
+
+    const ticketPromedio =
+      ventasFiltradas.length > 0 ? ingresos / ventasFiltradas.length : 0;
+
+    const productoMasRentable =
+      [...productProfitReports].sort(
+        (a, b) => b.gananciaTotal - a.gananciaTotal
+      )[0] ?? null;
+
+    const productosConPerdida = productProfitReports.filter(
+      (product) => product.gananciaTotal < 0
+    ).length;
+
+    const productosMargenBajo = productProfitReports.filter(
+      (product) => product.margen >= 0 && product.margen < 15
+    ).length;
+
+    return {
+      ingresos,
+      costos,
+      ganancia,
+      margen,
+      piezasVendidas,
+      ventas: ventasFiltradas.length,
+      ticketPromedio,
+      ventaMasAlta,
+      productoMasRentable,
+      productosConPerdida,
+      productosMargenBajo,
+    };
+  }, [ventasFiltradas, productProfitReports]);
 
   const productosMayorGanancia = useMemo(() => {
     return [...productProfitReports]
@@ -123,228 +354,657 @@ export default function Finanzas() {
       .slice(0, 10);
   }, [productProfitReports]);
 
-  const productosMenorGanancia = useMemo(() => {
+  const productosBajaRentabilidad = useMemo(() => {
     return [...productProfitReports]
-      .sort((a, b) => a.gananciaTotal - b.gananciaTotal)
+      .sort((a, b) => a.margen - b.margen)
       .slice(0, 10);
   }, [productProfitReports]);
 
-  const renderProfitTable = (
-    data: ProductProfitReport[],
-    emptyMessage: string,
-    type: "best" | "worst"
-  ) => {
-    if (data.length === 0) {
-      return (
-        <div className="h-40 flex items-center justify-center rounded-lg border border-dashed">
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
-        </div>
-      );
+  const historicalFinancialRows = useMemo(() => {
+    return [...ventasFiltradas]
+      .sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      )
+      .slice(0, 50);
+  }, [ventasFiltradas]);
+
+  const executiveMessage = useMemo(() => {
+    if (ventasFiltradas.length === 0) {
+      return "No hay ventas registradas en el periodo seleccionado. Cuando registres salidas con precio de venta, aquí aparecerá el análisis financiero.";
     }
 
-    return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>#</TableHead>
-            <TableHead>SKU</TableHead>
-            <TableHead>Producto</TableHead>
-            <TableHead>Piezas vendidas</TableHead>
-            <TableHead>Ingresos</TableHead>
-            <TableHead>Costos</TableHead>
-            <TableHead>Ganancia</TableHead>
-          </TableRow>
-        </TableHeader>
+    const margenTexto = percent(resumen.margen);
+    const gananciaTexto = money(resumen.ganancia);
+    const ingresosTexto = money(resumen.ingresos);
 
-        <TableBody>
-          {data.map((product, index) => (
-            <TableRow key={`${type}-${product.sku}`}>
-              <TableCell className="font-medium">{index + 1}</TableCell>
+    if (resumen.ganancia < 0) {
+      return `El periodo seleccionado generó ${ingresosTexto}, pero cerró con una pérdida de ${gananciaTexto}. Revisa precios de venta, descuentos y productos con margen negativo.`;
+    }
 
-              <TableCell>
-                <Badge variant="outline">{product.sku}</Badge>
-              </TableCell>
+    if (resumen.margen < 15) {
+      return `El periodo seleccionado generó ${ingresosTexto}, con utilidad de ${gananciaTexto} y margen bajo de ${margenTexto}. Conviene revisar productos con baja rentabilidad.`;
+    }
 
-              <TableCell className="font-medium">{product.nombre}</TableCell>
+    return `El periodo seleccionado generó ${ingresosTexto}, con utilidad neta de ${gananciaTexto} y margen de ${margenTexto}. El desempeño financiero es positivo.`;
+  }, [ventasFiltradas.length, resumen]);
 
-              <TableCell>{product.cantidadVendida}</TableCell>
+  const exportCSV = () => {
+    const headers = [
+      "Fecha",
+      "SKU",
+      "Producto",
+      "Cantidad",
+      "Ingreso",
+      "Costo",
+      "Ganancia",
+      "Margen",
+    ];
 
-              <TableCell>{money(product.ingresoTotal)}</TableCell>
+    const rows = ventasFiltradas.map((movement) => {
+      const ingreso = Number(movement.ingreso_total ?? 0);
+      const costo = Number(movement.costo_total ?? 0);
+      const ganancia = ingreso - costo;
+      const margen = getMargin(ingreso, ganancia);
 
-              <TableCell>{money(product.costoTotal)}</TableCell>
+      return [
+        formatDate(movement.timestamp),
+        movement.productSku,
+        movement.productName,
+        movement.quantity,
+        ingreso,
+        costo,
+        ganancia,
+        margen,
+      ];
+    });
 
-              <TableCell>
-                <span
-                  className={
-                    product.gananciaTotal >= 0
-                      ? "font-semibold text-green-600"
-                      : "font-semibold text-red-600"
-                  }
-                >
-                  {money(product.gananciaTotal)}
-                </span>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    );
+    const csvContent = [headers, ...rows]
+      .map((row) =>
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      )
+      .join("\n");
+
+    const blob = new Blob([csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `racknova-finanzas-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+
+    link.click();
+
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <DollarSign className="h-8 w-8" />
-            Finanzas
-          </h1>
-          <p className="text-muted-foreground">
-            Resumen de ingresos, costos, ganancias y rentabilidad por producto.
-          </p>
-        </div>
+    <div className="min-h-screen bg-background p-6 space-y-6">
+      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 text-white shadow-xl">
+        <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-blue-500/30 blur-3xl" />
+        <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
-                <TrendingUp className="h-4 w-4" />
-                Ingresos totales
-              </CardTitle>
-            </CardHeader>
+        <div className="relative p-6 md:p-8">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm border border-white/20">
+                <Wallet className="h-4 w-4" />
+                Panel financiero RackNova
+              </div>
 
-            <CardContent>
-              <p className="text-3xl font-bold">{money(resumen.ingresos)}</p>
-            </CardContent>
-          </Card>
+              <div>
+                <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+                  Finanzas
+                </h1>
+                <p className="text-blue-100 mt-2 max-w-2xl">
+                  Control de ingresos, costos, ganancia neta, margen de utilidad
+                  y rentabilidad por producto.
+                </p>
+              </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
-                <TrendingDown className="h-4 w-4" />
-                Costos totales
-              </CardTitle>
-            </CardHeader>
+              <div className="rounded-xl bg-white/10 border border-white/15 p-4 max-w-3xl">
+                <p className="text-sm leading-relaxed text-blue-50">
+                  {executiveMessage}
+                </p>
+              </div>
+            </div>
 
-            <CardContent>
-              <p className="text-3xl font-bold">{money(resumen.costos)}</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
-                {resumen.ganancia >= 0 ? (
-                  <TrendingUp className="h-4 w-4" />
-                ) : (
-                  <TrendingDown className="h-4 w-4" />
-                )}
-                Ganancia neta
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              <p
-                className={
-                  resumen.ganancia >= 0
-                    ? "text-3xl font-bold text-green-600"
-                    : "text-3xl font-bold text-red-600"
-                }
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-2 min-w-[210px]">
+              <Select
+                value={periodo}
+                onValueChange={(value) => setPeriodo(value as PeriodoFiltro)}
               >
-                {money(resumen.ganancia)}
+                <SelectTrigger className="bg-white text-slate-950 border-white">
+                  <SelectValue placeholder="Periodo" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="semana">Últimos 7 días</SelectItem>
+                  <SelectItem value="mes">Mes actual</SelectItem>
+                  <SelectItem value="anio">Año actual</SelectItem>
+                  <SelectItem value="todo">Todo el historial</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="secondary"
+                onClick={exportCSV}
+                className="bg-white text-slate-950 hover:bg-blue-50"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Exportar CSV
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
+              <p className="text-sm text-blue-100">Periodo</p>
+              <p className="text-xl font-bold">{getPeriodoLabel(periodo)}</p>
+            </div>
+
+            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
+              <p className="text-sm text-blue-100">Ventas registradas</p>
+              <p className="text-xl font-bold">{resumen.ventas}</p>
+            </div>
+
+            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
+              <p className="text-sm text-blue-100">Piezas vendidas</p>
+              <p className="text-xl font-bold">{resumen.piezasVendidas}</p>
+            </div>
+
+            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
+              <p className="text-sm text-blue-100">Producto más rentable</p>
+              <p className="text-xl font-bold truncate">
+                {resumen.productoMasRentable?.nombre ?? "-"}
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Ganancias por fecha</CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={grafica}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="fecha" />
-                <YAxis />
-                <Tooltip formatter={(value) => money(Number(value))} />
-                <Legend />
-
-                <Line
-  type="monotone"
-  dataKey="ingresos"
-  name="Ingresos"
-  stroke="hsl(var(--chart-green))"
-  strokeWidth={3}
-  dot={{ r: 4 }}
-/>
-
-<Line
-  type="monotone"
-  dataKey="costos"
-  name="Costos"
-  stroke="hsl(var(--chart-red))"
-  strokeWidth={3}
-  dot={{ r: 4 }}
-/>
-
-<Line
-  type="monotone"
-  dataKey="ganancia"
-  name="Ganancia"
-  stroke="hsl(var(--chart-blue))"
-  strokeWidth={3}
-  dot={{ r: 4 }}
-/>
-              </LineChart>
-            </ResponsiveContainer>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="racknova-card overflow-hidden">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Ingresos totales
+                </p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {money(resumen.ingresos)}
+                </p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+                <DollarSign className="h-6 w-6 text-emerald-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5" />
-                Productos con mayores ganancias
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Ranking general por ganancia acumulada en ventas registradas.
-              </p>
-            </CardHeader>
+        <Card className="racknova-card overflow-hidden">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Costos totales</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {money(resumen.costos)}
+                </p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center">
+                <Receipt className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-            <CardContent>
-              {renderProfitTable(
-                productosMayorGanancia,
-                "Todavía no hay ventas registradas para calcular ganancias.",
-                "best"
-              )}
-            </CardContent>
-          </Card>
+        <Card className="racknova-card overflow-hidden">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Ganancia neta</p>
+                <p
+                  className={`text-2xl font-bold ${
+                    resumen.ganancia >= 0 ? "text-blue-600" : "text-red-600"
+                  }`}
+                >
+                  {money(resumen.ganancia)}
+                </p>
+              </div>
+              <div
+                className={`h-11 w-11 rounded-full flex items-center justify-center ${
+                  resumen.ganancia >= 0
+                    ? "bg-blue-100 dark:bg-blue-950"
+                    : "bg-red-100 dark:bg-red-950"
+                }`}
+              >
+                {resumen.ganancia >= 0 ? (
+                  <TrendingUp className="h-6 w-6 text-blue-600" />
+                ) : (
+                  <TrendingDown className="h-6 w-6 text-red-600" />
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5" />
-                Productos con menores ganancias
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Productos con menor ganancia acumulada. Útil para detectar baja
-                rentabilidad o pérdidas.
-              </p>
-            </CardHeader>
-
-            <CardContent>
-              {renderProfitTable(
-                productosMenorGanancia,
-                "Todavía no hay ventas registradas para calcular ganancias.",
-                "worst"
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="racknova-card overflow-hidden">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Margen de utilidad
+                </p>
+                <p
+                  className={`text-2xl font-bold ${
+                    resumen.margen >= 15 ? "text-purple-600" : "text-red-600"
+                  }`}
+                >
+                  {percent(resumen.margen)}
+                </p>
+              </div>
+              <div className="h-11 w-11 rounded-full bg-purple-100 dark:bg-purple-950 flex items-center justify-center">
+                <Percent className="h-6 w-6 text-purple-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Ticket promedio</p>
+            <p className="text-2xl font-bold">
+              {money(resumen.ticketPromedio)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Venta más alta</p>
+            <p className="text-2xl font-bold">{money(resumen.ventaMasAlta)}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Productos con pérdida</p>
+            <p className="text-2xl font-bold text-red-600">
+              {resumen.productosConPerdida}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Margen bajo</p>
+            <p className="text-2xl font-bold text-orange-600">
+              {resumen.productosMargenBajo}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <Card className="racknova-card xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Ingresos, costos y ganancia
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[360px]">
+            {financialByDate.length === 0 ? (
+              <EmptyState text="No hay ventas financieras en este periodo." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={financialByDate}>
+                  <defs>
+                    <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="5%"
+                        stopColor={CHART_COLORS.income}
+                        stopOpacity={0.35}
+                      />
+                      <stop
+                        offset="95%"
+                        stopColor={CHART_COLORS.income}
+                        stopOpacity={0.02}
+                      />
+                    </linearGradient>
+
+                    <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop
+                        offset="5%"
+                        stopColor={CHART_COLORS.profit}
+                        stopOpacity={0.35}
+                      />
+                      <stop
+                        offset="95%"
+                        stopColor={CHART_COLORS.profit}
+                        stopOpacity={0.02}
+                      />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="fecha"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                    tickFormatter={(value) => `$${Number(value).toFixed(0)}`}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                    formatter={(value) => money(Number(value))}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="ingresos"
+                    name="Ingresos"
+                    stroke={CHART_COLORS.income}
+                    fill="url(#incomeGradient)"
+                    strokeWidth={3}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="ganancia"
+                    name="Ganancia"
+                    stroke={CHART_COLORS.profit}
+                    fill="url(#profitGradient)"
+                    strokeWidth={3}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="costos"
+                    name="Costos"
+                    stroke={CHART_COLORS.cost}
+                    strokeWidth={3}
+                    dot={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Percent className="h-5 w-5" />
+              Margen por fecha
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[360px]">
+            {financialByDate.length === 0 ? (
+              <EmptyState text="No hay margen para mostrar." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={financialByDate}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="fecha"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                    tickFormatter={(value) => `${value}%`}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                    formatter={(value) => [`${numberFormat(Number(value))}%`, "Margen"]}
+                  />
+                  <Bar
+                    dataKey="margen"
+                    name="Margen"
+                    fill={CHART_COLORS.margin}
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-amber-500" />
+              Productos más rentables
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {productosMayorGanancia.length === 0 ? (
+              <EmptyState text="Todavía no hay ventas para calcular rentabilidad." />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="racknova-table-header">
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Vendidas</TableHead>
+                      <TableHead>Ingresos</TableHead>
+                      <TableHead>Costos</TableHead>
+                      <TableHead>Ganancia</TableHead>
+                      <TableHead>Margen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {productosMayorGanancia.map((product, index) => (
+                      <TableRow key={product.sku}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{product.nombre}</p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              {product.sku}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{product.cantidadVendida}</TableCell>
+                        <TableCell>{money(product.ingresoTotal)}</TableCell>
+                        <TableCell>{money(product.costoTotal)}</TableCell>
+                        <TableCell className="font-semibold text-emerald-600">
+                          {money(product.gananciaTotal)}
+                        </TableCell>
+                        <TableCell>{marginBadge(product.margen)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Baja rentabilidad
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {productosBajaRentabilidad.length === 0 ? (
+              <EmptyState text="No hay productos con rentabilidad baja en este periodo." />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="racknova-table-header">
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Ingresos</TableHead>
+                      <TableHead>Costos</TableHead>
+                      <TableHead>Ganancia</TableHead>
+                      <TableHead>Margen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {productosBajaRentabilidad.map((product) => (
+                      <TableRow key={product.sku}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{product.nombre}</p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              {product.sku}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{money(product.ingresoTotal)}</TableCell>
+                        <TableCell>{money(product.costoTotal)}</TableCell>
+                        <TableCell
+                          className={
+                            product.gananciaTotal >= 0
+                              ? "font-semibold text-emerald-600"
+                              : "font-semibold text-red-600"
+                          }
+                        >
+                          {money(product.gananciaTotal)}
+                        </TableCell>
+                        <TableCell>{marginBadge(product.margen)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Histórico financiero
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {historicalFinancialRows.length === 0 ? (
+            <EmptyState text="No hay ventas financieras en este periodo." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader className="racknova-table-header">
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Cantidad</TableHead>
+                    <TableHead>Ingreso</TableHead>
+                    <TableHead>Costo</TableHead>
+                    <TableHead>Ganancia</TableHead>
+                    <TableHead>Margen</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {historicalFinancialRows.map((movement) => {
+                    const ingreso = Number(movement.ingreso_total ?? 0);
+                    const costo = Number(movement.costo_total ?? 0);
+                    const ganancia = ingreso - costo;
+                    const margen = getMargin(ingreso, ganancia);
+
+                    return (
+                      <TableRow key={movement.id}>
+                        <TableCell>{formatDate(movement.timestamp)}</TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">
+                              {movement.productName}
+                            </p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              {movement.productSku}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>{movement.quantity}</TableCell>
+                        <TableCell className="font-semibold text-emerald-600">
+                          {money(ingreso)}
+                        </TableCell>
+                        <TableCell className="font-semibold text-orange-600">
+                          {money(costo)}
+                        </TableCell>
+                        <TableCell
+                          className={
+                            ganancia >= 0
+                              ? "font-semibold text-blue-600"
+                              : "font-semibold text-red-600"
+                          }
+                        >
+                          {money(ganancia)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {ganancia >= 0 ? (
+                              <ArrowUpRight className="h-4 w-4 text-emerald-600" />
+                            ) : (
+                              <ArrowDownRight className="h-4 w-4 text-red-600" />
+                            )}
+                            {percent(margen)}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+
+              {ventasFiltradas.length > 50 && (
+                <p className="text-xs text-muted-foreground p-3">
+                  Mostrando las 50 ventas más recientes del periodo.
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="racknova-card border-blue-200 dark:border-blue-900">
+        <CardContent className="p-5">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-950 flex items-center justify-center shrink-0">
+              <Calculator className="h-5 w-5 text-blue-600" />
+            </div>
+
+            <div>
+              <p className="font-semibold">Cálculo financiero usado</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                La ganancia neta se calcula como ingresos totales menos costos
+                totales. El margen se calcula como ganancia dividida entre
+                ingresos totales. Esta página solo considera movimientos de tipo
+                salida/venta.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
