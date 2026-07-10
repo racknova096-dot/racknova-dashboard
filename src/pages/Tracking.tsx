@@ -1,5 +1,19 @@
 import React, { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Activity,
+  Search,
+  ArrowUpDown,
+  TrendingUp,
+  TrendingDown,
+  Edit,
+} from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,16 +32,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+
 import { useInventory } from "@/context/InventoryContext";
 import { MovementRecord } from "@/types/movement";
-import {
-  Activity,
-  Search,
-  ArrowUpDown,
-  TrendingUp,
-  TrendingDown,
-  Edit,
-} from "lucide-react";
+import { PageHero } from "@/components/layout/PageHero";
 
 export default function Tracking() {
   const { movements } = useInventory();
@@ -52,15 +60,15 @@ export default function Tracking() {
       minute: "2-digit",
     }).format(new Date(date));
   };
+
   const getLocalDateKey = (date: Date) => {
-  const localDate = new Date(date);
+    const localDate = new Date(date);
+    const year = localDate.getFullYear();
+    const month = String(localDate.getMonth() + 1).padStart(2, "0");
+    const day = String(localDate.getDate()).padStart(2, "0");
 
-  const year = localDate.getFullYear();
-  const month = String(localDate.getMonth() + 1).padStart(2, "0");
-  const day = String(localDate.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-};
+    return `${year}-${month}-${day}`;
+  };
 
   const getActionBadge = (action: MovementRecord["action"]) => {
     const variants: Record<
@@ -72,15 +80,15 @@ export default function Tracking() {
     > = {
       Ingreso: {
         variant: "default",
-        icon: <TrendingUp className="h-3 w-3" />,
+        icon: <TrendingUp className="h-3.5 w-3.5" />,
       },
       Egreso: {
         variant: "destructive",
-        icon: <TrendingDown className="h-3 w-3" />,
+        icon: <TrendingDown className="h-3.5 w-3.5" />,
       },
       Edición: {
         variant: "secondary",
-        icon: <Edit className="h-3 w-3" />,
+        icon: <Edit className="h-3.5 w-3.5" />,
       },
     };
 
@@ -94,16 +102,18 @@ export default function Tracking() {
 
   const filteredMovements = movements
     .filter((movement) => {
+      const term = searchTerm.toLowerCase();
+
       const matchesSearch =
-        movement.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        movement.productSku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        movement.location.toLowerCase().includes(searchTerm.toLowerCase());
+        movement.productName.toLowerCase().includes(term) ||
+        movement.productSku.toLowerCase().includes(term) ||
+        movement.location.toLowerCase().includes(term);
 
       const matchesAction =
         filterAction === "all" || movement.action === filterAction;
 
-const matchesDate =
-  !filterDate || getLocalDateKey(movement.timestamp) === filterDate;
+      const matchesDate =
+        !filterDate || getLocalDateKey(movement.timestamp) === filterDate;
 
       return matchesSearch && matchesAction && matchesDate;
     })
@@ -113,74 +123,123 @@ const matchesDate =
         : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
+  const totalIngresos = movements.filter(
+    (movement) => movement.action === "Ingreso"
+  ).length;
+
+  const totalEgresos = movements.filter(
+    (movement) => movement.action === "Egreso"
+  ).length;
+
+  const totalEdiciones = movements.filter(
+    (movement) => movement.action === "Edición"
+  ).length;
+
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
-            <Activity className="h-8 w-8" />
-            Historial de Movimientos
-          </h1>
-          <p className="text-muted-foreground">
-            Consulta ingresos, egresos, costos y ganancias del inventario.
-          </p>
-        </div>
+    <div className="min-h-screen bg-background p-6 space-y-6">
+      <PageHero
+        badge="Auditoría operativa"
+        title="Historial de Movimientos"
+        description="Consulta entradas, salidas, ediciones, costos, ventas y ganancias registradas en el inventario."
+        icon={Activity}
+        stats={[
+          {
+            label: "Movimientos totales",
+            value: movements.length,
+            tone: "blue",
+          },
+          {
+            label: "Ingresos",
+            value: totalIngresos,
+            tone: "green",
+          },
+          {
+            label: "Egresos",
+            value: totalEgresos,
+            tone: "red",
+          },
+          {
+            label: "Ediciones",
+            value: totalEdiciones,
+            tone: "purple",
+          },
+        ]}
+      >
+        Esta sección funciona como bitácora de inventario para revisar qué se
+        agregó, qué se vendió o retiró y qué cambios se hicieron.
+      </PageHero>
 
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle>Filtros</CardTitle>
-          </CardHeader>
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
 
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="relative">
-                <Search className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por producto, SKU o ubicación..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              <Select value={filterAction} onValueChange={setFilterAction}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Acción" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas las acciones</SelectItem>
-                  <SelectItem value="Ingreso">Ingreso</SelectItem>
-                  <SelectItem value="Egreso">Egreso</SelectItem>
-                  <SelectItem value="Edición">Edición</SelectItem>
-                </SelectContent>
-              </Select>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative md:col-span-2">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
 
               <Input
-                type="date"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
+                placeholder="Buscar por producto, SKU o ubicación..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="pl-10"
               />
-
-              <Button
-                variant="outline"
-                onClick={() => setSortDesc((prev) => !prev)}
-              >
-                <ArrowUpDown className="h-4 w-4 mr-2" />
-                Ordenar por fecha
-              </Button>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle>
-              Mostrando {filteredMovements.length} de {movements.length}{" "}
-              movimientos
-            </CardTitle>
-          </CardHeader>
+            <Select value={filterAction} onValueChange={setFilterAction}>
+              <SelectTrigger>
+                <SelectValue placeholder="Acción" />
+              </SelectTrigger>
 
-          <CardContent>
+              <SelectContent>
+                <SelectItem value="all">Todas las acciones</SelectItem>
+                <SelectItem value="Ingreso">Ingreso</SelectItem>
+                <SelectItem value="Egreso">Egreso</SelectItem>
+                <SelectItem value="Edición">Edición</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Input
+              type="date"
+              value={filterDate}
+              onChange={(event) => setFilterDate(event.target.value)}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-between">
+            <Button
+              variant="outline"
+              onClick={() => setSortDesc((prev) => !prev)}
+            >
+              <ArrowUpDown className="h-4 w-4 mr-2" />
+              Ordenar por fecha
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearchTerm("");
+                setFilterAction("all");
+                setFilterDate("");
+              }}
+            >
+              Limpiar filtros
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle>
+            Mostrando {filteredMovements.length} de {movements.length}{" "}
+            movimientos
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          <div className="rounded-xl border overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -202,8 +261,11 @@ const matchesDate =
               <TableBody>
                 {filteredMovements.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-8">
-                      No se encontraron movimientos
+                    <TableCell
+                      colSpan={12}
+                      className="text-center text-muted-foreground py-8"
+                    >
+                      No se encontraron movimientos.
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -224,11 +286,7 @@ const matchesDate =
                           {movement.productName}
                         </TableCell>
 
-                        <TableCell>
-                          <Badge variant="outline">
-                            {movement.productSku}
-                          </Badge>
-                        </TableCell>
+                        <TableCell>{movement.productSku}</TableCell>
 
                         <TableCell>
                           {movement.action === "Edición" ? (
@@ -241,11 +299,7 @@ const matchesDate =
                           )}
                         </TableCell>
 
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {movement.location}
-                          </Badge>
-                        </TableCell>
+                        <TableCell>{movement.location}</TableCell>
 
                         <TableCell>{money(costoProveedor)}</TableCell>
 
@@ -279,9 +333,7 @@ const matchesDate =
                           )}
                         </TableCell>
 
-                        <TableCell>
-                          <Badge variant="outline">{movement.user}</Badge>
-                        </TableCell>
+                        <TableCell>{movement.user}</TableCell>
 
                         <TableCell>{formatDate(movement.timestamp)}</TableCell>
                       </TableRow>
@@ -290,14 +342,14 @@ const matchesDate =
                 )}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
 
-        <p className="text-sm text-muted-foreground">
-          Nota: En ingresos se muestra el costo total del inventario agregado.
-          En egresos se muestra ingreso de venta, costo total y ganancia.
-        </p>
-      </div>
+          <p className="text-sm text-muted-foreground mt-4">
+            Nota: En ingresos se muestra el costo total del inventario agregado.
+            En egresos se muestra ingreso de venta, costo total y ganancia.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
