@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { PageHero } from "@/components/layout/PageHero";
 import { API_URL } from "@/config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -143,12 +144,65 @@ export function InventoryDashboard() {
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
-            Inventario por Rack y Nivel
-          </h1>
+      <PageHero
+  badge="Centro de control RackNova"
+  title="Inventario por Rack y Nivel"
+  description="Supervisa el estado físico del rack, ocupación por nivel, productos activos y control de admisión."
+  icon={Package}
+  actions={
+    <>
+      <Button
+        onClick={() => {
+          publishMQTT("Entrada/admision", "8113");
+          setSystemState("admitido");
+        }}
+        className="bg-green-600 text-white hover:bg-green-700"
+      >
+        Admitir
+      </Button>
+
+      <Button
+        onClick={() => {
+          publishMQTT("Entrada/admision", "0");
+          setSystemState("restringido");
+        }}
+        className="bg-red-600 text-white hover:bg-red-700"
+      >
+        Restringir
+      </Button>
+
+      <Button variant="destructive" onClick={handleClearRack}>
+        <Trash2 className="h-4 w-4 mr-2" />
+        Limpiar Rack {selectedRack}
+      </Button>
+    </>
+  }
+  stats={[
+    {
+      label: "Total de productos",
+      value: getTotalProducts(),
+      tone: "blue",
+    },
+    {
+      label: "Stock bajo",
+      value: getLowStockProducts().length,
+      tone: "amber",
+    },
+    {
+      label: "Slots ocupados",
+      value: `${occupiedSlots} / ${totalSlots}`,
+      tone: "green",
+    },
+    {
+      label: "Rack actual",
+      value: selectedRack,
+      tone: "purple",
+    },
+  ]}
+>
+  Haz clic en un slot verde para agregar producto rápidamente o usa la página
+  Agregar para capturar inventario con más detalle.
+</PageHero>
 
           {/* MENSAJE DINÁMICO DEL SISTEMA */}
           {systemState && (
