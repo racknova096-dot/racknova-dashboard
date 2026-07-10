@@ -1,4 +1,20 @@
 import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Pencil,
+  Trash2,
+  Search,
+  Filter,
+  ArrowLeft,
+  ShoppingCart,
+  AlertTriangle,
+  CalendarDays,
+  Percent,
+  Calculator,
+  LocateFixed,
+  Boxes,
+} from "lucide-react";
+
 import {
   Card,
   CardContent,
@@ -31,24 +47,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+
 import { useInventory } from "@/context/InventoryContext";
 import { ProductModal } from "@/components/inventory/ProductModal";
+import { PageHero } from "@/components/layout/PageHero";
 import { Product, Location } from "@/types/inventory";
-import {
-  Pencil,
-  Trash2,
-  Search,
-  Filter,
-  ArrowLeft,
-  ShoppingCart,
-  AlertTriangle,
-  CalendarDays,
-  Percent,
-  Calculator,
-  LocateFixed,
-} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
 
 type StockFilter = "all" | "bajo" | "normal" | "alto";
 
@@ -78,7 +82,6 @@ const getDaysToExpire = (caducidad?: string | null) => {
   expiration.setHours(0, 0, 0, 0);
 
   const diffMs = expiration.getTime() - today.getTime();
-
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 };
 
@@ -155,6 +158,17 @@ export default function ProductList() {
     return matchesSearch && matchesRack && matchesNivel && matchesStock;
   });
 
+  const lowStockCount = productsWithLocation.filter((product) => {
+    const stockMinimo = Number(product.stock_minimo ?? 10);
+    return product.cantidad <= stockMinimo;
+  }).length;
+
+  const activeRacks = new Set(
+    productsWithLocation
+      .map((product) => product.location?.rack)
+      .filter(Boolean)
+  ).size;
+
   const handleEdit = (product: Product) => {
     const location = locations.find((loc) => loc.id === product.locationId);
 
@@ -227,8 +241,8 @@ export default function ProductList() {
     const precio = Number(precioVenta || 0);
     const costoProveedor = Number(saleProduct.costo_proveedor ?? 0);
     const precioSugerido = Number(saleProduct.precio_venta_sugerido ?? 0);
-
     const descuento = getSuggestedDiscount(saleProduct.caducidad);
+
     const precioConDescuento =
       precioSugerido > 0
         ? Number((precioSugerido * (1 - descuento / 100)).toFixed(2))
@@ -313,12 +327,10 @@ export default function ProductList() {
     }
 
     if (status === "alto") {
-      return (
-        <Badge className="bg-blue-600 hover:bg-blue-600">Stock alto</Badge>
-      );
+      return <Badge className="bg-blue-600 text-white">Stock alto</Badge>;
     }
 
-    return <Badge variant="outline">Stock normal</Badge>;
+    return <Badge variant="secondary">Stock normal</Badge>;
   };
 
   const getExpirationBadge = (product: Product) => {
@@ -334,34 +346,56 @@ export default function ProductList() {
 
     if (days <= 30) {
       return (
-        <Badge className="bg-amber-500 hover:bg-amber-500">
+        <Badge className="bg-amber-500 text-white">
           Caduca en {days} día(s)
         </Badge>
       );
     }
 
-    return <Badge variant="outline">{formatDate(product.caducidad)}</Badge>;
+    return <Badge variant="secondary">{formatDate(product.caducidad)}</Badge>;
   };
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver al Dashboard
-          </Link>
-
-          <h1 className="racknova-page-title">Listado de Productos</h1>
-          <p className="text-muted-foreground">
-            Consulta productos actuales, busca físicamente en el rack y registra
-            salidas o ventas.
-          </p>
-        </div>
-      </div>
+      <PageHero
+        badge="Inventario activo"
+        title="Listado de Productos"
+        description="Consulta, filtra, edita y registra salidas de productos almacenados en RackNova."
+        icon={Boxes}
+        actions={
+          <Button variant="secondary" asChild>
+            <Link to="/">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver al Dashboard
+            </Link>
+          </Button>
+        }
+        stats={[
+          {
+            label: "Productos totales",
+            value: productsWithLocation.length,
+            tone: "blue",
+          },
+          {
+            label: "Productos visibles",
+            value: filteredProducts.length,
+            tone: "green",
+          },
+          {
+            label: "Stock crítico",
+            value: lowStockCount,
+            tone: "amber",
+          },
+          {
+            label: "Racks activos",
+            value: activeRacks,
+            tone: "purple",
+          },
+        ]}
+      >
+        Usa los filtros para localizar productos por SKU, nombre, rack o nivel.
+        Desde esta página también puedes registrar salidas y ventas.
+      </PageHero>
 
       <Card className="racknova-card">
         <CardHeader>
@@ -374,11 +408,11 @@ export default function ProductList() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="relative md:col-span-2">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por SKU o nombre..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(event) => setSearchTerm(event.target.value)}
                 className="pl-9"
               />
             </div>
@@ -387,6 +421,7 @@ export default function ProductList() {
               <SelectTrigger>
                 <SelectValue placeholder="Rack" />
               </SelectTrigger>
+
               <SelectContent>
                 <SelectItem value="all">Todos los racks</SelectItem>
                 <SelectItem value="A">Rack A</SelectItem>
@@ -401,6 +436,7 @@ export default function ProductList() {
               <SelectTrigger>
                 <SelectValue placeholder="Nivel" />
               </SelectTrigger>
+
               <SelectContent>
                 <SelectItem value="all">Todos los niveles</SelectItem>
                 <SelectItem value="1">Nivel 1</SelectItem>
@@ -416,6 +452,7 @@ export default function ProductList() {
               <SelectTrigger>
                 <SelectValue placeholder="Stock" />
               </SelectTrigger>
+
               <SelectContent>
                 <SelectItem value="all">Todo el stock</SelectItem>
                 <SelectItem value="bajo">Stock bajo</SelectItem>
@@ -425,7 +462,7 @@ export default function ProductList() {
             </Select>
           </div>
 
-          <div className="flex justify-end mt-4">
+          <div className="mt-4 flex justify-end">
             <Button
               variant="outline"
               onClick={() => {
@@ -449,9 +486,9 @@ export default function ProductList() {
         </CardHeader>
 
         <CardContent>
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="rounded-xl border overflow-hidden">
             <Table>
-              <TableHeader className="racknova-table-header">
+              <TableHeader>
                 <TableRow>
                   <TableHead>Ubicación</TableHead>
                   <TableHead>SKU</TableHead>
@@ -478,23 +515,21 @@ export default function ProductList() {
                 ) : (
                   filteredProducts.map((product) => (
                     <TableRow key={product.id}>
-                      <TableCell className="font-mono">
+                      <TableCell className="font-medium">
                         {product.location
                           ? `${product.location.rack}-${product.location.nivel}-${product.location.slot}`
                           : product.locationId}
                       </TableCell>
 
-                      <TableCell className="font-mono">{product.sku}</TableCell>
+                      <TableCell>{product.sku}</TableCell>
 
                       <TableCell>
-                        <div>
-                          <p className="font-medium">{product.nombre}</p>
-                          {product.descripcion && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">
-                              {product.descripcion}
-                            </p>
-                          )}
-                        </div>
+                        <div className="font-medium">{product.nombre}</div>
+                        {product.descripcion && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {product.descripcion}
+                          </div>
+                        )}
                       </TableCell>
 
                       <TableCell>{product.cantidad}</TableCell>
@@ -512,9 +547,9 @@ export default function ProductList() {
                       <TableCell>
                         <div className="space-y-1">
                           {getExpirationBadge(product)}
-                          <p className="text-xs text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             {formatDate(product.caducidad)}
-                          </p>
+                          </div>
                         </div>
                       </TableCell>
 
@@ -570,26 +605,24 @@ export default function ProductList() {
 
           {saleProduct && (
             <div className="space-y-5">
-              <Card>
-                <CardContent className="p-4 space-y-2">
-                  <p className="text-sm text-muted-foreground">Producto</p>
-                  <p className="font-semibold text-lg">{saleProduct.nombre}</p>
-                  <p className="text-sm text-muted-foreground">
-                    SKU: {saleProduct.sku} · Stock actual:{" "}
-                    {saleProduct.cantidad} pieza(s)
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Ubicación: {saleProduct.locationId}
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border bg-muted/40 p-4">
+                <p className="text-sm text-muted-foreground">Producto</p>
+                <h3 className="text-lg font-semibold">{saleProduct.nombre}</h3>
+                <p className="text-sm text-muted-foreground">
+                  SKU: {saleProduct.sku} · Stock actual: {saleProduct.cantidad}{" "}
+                  pieza(s)
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Ubicación: {saleProduct.locationId}
+                </p>
+              </div>
 
               {saleCalculations.vencido && (
-                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-red-900">
-                  <p className="font-semibold flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800 dark:bg-red-950/30 dark:border-red-900 dark:text-red-200">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="h-5 w-5" />
                     Producto vencido
-                  </p>
+                  </div>
                   <p className="text-sm mt-1">
                     Este producto venció hace{" "}
                     {Math.abs(saleCalculations.diasCaducidad ?? 0)} día(s).
@@ -601,11 +634,11 @@ export default function ProductList() {
 
               {!saleCalculations.vencido &&
                 saleCalculations.proximoCaducar && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-950">
-                    <p className="font-semibold flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4" />
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:bg-amber-950/30 dark:border-amber-900 dark:text-amber-200">
+                    <div className="flex items-center gap-2 font-semibold">
+                      <CalendarDays className="h-5 w-5" />
                       Producto próximo a caducar
-                    </p>
+                    </div>
                     <p className="text-sm mt-1">
                       Caduca en {saleCalculations.diasCaducidad} día(s).
                       RackNova sugiere un descuento de{" "}
@@ -619,10 +652,10 @@ export default function ProductList() {
                   <Label>Cantidad vendida / retirada</Label>
                   <Input
                     type="number"
-                    min="1"
+                    min={1}
                     max={saleProduct.cantidad}
                     value={cantidadVendida}
-                    onChange={(e) => setCantidadVendida(e.target.value)}
+                    onChange={(event) => setCantidadVendida(event.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
                     Máximo disponible: {saleProduct.cantidad}
@@ -633,10 +666,10 @@ export default function ProductList() {
                   <Label>Precio venta unitario</Label>
                   <Input
                     type="number"
-                    min="0"
+                    min={0}
                     step="0.01"
                     value={precioVenta}
-                    onChange={(e) => setPrecioVenta(e.target.value)}
+                    onChange={(event) => setPrecioVenta(event.target.value)}
                     placeholder="Ej: 100.00"
                   />
                   <p className="text-xs text-muted-foreground">
@@ -648,95 +681,100 @@ export default function ProductList() {
 
               {saleCalculations.descuento > 0 &&
                 saleCalculations.precioConDescuento > 0 && (
-                  <Card className="border-dashed">
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="font-semibold flex items-center gap-2">
-                            <Percent className="h-4 w-4" />
-                            Descuento sugerido por caducidad
-                          </p>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Precio sugerido original:{" "}
-                            {formatCurrency(saleCalculations.precioSugerido)}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Descuento: {saleCalculations.descuento}%
-                          </p>
-                          <p className="font-semibold">
-                            Precio con descuento:{" "}
-                            {formatCurrency(
-                              saleCalculations.precioConDescuento
-                            )}
-                          </p>
-                        </div>
+                  <div className="rounded-xl border bg-muted/40 p-4">
+                    <div className="flex items-center gap-2 font-semibold mb-2">
+                      <Percent className="h-5 w-5" />
+                      Descuento sugerido por caducidad
+                    </div>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() =>
-                            setPrecioVenta(
-                              saleCalculations.precioConDescuento.toString()
-                            )
-                          }
-                        >
-                          Usar precio con descuento
-                        </Button>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">
+                          Precio sugerido original
+                        </p>
+                        <p className="font-semibold">
+                          {formatCurrency(saleCalculations.precioSugerido)}
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      <div>
+                        <p className="text-muted-foreground">Descuento</p>
+                        <p className="font-semibold">
+                          {saleCalculations.descuento}%
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-muted-foreground">
+                          Precio con descuento
+                        </p>
+                        <p className="font-semibold">
+                          {formatCurrency(saleCalculations.precioConDescuento)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() =>
+                        setPrecioVenta(
+                          saleCalculations.precioConDescuento.toString()
+                        )
+                      }
+                    >
+                      Usar precio con descuento
+                    </Button>
+                  </div>
                 )}
 
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Calculator className="h-4 w-4" />
-                    Estimación financiera
-                  </CardTitle>
-                </CardHeader>
+              <div className="rounded-xl border bg-muted/40 p-4">
+                <div className="flex items-center gap-2 font-semibold mb-3">
+                  <Calculator className="h-5 w-5" />
+                  Estimación financiera
+                </div>
 
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Ingreso estimado
-                      </p>
-                      <p className="font-bold text-lg">
-                        {formatCurrency(saleCalculations.ingresoTotal)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Costo estimado
-                      </p>
-                      <p className="font-bold text-lg">
-                        {formatCurrency(saleCalculations.costoTotal)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">
-                        Ganancia estimada
-                      </p>
-                      <p
-                        className={`font-bold text-lg ${
-                          saleCalculations.ganancia >= 0
-                            ? "text-emerald-600"
-                            : "text-red-600"
-                        }`}
-                      >
-                        {formatCurrency(saleCalculations.ganancia)}
-                      </p>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Ingreso estimado
+                    </p>
+                    <p className="text-lg font-bold">
+                      {formatCurrency(saleCalculations.ingresoTotal)}
+                    </p>
                   </div>
 
-                  <p className="text-xs text-muted-foreground mt-3">
-                    La salida se descontará usando FEFO: primero se descuenta el
-                    lote que caduca antes.
-                  </p>
-                </CardContent>
-              </Card>
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Costo estimado
+                    </p>
+                    <p className="text-lg font-bold">
+                      {formatCurrency(saleCalculations.costoTotal)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Ganancia estimada
+                    </p>
+                    <p
+                      className={`text-lg font-bold ${
+                        saleCalculations.ganancia >= 0
+                          ? "text-emerald-600"
+                          : "text-red-600"
+                      }`}
+                    >
+                      {formatCurrency(saleCalculations.ganancia)}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground mt-3">
+                  La salida se descontará usando FEFO: primero se descuenta el
+                  lote que caduca antes.
+                </p>
+              </div>
             </div>
           )}
 
@@ -752,11 +790,14 @@ export default function ProductList() {
 
       {selectedProduct && selectedLocation && (
         <ProductModal
-          isOpen={modalOpen}
-          onClose={() => {
-            setModalOpen(false);
-            setSelectedProduct(null);
-            setSelectedLocation(null);
+          open={modalOpen}
+          onOpenChange={(open) => {
+            setModalOpen(open);
+
+            if (!open) {
+              setSelectedProduct(null);
+              setSelectedLocation(null);
+            }
           }}
           location={selectedLocation}
           product={selectedProduct}
