@@ -496,7 +496,7 @@ export default function Reportes() {
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
-     <PageHero
+    <PageHero
   badge="Centro operativo RackNova"
   title="Reportes"
   description="Análisis operativo de ventas, rotación, stock, caducidad y movimientos."
@@ -529,28 +529,6 @@ export default function Reportes() {
       </Button>
     </>
   }
-  stats={[
-    {
-      label: "Periodo",
-      value: getPeriodoLabel(periodo),
-      tone: "blue",
-    },
-    {
-      label: "Piezas vendidas",
-      value: resumen.piezasVendidas,
-      tone: "green",
-    },
-    {
-      label: "Productos sin venta",
-      value: resumen.noVendidos,
-      tone: "cyan",
-    },
-    {
-      label: "Movimientos",
-      value: resumen.movimientos,
-      tone: "purple",
-    },
-  ]}
 >
   El periodo seleccionado permite revisar el comportamiento operativo del
   inventario sin mezclarlo con métricas financieras avanzadas.
