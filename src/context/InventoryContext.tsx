@@ -45,6 +45,7 @@ interface InventoryContextType {
   updateSlotStatus: (locationId: string, status: SlotStatus) => void;
   startProductPlacement: (locationId: string) => void;
   confirmProductPlacement: (locationId: string) => void;
+ buscarFisicamente: (locationId: string) => Promise<PhysicalSearchResult>; 
 }
 
 interface PendingDeletion {
@@ -780,6 +781,73 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const confirmProductPlacement = (locationId: string) =>
     updateSlotStatus(locationId, "ocupado");
 
+  const buscarFisicamente = async (
+  locationId: string
+): Promise<PhysicalSearchResult> => {
+  const [, nivelStr, slotStr] = locationId.split("-");
+
+  const nivel = parseInt(nivelStr);
+  const slot = parseInt(slotStr);
+
+  const pinMap: Record<number, number> = {
+    1: 14,
+    2: 12,
+    3: 32,
+    4: 26,
+    5: 27,
+    6: 33,
+  };
+
+  const topicByLevel: Record<number, string> = {
+    1: "Entrada/L3",
+    2: "Entrada/L2",
+    3: "Entrada/L1",
+  };
+
+  const pin = pinMap[slot];
+  const topic = topicByLevel[nivel];
+
+  if (!pin || !topic) {
+    return {
+      ok: false,
+      mensaje: `No hay pin/topic configurado para la ubicación ${locationId}.`,
+    };
+  }
+
+  const comando = `b${pin}b`;
+
+  if (TEST_MODE_NO_MQTT) {
+    console.log("[MODO PRUEBA] Buscar físicamente:", {
+      locationId,
+      topic,
+      comando,
+    });
+
+    return {
+      ok: true,
+      topic,
+      comando,
+      mqttDisabled: true,
+      mensaje: `Modo prueba activo. Se simuló búsqueda física: ${topic} → ${comando}`,
+    };
+  }
+
+  await sendMQTT(topic, comando);
+
+  console.log("Buscar físicamente enviado:", {
+    locationId,
+    topic,
+    comando,
+  });
+
+  return {
+    ok: true,
+    topic,
+    comando,
+    mensaje: `Comando enviado: ${topic} → ${comando}`,
+  };
+};
+
   const handleMQTT = useCallback((topic: string, data: any) => {
     if (TEST_MODE_NO_MQTT) {
       return;
@@ -907,6 +975,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         updateSlotStatus,
         startProductPlacement,
         confirmProductPlacement,
+        buscarFisicamente,
       }}
     >
       {children}
