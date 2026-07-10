@@ -77,14 +77,32 @@ type ProductoReporte = {
 const CHART_COLORS = {
   primary: "#2563eb",
   emerald: "#059669",
-  amber: "#d97706",
+  amber: "#f59e0b",
   red: "#dc2626",
   purple: "#7c3aed",
-  cyan: "#0891b2",
-  slate: "#475569",
+  cyan: "#06b6d4",
+  notSold: "#0ea5e9",
 };
 
 const STOCK_COLORS = ["#dc2626", "#2563eb", "#059669"];
+
+const TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: "#ffffff",
+  border: "1px solid #cbd5e1",
+  borderRadius: "12px",
+  color: "#0f172a",
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.15)",
+};
+
+const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+  color: "#0f172a",
+  fontWeight: 700,
+};
+
+const TOOLTIP_ITEM_STYLE: React.CSSProperties = {
+  color: "#0f172a",
+  fontWeight: 600,
+};
 
 function numberFormat(value: number) {
   return new Intl.NumberFormat("es-MX", {
@@ -210,6 +228,12 @@ function EmptyState({ text }: { text: string }) {
       {text}
     </div>
   );
+}
+
+function tooltipProductName(_label: unknown, payload: any[]) {
+  const item = payload?.[0]?.payload;
+
+  return item?.nombre || "Producto";
 }
 
 export default function Reportes() {
@@ -553,11 +577,11 @@ export default function Reportes() {
                 <p className="text-sm text-muted-foreground">
                   Productos sin venta
                 </p>
-                <p className="text-3xl font-bold text-slate-700">
+                <p className="text-3xl font-bold text-sky-600">
                   {resumen.noVendidos}
                 </p>
               </div>
-              <PackageX className="h-8 w-8 text-slate-700" />
+              <PackageX className="h-8 w-8 text-sky-600" />
             </div>
           </CardContent>
         </Card>
@@ -626,9 +650,21 @@ export default function Reportes() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={productosMasVendidos}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="sku" stroke="#64748b" />
-                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <XAxis
+                    dataKey="sku"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
                   <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                    labelFormatter={tooltipProductName}
                     formatter={(value) => [
                       `${numberFormat(Number(value))} pieza(s)`,
                       "Vendidas",
@@ -658,9 +694,21 @@ export default function Reportes() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={productosMenosVendidos}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="sku" stroke="#64748b" />
-                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <XAxis
+                    dataKey="sku"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
                   <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                    labelFormatter={tooltipProductName}
                     formatter={(value) => [
                       `${numberFormat(Number(value))} pieza(s)`,
                       "Vendidas",
@@ -692,9 +740,21 @@ export default function Reportes() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={productosNoVendidos.slice(0, 8)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="sku" stroke="#64748b" />
-                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <XAxis
+                    dataKey="sku"
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    stroke="#94a3b8"
+                    tick={{ fill: "#94a3b8" }}
+                  />
                   <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    itemStyle={TOOLTIP_ITEM_STYLE}
+                    labelFormatter={tooltipProductName}
                     formatter={(value) => [
                       `${numberFormat(Number(value))} pieza(s)`,
                       "Stock actual",
@@ -703,7 +763,7 @@ export default function Reportes() {
                   <Bar
                     dataKey="cantidadActual"
                     name="Stock actual"
-                    fill={CHART_COLORS.slate}
+                    fill={CHART_COLORS.notSold}
                     radius={[8, 8, 0, 0]}
                   />
                 </BarChart>
@@ -736,7 +796,11 @@ export default function Reportes() {
                     />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -756,9 +820,21 @@ export default function Reportes() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={movimientosPorFecha}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="fecha" stroke="#64748b" />
-                <YAxis allowDecimals={false} stroke="#64748b" />
-                <Tooltip />
+                <XAxis
+                  dataKey="fecha"
+                  stroke="#94a3b8"
+                  tick={{ fill: "#94a3b8" }}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  stroke="#94a3b8"
+                  tick={{ fill: "#94a3b8" }}
+                />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={TOOLTIP_LABEL_STYLE}
+                  itemStyle={TOOLTIP_ITEM_STYLE}
+                />
                 <Legend />
                 <Bar
                   dataKey="piezasVendidas"
