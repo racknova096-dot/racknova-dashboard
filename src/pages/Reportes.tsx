@@ -1,6 +1,18 @@
-import React, { useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useMemo, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -20,23 +32,24 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
+  LineChart,
+  Line,
+  Legend,
 } from "recharts";
 import {
   BarChart3,
   TrendingUp,
   TrendingDown,
-  CalendarClock,
   AlertTriangle,
   Boxes,
   PackageCheck,
+  CalendarClock,
   Download,
-  Printer,
-  Percent,
-  Lightbulb,
-  Calculator,
-  MapPin,
+  Activity,
+  DollarSign,
 } from "lucide-react";
+
+type PeriodoFiltro = "semana" | "mes" | "anio" | "todo";
 
 type VentaProducto = {
   sku: string;
@@ -49,108 +62,39 @@ type VentaProducto = {
   ultimaVenta: Date | null;
 };
 
-type ProductoAnalizado = {
+type ProductoReporte = {
   sku: string;
   nombre: string;
   locationId: string;
   cantidadActual: number;
   stockMinimo: number;
+  stockAlto: number;
   caducidad: string | null;
   diasCaducidad: number | null;
-
   cantidadVendida: number;
   ingresoTotal: number;
   costoTotal: number;
   gananciaTotal: number;
-  primeraVenta: Date | null;
-  ultimaVenta: Date | null;
-  diasSinVenta: number | null;
-
-  cantidadIngresadaEstimada: number;
-  sellThrough: number;
-  margen: number;
-
-  costoProveedorUnitario: number;
-  precioVentaSugerido: number;
-  precioPromedioHistorico: number;
-  precioBaseParaDescuento: number;
-
-  descuentoSugerido: number;
-  precioConDescuento: number;
-  costoInventarioActual: number;
-  recuperacionEstimada: number;
-  resultadoConDescuento: number;
-  porcentajeRecuperacionCosto: number;
-  piezasDiariasParaEvitarCaducidad: number | null;
 };
 
-type Recomendacion = {
-  tipo:
-    | "DESCUENTO"
-    | "CADUCIDAD"
-    | "ROTACION"
-    | "RENTABLE"
-    | "UBICACION"
-    | "STOCK";
-  prioridad: "Alta" | "Media" | "Baja";
-  sku: string;
-  nombre: string;
-  mensaje: string;
-  accion: string;
-  valorReferencia: string;
-
-  descuentoSugerido?: number;
-  precioConDescuento?: number;
-  recuperacionEstimada?: number;
-  resultadoConDescuento?: number;
-  porcentajeRecuperacionCosto?: number;
-  ubicacionActual?: string;
-  ubicacionSugerida?: string;
-};
-
-const COLORS = [
-  "#2563eb",
-  "#16a34a",
-  "#f97316",
-  "#dc2626",
-  "#7c3aed",
-  "#0891b2",
-  "#ca8a04",
-  "#be185d",
-];
-
-function getStockMinimo(product: Product) {
-  return Number((product as any).stock_minimo ?? 10);
-}
-
-function getCaducidad(product: Product) {
-  return ((product as any).caducidad ?? null) as string | null;
-}
-
-function getPrecioVentaSugerido(product: Product) {
-  return Number((product as any).precio_venta_sugerido ?? 0);
-}
-
-function formatMoney(value: number) {
+function money(value: number) {
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
   }).format(Number(value || 0));
 }
 
-function formatNumber(value: number) {
+function numberFormat(value: number) {
   return new Intl.NumberFormat("es-MX", {
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 }
 
-function formatPercent(value: number) {
-  return `${formatNumber(value)}%`;
-}
+function formatDate(value: Date | string | null | undefined) {
+  if (!value) return "-";
 
-function formatDate(dateValue: string) {
-  const cleanDate = dateValue.slice(0, 10);
-  const date = new Date(`${cleanDate}T00:00:00`);
+  const date =
+    value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`);
 
   return new Intl.DateTimeFormat("es-MX", {
     day: "2-digit",
@@ -159,7 +103,9 @@ function formatDate(dateValue: string) {
   }).format(date);
 }
 
-function getDaysToExpiration(dateValue: string) {
+function getDaysToExpiration(dateValue?: string | null) {
+  if (!dateValue) return null;
+
   const cleanDate = dateValue.slice(0, 10);
   const expirationDate = new Date(`${cleanDate}T00:00:00`);
 
@@ -171,97 +117,116 @@ function getDaysToExpiration(dateValue: string) {
   );
 
   const diffMs = expirationDate.getTime() - todayClean.getTime();
+
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
-function daysSince(date: Date | null) {
-  if (!date) return null;
+function isMovementInsidePeriod(date: Date, periodo: PeriodoFiltro) {
+  if (periodo === "todo") return true;
 
-  const today = new Date();
-  const todayClean = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
-  );
+  const now = new Date();
+  const current = new Date(date);
 
-  const dateClean = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (periodo === "semana") {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
 
-  const diffMs = todayClean.getTime() - dateClean.getTime();
-  return Math.max(Math.floor(diffMs / (1000 * 60 * 60 * 24)), 0);
+    return current >= sevenDaysAgo;
+  }
+
+  if (periodo === "mes") {
+    return (
+      current.getFullYear() === now.getFullYear() &&
+      current.getMonth() === now.getMonth()
+    );
+  }
+
+  if (periodo === "anio") {
+    return current.getFullYear() === now.getFullYear();
+  }
+
+  return true;
 }
 
-function ExpirationBadge({ days }: { days: number }) {
+function getPeriodoLabel(periodo: PeriodoFiltro) {
+  if (periodo === "semana") return "Últimos 7 días";
+  if (periodo === "mes") return "Mes actual";
+  if (periodo === "anio") return "Año actual";
+  return "Todo el historial";
+}
+
+function getStockStatus(product: Product) {
+  const stockMinimo = Number(product.stock_minimo ?? 10);
+  const stockAlto = Number(product.stock_alto ?? stockMinimo * 3);
+
+  if (product.cantidad <= stockMinimo) return "bajo";
+  if (product.cantidad >= stockAlto) return "alto";
+
+  return "normal";
+}
+
+function StockBadge({ product }: { product: Product }) {
+  const status = getStockStatus(product);
+
+  if (status === "bajo") {
+    return <Badge variant="destructive">Stock bajo</Badge>;
+  }
+
+  if (status === "alto") {
+    return <Badge className="bg-blue-600 hover:bg-blue-600">Stock alto</Badge>;
+  }
+
+  return <Badge variant="outline">Stock normal</Badge>;
+}
+
+function ExpirationBadge({ days }: { days: number | null }) {
+  if (days === null) return <Badge variant="outline">Sin caducidad</Badge>;
+
   if (days < 0) return <Badge variant="destructive">Vencido</Badge>;
-  if (days === 0) return <Badge variant="destructive">Caduca hoy</Badge>;
-  if (days <= 5) return <Badge variant="destructive">Urgente</Badge>;
-  if (days <= 30) return <Badge variant="secondary">Próximo</Badge>;
+
+  if (days === 0) {
+    return <Badge className="bg-red-600 hover:bg-red-600">Caduca hoy</Badge>;
+  }
+
+  if (days <= 30) {
+    return (
+      <Badge className="bg-amber-500 hover:bg-amber-500">
+        Caduca en {days} día(s)
+      </Badge>
+    );
+  }
 
   return <Badge variant="outline">Vigente</Badge>;
 }
 
-function PriorityBadge({ prioridad }: { prioridad: Recomendacion["prioridad"] }) {
-  if (prioridad === "Alta") return <Badge variant="destructive">Alta</Badge>;
-  if (prioridad === "Media") return <Badge variant="secondary">Media</Badge>;
-
-  return <Badge variant="outline">Baja</Badge>;
-}
-
-function TypeBadge({ tipo }: { tipo: Recomendacion["tipo"] }) {
-  const labels: Record<Recomendacion["tipo"], string> = {
-    DESCUENTO: "Descuento",
-    CADUCIDAD: "Caducidad",
-    ROTACION: "Rotación",
-    RENTABLE: "Rentable",
-    UBICACION: "Ubicación",
-    STOCK: "Stock",
-  };
-
-  return <Badge variant="outline">{labels[tipo]}</Badge>;
-}
-
 function EmptyState({ text }: { text: string }) {
   return (
-    <div className="h-[220px] flex items-center justify-center rounded-lg border border-dashed">
-      <p className="text-sm text-muted-foreground">{text}</p>
+    <div className="py-8 text-center text-sm text-muted-foreground">
+      {text}
     </div>
   );
 }
 
-function getDiscountSuggestion(daysToExpiration: number | null) {
-  if (daysToExpiration === null) return 0;
-
-  // Producto vencido: no se sugiere descuento.
-  if (daysToExpiration < 0) return 0;
-
-  if (daysToExpiration <= 5) return 40;
-  if (daysToExpiration <= 10) return 30;
-  if (daysToExpiration <= 15) return 20;
-  if (daysToExpiration <= 30) return 10;
-
-  return 0;
-}
-
-function parseLocationId(locationId: string) {
-  const [rack, nivelRaw, slotRaw] = locationId.split("-");
-
-  return {
-    rack,
-    nivel: Number(nivelRaw),
-    slot: Number(slotRaw),
-  };
-}
-
 export default function Reportes() {
-  const { products, locations, movements } = useInventory();
+  const { products, movements } = useInventory();
+  const [periodo, setPeriodo] = useState<PeriodoFiltro>("mes");
 
-  const { ventasOrdenadas, ventasMap } = useMemo(() => {
+  const movimientosFiltrados = useMemo(() => {
+    return movements.filter((movement) =>
+      isMovementInsidePeriod(new Date(movement.timestamp), periodo)
+    );
+  }, [movements, periodo]);
+
+  const ventasMap = useMemo(() => {
     const map = new Map<string, VentaProducto>();
 
-    movements
+    movimientosFiltrados
       .filter((movement) => movement.action === "Egreso")
       .forEach((movement) => {
         const sku = movement.productSku;
         const fecha = new Date(movement.timestamp);
+
         const current = map.get(sku);
 
         if (current) {
@@ -291,129 +256,16 @@ export default function Reportes() {
         }
       });
 
-    const ventas = Array.from(map.values()).sort(
-      (a, b) => b.cantidadVendida - a.cantidadVendida
-    );
+    return map;
+  }, [movimientosFiltrados]);
 
-    return {
-      ventasOrdenadas: ventas,
-      ventasMap: map,
-    };
-  }, [movements]);
-
-  const productoMasVendidoColocado = useMemo(() => {
-    for (const venta of ventasOrdenadas) {
-      const productoColocado = products.find(
-        (product) => product.sku === venta.sku
-      );
-
-      if (productoColocado) {
-        return {
-          ...venta,
-          locationId: productoColocado.locationId,
-        };
-      }
-    }
-
-    return null;
-  }, [ventasOrdenadas, products]);
-
-  const occupiedLocationIds = useMemo(() => {
-    return new Set(products.map((product) => product.locationId));
-  }, [products]);
-
-  const getSuggestedVisibleLocation = (currentLocationId: string) => {
-    const emptyLocations = locations.filter(
-      (location) =>
-        !occupiedLocationIds.has(location.id) && location.id !== currentLocationId
-    );
-
-    if (emptyLocations.length === 0) {
-      return null;
-    }
-
-    if (!productoMasVendidoColocado) {
-      return emptyLocations[0]?.id ?? null;
-    }
-
-    const reference = parseLocationId(productoMasVendidoColocado.locationId);
-
-    const ranked = [...emptyLocations].sort((a, b) => {
-      const aDistance =
-        (a.rack === reference.rack ? 0 : 100) +
-        (Number(a.nivel) === reference.nivel ? 0 : 20) +
-        Math.abs(Number(a.slot) - reference.slot);
-
-      const bDistance =
-        (b.rack === reference.rack ? 0 : 100) +
-        (Number(b.nivel) === reference.nivel ? 0 : 20) +
-        Math.abs(Number(b.slot) - reference.slot);
-
-      return aDistance - bDistance;
-    });
-
-    return ranked[0]?.id ?? null;
-  };
-
-  const productosAnalizados: ProductoAnalizado[] = useMemo(() => {
+  const productosReporte: ProductoReporte[] = useMemo(() => {
     return products.map((product) => {
       const venta = ventasMap.get(product.sku);
-
-      const stockMinimo = getStockMinimo(product);
-      const caducidad = getCaducidad(product);
-      const diasCaducidad = caducidad ? getDaysToExpiration(caducidad) : null;
-
-      const cantidadVendida = venta?.cantidadVendida ?? 0;
-      const ingresoTotal = venta?.ingresoTotal ?? 0;
-      const costoTotal = venta?.costoTotal ?? 0;
-      const gananciaTotal = venta?.gananciaTotal ?? 0;
-
-      const cantidadIngresadaEstimada = product.cantidad + cantidadVendida;
-
-      const sellThrough =
-        cantidadIngresadaEstimada > 0
-          ? (cantidadVendida / cantidadIngresadaEstimada) * 100
-          : 0;
-
-      const margen = ingresoTotal > 0 ? (gananciaTotal / ingresoTotal) * 100 : 0;
-
-      const costoProveedorUnitario = Number(product.costo_proveedor ?? 0);
-      const precioVentaSugerido = getPrecioVentaSugerido(product);
-
-      const precioPromedioHistorico =
-        cantidadVendida > 0 ? ingresoTotal / cantidadVendida : 0;
-
-      const precioBaseParaDescuento =
-        precioVentaSugerido > 0 ? precioVentaSugerido : precioPromedioHistorico;
-
-      const descuentoSugerido = getDiscountSuggestion(diasCaducidad);
-
-      const precioConDescuento =
-        precioBaseParaDescuento > 0 && descuentoSugerido > 0
-          ? precioBaseParaDescuento * (1 - descuentoSugerido / 100)
-          : 0;
-
-      const costoInventarioActual = costoProveedorUnitario * product.cantidad;
-
-      const recuperacionEstimada =
-        precioConDescuento > 0 ? precioConDescuento * product.cantidad : 0;
-
-      const resultadoConDescuento =
-        recuperacionEstimada > 0
-          ? recuperacionEstimada - costoInventarioActual
-          : 0;
-
-      const porcentajeRecuperacionCosto =
-        costoInventarioActual > 0 && recuperacionEstimada > 0
-          ? (recuperacionEstimada / costoInventarioActual) * 100
-          : 0;
-
-      const piezasDiariasParaEvitarCaducidad =
-        diasCaducidad !== null && diasCaducidad > 0
-          ? product.cantidad / diasCaducidad
-          : diasCaducidad !== null && diasCaducidad <= 0
-          ? product.cantidad
-          : null;
+      const stockMinimo = Number(product.stock_minimo ?? 10);
+      const stockAlto = Number(product.stock_alto ?? stockMinimo * 3);
+      const caducidad = product.caducidad ?? null;
+      const diasCaducidad = getDaysToExpiration(caducidad);
 
       return {
         sku: product.sku,
@@ -421,245 +273,27 @@ export default function Reportes() {
         locationId: product.locationId,
         cantidadActual: product.cantidad,
         stockMinimo,
+        stockAlto,
         caducidad,
         diasCaducidad,
-
-        cantidadVendida,
-        ingresoTotal,
-        costoTotal,
-        gananciaTotal,
-        primeraVenta: venta?.primeraVenta ?? null,
-        ultimaVenta: venta?.ultimaVenta ?? null,
-        diasSinVenta: daysSince(venta?.ultimaVenta ?? null),
-
-        cantidadIngresadaEstimada,
-        sellThrough,
-        margen,
-
-        costoProveedorUnitario,
-        precioVentaSugerido,
-        precioPromedioHistorico,
-        precioBaseParaDescuento,
-
-        descuentoSugerido,
-        precioConDescuento,
-        costoInventarioActual,
-        recuperacionEstimada,
-        resultadoConDescuento,
-        porcentajeRecuperacionCosto,
-        piezasDiariasParaEvitarCaducidad,
+        cantidadVendida: Number(venta?.cantidadVendida ?? 0),
+        ingresoTotal: Number(venta?.ingresoTotal ?? 0),
+        costoTotal: Number(venta?.costoTotal ?? 0),
+        gananciaTotal: Number(venta?.gananciaTotal ?? 0),
       };
     });
   }, [products, ventasMap]);
 
-  const productosSinVentaODemorados = useMemo(() => {
-    return [...productosAnalizados]
-      .filter((product) => product.cantidadActual > 0)
-      .sort((a, b) => {
-        const aScore = a.diasSinVenta === null ? 999999 : a.diasSinVenta;
-        const bScore = b.diasSinVenta === null ? 999999 : b.diasSinVenta;
-
-        if (aScore !== bScore) return bScore - aScore;
-
-        return b.cantidadActual - a.cantidadActual;
-      })
-      .slice(0, 2);
-  }, [productosAnalizados]);
-
-  const recomendaciones = useMemo(() => {
-    const lista: Recomendacion[] = [];
-
-    productosAnalizados.forEach((product) => {
-      const sinVentas = product.cantidadVendida === 0;
-      const bajaRotacion =
-        product.cantidadVendida > 0 && product.sellThrough < 30;
-      const stockAlto =
-        product.cantidadActual >= product.stockMinimo * 3 &&
-        (sinVentas || bajaRotacion);
-
-      const caducado =
-        product.diasCaducidad !== null && product.diasCaducidad < 0;
-
-      const proximoCaducar =
-        product.diasCaducidad !== null &&
-        product.diasCaducidad >= 0 &&
-        product.diasCaducidad <= 30;
-
-      const caducaUrgente =
-        product.diasCaducidad !== null &&
-        product.diasCaducidad >= 0 &&
-        product.diasCaducidad <= 5;
-
-      const rentable =
-        product.cantidadVendida > 0 &&
-        product.gananciaTotal > 0 &&
-        product.margen >= 30;
-
-      const ubicacionSugerida = getSuggestedVisibleLocation(product.locationId);
-
-      if (caducado) {
-        lista.push({
-          tipo: "CADUCIDAD",
-          prioridad: "Alta",
-          sku: product.sku,
-          nombre: product.nombre,
-          mensaje: `Producto vencido hace ${Math.abs(
-            product.diasCaducidad ?? 0
-          )} día(s). No se recomienda descuento.`,
-          accion:
-            "Retirar/eliminar del inventario y registrar merma. Si aún debe revisarse físicamente, mover temporalmente a una zona visible para control inmediato.",
-          valorReferencia: ubicacionSugerida
-            ? `Ubicación actual: ${product.locationId} | Posición visible sugerida: ${ubicacionSugerida}`
-            : `Ubicación actual: ${product.locationId} | Sin espacio vacío sugerido.`,
-          ubicacionActual: product.locationId,
-          ubicacionSugerida: ubicacionSugerida ?? undefined,
-        });
-      } else if (proximoCaducar) {
-        const resultadoTexto =
-          product.precioBaseParaDescuento <= 0
-            ? "No hay precio de venta suficiente para estimar recuperación."
-            : product.resultadoConDescuento >= 0
-            ? `Con el descuento se estima utilidad de ${formatMoney(
-                product.resultadoConDescuento
-              )}.`
-            : `Con el descuento se estima pérdida de ${formatMoney(
-                Math.abs(product.resultadoConDescuento)
-              )}, recuperando aprox. ${formatPercent(
-                product.porcentajeRecuperacionCosto
-              )} del costo.`;
-
-        lista.push({
-          tipo: "CADUCIDAD",
-          prioridad: caducaUrgente ? "Alta" : "Media",
-          sku: product.sku,
-          nombre: product.nombre,
-          mensaje: `Caduca en ${product.diasCaducidad} día(s). Descuento sugerido: ${product.descuentoSugerido}%.`,
-          accion:
-            product.precioBaseParaDescuento > 0
-              ? `Priorizar salida, mover a posición visible y aplicar descuento calculado. ${resultadoTexto}`
-              : "Priorizar salida, mover a posición visible y evaluar descuento manualmente.",
-          valorReferencia: ubicacionSugerida
-            ? `Ubicación actual: ${product.locationId} | Posición visible sugerida: ${ubicacionSugerida}`
-            : `Debe vender aprox. ${formatNumber(
-                product.piezasDiariasParaEvitarCaducidad ?? 0
-              )} pz/día para evitar pérdida.`,
-          descuentoSugerido: product.descuentoSugerido,
-          precioConDescuento: product.precioConDescuento,
-          recuperacionEstimada: product.recuperacionEstimada,
-          resultadoConDescuento: product.resultadoConDescuento,
-          porcentajeRecuperacionCosto: product.porcentajeRecuperacionCosto,
-          ubicacionActual: product.locationId,
-          ubicacionSugerida: ubicacionSugerida ?? undefined,
-        });
-      }
-
-      if (stockAlto) {
-        lista.push({
-          tipo: "DESCUENTO",
-          prioridad: proximoCaducar ? "Alta" : "Media",
-          sku: product.sku,
-          nombre: product.nombre,
-          mensaje: `Stock alto con baja rotación. Porcentaje vendido del inventario estimado: ${formatPercent(
-            product.sellThrough
-          )}.`,
-          accion:
-            product.descuentoSugerido > 0
-              ? `Aplicar descuento sugerido de ${product.descuentoSugerido}% y mover a zona visible.`
-              : "Aplicar promoción por volumen, revisar precio o mover a zona visible.",
-          valorReferencia: `Stock actual: ${product.cantidadActual} | Vendidas: ${product.cantidadVendida}`,
-          descuentoSugerido: product.descuentoSugerido,
-          precioConDescuento: product.precioConDescuento,
-          recuperacionEstimada: product.recuperacionEstimada,
-          resultadoConDescuento: product.resultadoConDescuento,
-          porcentajeRecuperacionCosto: product.porcentajeRecuperacionCosto,
-        });
-      }
-
-      if (product.cantidadActual < product.stockMinimo) {
-        lista.push({
-          tipo: "STOCK",
-          prioridad: "Alta",
-          sku: product.sku,
-          nombre: product.nombre,
-          mensaje: `Stock bajo. Actual: ${product.cantidadActual}, mínimo: ${product.stockMinimo}.`,
-          accion:
-            "Revisar disponibilidad y considerar reposición según criterio del usuario.",
-          valorReferencia: `Stock actual: ${product.cantidadActual} | Stock mínimo: ${product.stockMinimo}`,
-        });
-      }
-
-      if (rentable) {
-        lista.push({
-          tipo: "RENTABLE",
-          prioridad: "Baja",
-          sku: product.sku,
-          nombre: product.nombre,
-          mensaje: `Producto rentable. Margen: ${formatPercent(
-            product.margen
-          )}, porcentaje vendido del inventario estimado: ${formatPercent(
-            product.sellThrough
-          )}.`,
-          accion: "Mantener seguimiento de ventas, precio y rentabilidad.",
-          valorReferencia: `Ganancia acumulada: ${formatMoney(
-            product.gananciaTotal
-          )}`,
-        });
-      }
-    });
-
-    productosSinVentaODemorados.forEach((product) => {
-      const ubicacionSugerida = getSuggestedVisibleLocation(product.locationId);
-
-      const mensaje =
-        product.diasSinVenta === null
-          ? "Producto sin ventas registradas en el historial actual."
-          : `Producto con baja rotación. Lleva ${product.diasSinVenta} día(s) sin venta.`;
-
-      const productoReferencia = productoMasVendidoColocado
-        ? `${productoMasVendidoColocado.nombre} (${productoMasVendidoColocado.sku})`
-        : "producto más vendido";
-
-      lista.push({
-        tipo: "UBICACION",
-        prioridad:
-          product.cantidadActual >= product.stockMinimo * 2 ? "Media" : "Baja",
-        sku: product.sku,
-        nombre: product.nombre,
-        mensaje,
-        accion: ubicacionSugerida
-          ? `Mover a ${ubicacionSugerida}, cerca de ${productoReferencia}. Evaluar descuento si continúa sin rotación.`
-          : "Mover a una posición más visible y evaluar descuento si continúa sin rotación.",
-        valorReferencia: `Ubicación actual: ${product.locationId}${
-          productoMasVendidoColocado
-            ? ` | Más vendido ubicado en ${productoMasVendidoColocado.locationId}`
-            : ""
-        }`,
-        ubicacionActual: product.locationId,
-        ubicacionSugerida: ubicacionSugerida ?? undefined,
-      });
-    });
-
-    const priorityOrder = {
-      Alta: 0,
-      Media: 1,
-      Baja: 2,
-    };
-
-    return lista.sort(
-      (a, b) => priorityOrder[a.prioridad] - priorityOrder[b.prioridad]
+  const ventasOrdenadas = useMemo(() => {
+    return Array.from(ventasMap.values()).sort(
+      (a, b) => b.cantidadVendida - a.cantidadVendida
     );
-  }, [
-    productosAnalizados,
-    productosSinVentaODemorados,
-    productoMasVendidoColocado,
-    locations,
-    products,
-  ]);
+  }, [ventasMap]);
 
   const productosMasVendidos = ventasOrdenadas.slice(0, 8);
 
   const productosMenosVendidos = useMemo(() => {
-    return [...productosAnalizados]
+    return [...productosReporte]
       .sort((a, b) => {
         if (a.cantidadVendida !== b.cantidadVendida) {
           return a.cantidadVendida - b.cantidadVendida;
@@ -668,115 +302,183 @@ export default function Reportes() {
         return b.cantidadActual - a.cantidadActual;
       })
       .slice(0, 8);
-  }, [productosAnalizados]);
-
-  const productosCaducidad = useMemo(() => {
-    return productosAnalizados
-      .filter((product) => product.caducidad)
-      .map((product) => ({
-        sku: product.sku,
-        nombre: product.nombre,
-        cantidad: product.cantidadActual,
-        caducidad: product.caducidad as string,
-        diasRestantes: product.diasCaducidad ?? 0,
-      }))
-      .sort((a, b) => a.diasRestantes - b.diasRestantes);
-  }, [productosAnalizados]);
-
-  const productosPorCaducar = productosCaducidad
-    .filter((product) => product.diasRestantes <= 30)
-    .slice(0, 10);
+  }, [productosReporte]);
 
   const productosStockBajo = useMemo(() => {
-    return productosAnalizados
-      .filter((product) => product.cantidadActual < product.stockMinimo)
-      .sort((a, b) => a.cantidadActual - b.cantidadActual)
-      .slice(0, 10);
-  }, [productosAnalizados]);
+    return products
+      .filter((product) => getStockStatus(product) === "bajo")
+      .sort((a, b) => a.cantidad - b.cantidad);
+  }, [products]);
 
   const productosStockAlto = useMemo(() => {
-    return [...productosAnalizados]
-      .sort((a, b) => b.cantidadActual - a.cantidadActual)
-      .slice(0, 10);
-  }, [productosAnalizados]);
+    return products
+      .filter((product) => getStockStatus(product) === "alto")
+      .sort((a, b) => b.cantidad - a.cantidad);
+  }, [products]);
 
-  const descuentosSugeridos = recomendaciones
-    .filter((item) => item.tipo === "DESCUENTO" || item.tipo === "CADUCIDAD")
-    .slice(0, 10);
+  const productosCaducidad = useMemo(() => {
+    return productosReporte
+      .filter((product) => product.caducidad)
+      .sort((a, b) => {
+        const aDays = a.diasCaducidad ?? 999999;
+        const bDays = b.diasCaducidad ?? 999999;
 
-  const ubicacionSugerida = recomendaciones
-    .filter((item) => item.tipo === "UBICACION")
-    .slice(0, 10);
+        return aDays - bDays;
+      });
+  }, [productosReporte]);
 
-  const productosRentablesLista = recomendaciones
-    .filter((item) => item.tipo === "RENTABLE")
-    .slice(0, 10);
-
-  const productosSinVentas = productosAnalizados.filter(
-    (product) => product.cantidadVendida === 0 && product.cantidadActual > 0
-  ).length;
-
-  const totalPiezasVendidas = ventasOrdenadas.reduce(
-    (total, product) => total + product.cantidadVendida,
-    0
+  const productosPorCaducar = productosCaducidad.filter(
+    (product) =>
+      product.diasCaducidad !== null &&
+      product.diasCaducidad >= 0 &&
+      product.diasCaducidad <= 30
   );
 
-  const vencidos = productosCaducidad.filter(
-    (product) => product.diasRestantes < 0
-  ).length;
+  const productosVencidos = productosCaducidad.filter(
+    (product) => product.diasCaducidad !== null && product.diasCaducidad < 0
+  );
 
-  const porCaducar = productosCaducidad.filter(
-    (product) => product.diasRestantes >= 0 && product.diasRestantes <= 30
-  ).length;
+  const movimientosPorFecha = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        fecha: string;
+        ingresos: number;
+        costos: number;
+        ganancia: number;
+        piezasVendidas: number;
+        entradas: number;
+      }
+    >();
 
-  const alertasAltas = recomendaciones.filter(
-    (item) => item.prioridad === "Alta"
-  ).length;
+    movimientosFiltrados.forEach((movement) => {
+      const fecha = new Date(movement.timestamp).toISOString().slice(0, 10);
+      const current =
+        map.get(fecha) ??
+        {
+          fecha,
+          ingresos: 0,
+          costos: 0,
+          ganancia: 0,
+          piezasVendidas: 0,
+          entradas: 0,
+        };
 
-  const productosRentables = recomendaciones.filter(
-    (item) => item.tipo === "RENTABLE"
-  ).length;
+      if (movement.action === "Egreso") {
+        current.ingresos += Number(movement.ingreso_total ?? 0);
+        current.costos += Number(movement.costo_total ?? 0);
+        current.ganancia += Number(movement.ganancia ?? 0);
+        current.piezasVendidas += Number(movement.quantity ?? 0);
+      }
 
-  const exportRecommendationsCSV = () => {
+      if (movement.action === "Ingreso") {
+        current.entradas += Number(movement.quantity ?? 0);
+      }
+
+      map.set(fecha, current);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.fecha.localeCompare(b.fecha)
+    );
+  }, [movimientosFiltrados]);
+
+  const stockChartData = useMemo(() => {
+    const bajo = products.filter((product) => getStockStatus(product) === "bajo")
+      .length;
+    const normal = products.filter(
+      (product) => getStockStatus(product) === "normal"
+    ).length;
+    const alto = products.filter((product) => getStockStatus(product) === "alto")
+      .length;
+
+    return [
+      { estado: "Bajo", productos: bajo },
+      { estado: "Normal", productos: normal },
+      { estado: "Alto", productos: alto },
+    ];
+  }, [products]);
+
+  const resumen = useMemo(() => {
+    const ventas = movimientosFiltrados.filter(
+      (movement) => movement.action === "Egreso"
+    );
+
+    const ingresos = ventas.reduce(
+      (total, movement) => total + Number(movement.ingreso_total ?? 0),
+      0
+    );
+
+    const costos = ventas.reduce(
+      (total, movement) => total + Number(movement.costo_total ?? 0),
+      0
+    );
+
+    const ganancia = ventas.reduce(
+      (total, movement) => total + Number(movement.ganancia ?? 0),
+      0
+    );
+
+    const piezasVendidas = ventas.reduce(
+      (total, movement) => total + Number(movement.quantity ?? 0),
+      0
+    );
+
+    return {
+      ingresos,
+      costos,
+      ganancia,
+      piezasVendidas,
+      movimientos: movimientosFiltrados.length,
+      productosActivos: products.length,
+      stockBajo: productosStockBajo.length,
+      stockAlto: productosStockAlto.length,
+      porCaducar: productosPorCaducar.length,
+      vencidos: productosVencidos.length,
+    };
+  }, [
+    movimientosFiltrados,
+    products.length,
+    productosStockBajo.length,
+    productosStockAlto.length,
+    productosPorCaducar.length,
+    productosVencidos.length,
+  ]);
+
+  const exportCSV = () => {
     const headers = [
-      "prioridad",
-      "tipo",
-      "sku",
-      "producto",
-      "mensaje",
-      "accion",
-      "referencia",
-      "descuento_sugerido",
-      "precio_con_descuento",
-      "recuperacion_estimada",
-      "resultado_estimado",
-      "porcentaje_recuperacion_costo",
-      "ubicacion_actual",
-      "ubicacion_sugerida",
+      "SKU",
+      "Producto",
+      "Ubicacion",
+      "Cantidad actual",
+      "Stock minimo",
+      "Stock alto",
+      "Cantidad vendida",
+      "Ingresos",
+      "Costos",
+      "Ganancia",
+      "Caducidad",
+      "Dias caducidad",
     ];
 
-    const rows = recomendaciones.map((item) => [
-      item.prioridad,
-      item.tipo,
-      item.sku,
-      item.nombre,
-      item.mensaje,
-      item.accion,
-      item.valorReferencia,
-      item.descuentoSugerido ?? "",
-      item.precioConDescuento ?? "",
-      item.recuperacionEstimada ?? "",
-      item.resultadoConDescuento ?? "",
-      item.porcentajeRecuperacionCosto ?? "",
-      item.ubicacionActual ?? "",
-      item.ubicacionSugerida ?? "",
+    const rows = productosReporte.map((product) => [
+      product.sku,
+      product.nombre,
+      product.locationId,
+      product.cantidadActual,
+      product.stockMinimo,
+      product.stockAlto,
+      product.cantidadVendida,
+      product.ingresoTotal,
+      product.costoTotal,
+      product.gananciaTotal,
+      product.caducidad ?? "",
+      product.diasCaducidad ?? "",
     ]);
 
     const csvContent = [headers, ...rows]
       .map((row) =>
-        row
-          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
-          .join(",")
+        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
       )
       .join("\n");
 
@@ -788,640 +490,616 @@ export default function Reportes() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = `racknova-ia-reporte-${new Date()
+    link.download = `racknova-reportes-${new Date()
       .toISOString()
       .slice(0, 10)}.csv`;
 
     link.click();
+
     URL.revokeObjectURL(url);
   };
 
-  const printReport = () => {
-    window.print();
-  };
-
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-3xl font-black flex items-center gap-2 racknova-page-title">
-              <BarChart3 className="h-8 w-8" />
-              RackNova iA
-            </h1>
-
-            <p className="text-muted-foreground">
-              Modelo inteligente de análisis, predicción y recomendaciones para
-              descuentos, caducidad, ubicación, rotación y rentabilidad.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={printReport}>
-              <Printer className="h-4 w-4 mr-2" />
-              Imprimir / PDF
-            </Button>
-
-            <Button onClick={exportRecommendationsCSV}>
-              <Download className="h-4 w-4 mr-2" />
-              Exportar CSV
-            </Button>
-          </div>
+    <div className="min-h-screen bg-background p-6 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="racknova-page-title flex items-center gap-2">
+            <BarChart3 className="h-7 w-7 text-primary" />
+            Reportes
+          </h1>
+          <p className="text-muted-foreground">
+            Gráficas y tablas de ventas, stock, caducidad y movimientos.
+          </p>
         </div>
 
-        <Card className="racknova-card border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calculator className="h-5 w-5" />
-              Modelo matemático de decisión
-            </CardTitle>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Select
+            value={periodo}
+            onValueChange={(value) => setPeriodo(value as PeriodoFiltro)}
+          >
+            <SelectTrigger className="w-[190px]">
+              <SelectValue placeholder="Periodo" />
+            </SelectTrigger>
 
-            <p className="text-sm text-muted-foreground">
-              El sistema calcula caducidad, descuento sugerido, recuperación
-              económica, pérdida o utilidad estimada, rotación, margen y
-              ubicación sugerida.
-            </p>
-          </CardHeader>
+            <SelectContent>
+              <SelectItem value="semana">Últimos 7 días</SelectItem>
+              <SelectItem value="mes">Mes actual</SelectItem>
+              <SelectItem value="anio">Año actual</SelectItem>
+              <SelectItem value="todo">Todo el historial</SelectItem>
+            </SelectContent>
+          </Select>
 
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-              <div className="rounded-xl border bg-card p-4">
-                <p className="font-semibold">Caducidad</p>
-                <p className="text-muted-foreground mt-1">
-                  Vencido: retirar/eliminar. Próximo a caducar: descuento
-                  progresivo.
+          <Button variant="outline" onClick={exportCSV}>
+            <Download className="h-4 w-4 mr-2" />
+            Exportar CSV
+          </Button>
+        </div>
+      </div>
+
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Periodo seleccionado: {getPeriodoLabel(periodo)}
+          </CardTitle>
+        </CardHeader>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Piezas vendidas
                 </p>
+                <p className="text-3xl font-bold">{resumen.piezasVendidas}</p>
               </div>
-
-              <div className="rounded-xl border bg-card p-4">
-                <p className="font-semibold">Descuento sugerido</p>
-                <p className="text-muted-foreground mt-1">
-                  1-5 días: 40%, 6-10: 30%, 11-15: 20%, 16-30: 10%.
-                </p>
-              </div>
-
-              <div className="rounded-xl border bg-card p-4">
-                <p className="font-semibold">Recuperación económica</p>
-                <p className="text-muted-foreground mt-1">
-                  Estima cuánto se recupera y si habría utilidad o pérdida.
-                </p>
-              </div>
-
-              <div className="rounded-xl border bg-card p-4">
-                <p className="font-semibold">Ubicación inteligente</p>
-                <p className="text-muted-foreground mt-1">
-                  Sugiere mover productos lentos cerca del producto más vendido.
-                </p>
-              </div>
+              <TrendingUp className="h-8 w-8 text-emerald-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="racknova-card border-primary/30">
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Ingresos</p>
+                <p className="text-3xl font-bold">
+                  {money(resumen.ingresos)}
+                </p>
+              </div>
+              <DollarSign className="h-8 w-8 text-emerald-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Ganancia</p>
+                <p
+                  className={`text-3xl font-bold ${
+                    resumen.ganancia >= 0 ? "text-emerald-600" : "text-red-600"
+                  }`}
+                >
+                  {money(resumen.ganancia)}
+                </p>
+              </div>
+              {resumen.ganancia >= 0 ? (
+                <TrendingUp className="h-8 w-8 text-emerald-600" />
+              ) : (
+                <TrendingDown className="h-8 w-8 text-red-600" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Productos activos
+                </p>
+                <p className="text-3xl font-bold">
+                  {resumen.productosActivos}
+                </p>
+              </div>
+              <Boxes className="h-8 w-8 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Stock bajo</p>
+            <p className="text-3xl font-bold text-red-600">
+              {resumen.stockBajo}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Stock alto</p>
+            <p className="text-3xl font-bold text-blue-600">
+              {resumen.stockAlto}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Por caducar</p>
+            <p className="text-3xl font-bold text-amber-600">
+              {resumen.porCaducar}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <p className="text-sm text-muted-foreground">Vencidos</p>
+            <p className="text-3xl font-bold text-red-600">
+              {resumen.vencidos}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle>Productos más vendidos</CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[320px]">
+            {productosMasVendidos.length === 0 ? (
+              <EmptyState text="No hay ventas registradas en este periodo." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={productosMasVendidos}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="sku" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="cantidadVendida" name="Vendidas" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle>Ventas y ganancias por fecha</CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[320px]">
+            {movimientosPorFecha.length === 0 ? (
+              <EmptyState text="No hay movimientos financieros en este periodo." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={movimientosPorFecha}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="fecha" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => money(Number(value))} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="ingresos"
+                    name="Ingresos"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="ganancia"
+                    name="Ganancia"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle>Distribución de stock</CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stockChartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="estado" />
+                <YAxis allowDecimals={false} />
+                <Tooltip />
+                <Bar dataKey="productos" name="Productos" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle>Movimientos por fecha</CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[280px]">
+            {movimientosPorFecha.length === 0 ? (
+              <EmptyState text="No hay movimientos en este periodo." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={movimientosPorFecha}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="fecha" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="piezasVendidas" name="Piezas vendidas" />
+                  <Bar dataKey="entradas" name="Piezas ingresadas" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card className="racknova-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5" />
-              RackNova iA - Recomendaciones inteligentes
+              <TrendingUp className="h-5 w-5" />
+              Top productos más vendidos
             </CardTitle>
-
-            <p className="text-sm text-muted-foreground">
-              Recomendaciones automáticas basadas en ventas, stock, caducidad,
-              recuperación económica, rentabilidad y ubicación.
-            </p>
           </CardHeader>
 
           <CardContent>
-            {recomendaciones.length === 0 ? (
-              <EmptyState text="Aún no hay datos suficientes para generar recomendaciones." />
+            {productosMasVendidos.length === 0 ? (
+              <EmptyState text="No hay productos vendidos en este periodo." />
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {recomendaciones.slice(0, 6).map((item, index) => (
-                  <div
-                    key={`${item.tipo}-${item.sku}-${index}`}
-                    className="rounded-xl border bg-card p-4 shadow-sm space-y-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <TypeBadge tipo={item.tipo} />
-                      <PriorityBadge prioridad={item.prioridad} />
-                    </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="racknova-table-header">
+                    <TableRow>
+                      <TableHead>#</TableHead>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Vendidas</TableHead>
+                      <TableHead>Ingresos</TableHead>
+                      <TableHead>Ganancia</TableHead>
+                    </TableRow>
+                  </TableHeader>
 
-                    <div>
-                      <p className="font-semibold">{item.nombre}</p>
-                      <p className="text-xs text-muted-foreground">
-                        SKU: {item.sku}
-                      </p>
-                    </div>
-
-                    <p className="text-sm">{item.mensaje}</p>
-
-                    <div className="rounded-md bg-muted p-3 text-sm">
-                      <p className="font-medium">{item.accion}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {item.valorReferencia}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  <TableBody>
+                    {productosMasVendidos.map((product, index) => (
+                      <TableRow key={product.sku}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell className="font-mono">
+                          {product.sku}
+                        </TableCell>
+                        <TableCell>{product.nombre}</TableCell>
+                        <TableCell>{product.cantidadVendida}</TableCell>
+                        <TableCell>{money(product.ingresoTotal)}</TableCell>
+                        <TableCell
+                          className={
+                            product.gananciaTotal >= 0
+                              ? "font-semibold text-emerald-600"
+                              : "font-semibold text-red-600"
+                          }
+                        >
+                          {money(product.gananciaTotal)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <Card className="racknova-card racknova-metric-success">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Vendidas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{totalPiezasVendidas}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card racknova-metric-warning">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <TrendingDown className="h-4 w-4" />
-                Sin ventas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{productosSinVentas}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card racknova-metric-warning">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <CalendarClock className="h-4 w-4" />
-                Por caducar
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{porCaducar}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card racknova-metric-danger">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Vencidos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{vencidos}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card racknova-metric-danger">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <Boxes className="h-4 w-4" />
-                Alertas altas
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{alertasAltas}</p>
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card racknova-metric-info">
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
-                <PackageCheck className="h-4 w-4" />
-                Rentables
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{productosRentables}</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Percent className="h-5 w-5" />
-                Descuentos / prioridad de salida
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Productos próximos a caducar, vencidos o con baja rotación.
-              </p>
-            </CardHeader>
-
-            <CardContent>
-              {descuentosSugeridos.length === 0 ? (
-                <EmptyState text="No hay productos con recomendación de descuento o caducidad." />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Prioridad</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Motivo</TableHead>
-                      <TableHead>Desc.</TableHead>
-                      <TableHead>Recuperación</TableHead>
-                      <TableHead>Resultado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {descuentosSugeridos.map((item, index) => (
-                      <TableRow key={`descuento-${item.sku}-${index}`}>
-                        <TableCell>
-                          <PriorityBadge prioridad={item.prioridad} />
-                        </TableCell>
-
-                        <TableCell>
-                          <Badge variant="outline">{item.sku}</Badge>
-                        </TableCell>
-
-                        <TableCell className="font-medium">
-                          {item.nombre}
-                        </TableCell>
-
-                        <TableCell>{item.mensaje}</TableCell>
-
-                        <TableCell>
-                          {item.descuentoSugerido
-                            ? `${item.descuentoSugerido}%`
-                            : "No aplica"}
-                        </TableCell>
-
-                        <TableCell>
-                          {item.recuperacionEstimada
-                            ? formatMoney(item.recuperacionEstimada)
-                            : "-"}
-                        </TableCell>
-
-                        <TableCell>
-                          {item.resultadoConDescuento !== undefined &&
-                          item.resultadoConDescuento !== 0 ? (
-                            <span
-                              className={
-                                item.resultadoConDescuento >= 0
-                                  ? "font-semibold text-green-600"
-                                  : "font-semibold text-red-600"
-                              }
-                            >
-                              {item.resultadoConDescuento >= 0 ? "+" : "-"}
-                              {formatMoney(Math.abs(item.resultadoConDescuento))}
-                            </span>
-                          ) : (
-                            "-"
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Optimización de ubicación
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Muestra los 2 productos sin venta o con más tiempo sin vender y
-                sugiere moverlos cerca del producto más vendido.
-              </p>
-            </CardHeader>
-
-            <CardContent>
-              {ubicacionSugerida.length === 0 ? (
-                <EmptyState text="No hay recomendaciones de ubicación por ahora." />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Prioridad</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Diagnóstico</TableHead>
-                      <TableHead>Actual</TableHead>
-                      <TableHead>Sugerida</TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {ubicacionSugerida.map((item, index) => (
-                      <TableRow key={`ubicacion-${item.sku}-${index}`}>
-                        <TableCell>
-                          <PriorityBadge prioridad={item.prioridad} />
-                        </TableCell>
-
-                        <TableCell>
-                          <Badge variant="outline">{item.sku}</Badge>
-                        </TableCell>
-
-                        <TableCell className="font-medium">
-                          {item.nombre}
-                        </TableCell>
-
-                        <TableCell>{item.mensaje}</TableCell>
-
-                        <TableCell>{item.ubicacionActual ?? "-"}</TableCell>
-
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {item.ubicacionSugerida ?? "Revisar"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {productosRentablesLista.length > 0 && (
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle>Productos rentables detectados</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Productos con margen positivo y buen desempeño financiero.
-              </p>
-            </CardHeader>
-
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Prioridad</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Diagnóstico</TableHead>
-                    <TableHead>Referencia</TableHead>
-                  </TableRow>
-                </TableHeader>
-
-                <TableBody>
-                  {productosRentablesLista.map((item, index) => (
-                    <TableRow key={`rentable-${item.sku}-${index}`}>
-                      <TableCell>
-                        <PriorityBadge prioridad={item.prioridad} />
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="outline">{item.sku}</Badge>
-                      </TableCell>
-
-                      <TableCell className="font-medium">
-                        {item.nombre}
-                      </TableCell>
-
-                      <TableCell>{item.mensaje}</TableCell>
-
-                      <TableCell>{item.valorReferencia}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle>Productos más vendidos</CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              {productosMasVendidos.length === 0 ? (
-                <EmptyState text="Todavía no hay ventas registradas." />
-              ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={productosMasVendidos}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="sku" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="cantidadVendida" name="Piezas vendidas">
-                      {productosMasVendidos.map((_, index) => (
-                        <Cell
-                          key={`top-sale-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle>Productos menos vendidos / sin ventas</CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              {productosMenosVendidos.length === 0 ? (
-                <EmptyState text="No hay productos para analizar." />
-              ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={productosMenosVendidos}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="sku" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="cantidadVendida" name="Piezas vendidas">
-                      {productosMenosVendidos.map((_, index) => (
-                        <Cell
-                          key={`low-sale-${index}`}
-                          fill={COLORS[(index + 2) % COLORS.length]}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle>Stock bajo</CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              {productosStockBajo.length === 0 ? (
-                <EmptyState text="No hay productos con stock bajo." />
-              ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={productosStockBajo}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="sku" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="cantidadActual" name="Cantidad actual">
-                      {productosStockBajo.map((_, index) => (
-                        <Cell
-                          key={`low-stock-${index}`}
-                          fill={COLORS[(index + 3) % COLORS.length]}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="racknova-card">
-            <CardHeader>
-              <CardTitle>Productos con mayor stock</CardTitle>
-            </CardHeader>
-
-            <CardContent>
-              {productosStockAlto.length === 0 ? (
-                <EmptyState text="No hay productos para analizar." />
-              ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={productosStockAlto}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="sku" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="cantidadActual" name="Cantidad actual">
-                      {productosStockAlto.map((_, index) => (
-                        <Cell
-                          key={`high-stock-${index}`}
-                          fill={COLORS[(index + 4) % COLORS.length]}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
         <Card className="racknova-card">
           <CardHeader>
-            <CardTitle>Productos próximos a caducar</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingDown className="h-5 w-5" />
+              Menos vendidos / sin venta
+            </CardTitle>
           </CardHeader>
 
           <CardContent>
-            {productosPorCaducar.length === 0 ? (
-              <EmptyState text="No hay productos próximos a caducar en los siguientes 30 días." />
+            {productosMenosVendidos.length === 0 ? (
+              <EmptyState text="No hay productos para analizar." />
             ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="racknova-table-header">
+                    <TableRow>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Stock actual</TableHead>
+                      <TableHead>Vendidas</TableHead>
+                      <TableHead>Ubicación</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {productosMenosVendidos.map((product) => (
+                      <TableRow key={product.sku}>
+                        <TableCell className="font-mono">
+                          {product.sku}
+                        </TableCell>
+                        <TableCell>{product.nombre}</TableCell>
+                        <TableCell>{product.cantidadActual}</TableCell>
+                        <TableCell>
+                          {product.cantidadVendida === 0 ? (
+                            <Badge variant="outline">Sin venta</Badge>
+                          ) : (
+                            product.cantidadVendida
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {product.locationId}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Stock bajo
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {productosStockBajo.length === 0 ? (
+              <EmptyState text="No hay productos con stock bajo." />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="racknova-table-header">
+                    <TableRow>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Cantidad</TableHead>
+                      <TableHead>Mínimo</TableHead>
+                      <TableHead>Ubicación</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {productosStockBajo.map((product) => (
+                      <TableRow key={product.sku}>
+                        <TableCell className="font-mono">
+                          {product.sku}
+                        </TableCell>
+                        <TableCell>{product.nombre}</TableCell>
+                        <TableCell className="font-semibold text-red-600">
+                          {product.cantidad}
+                        </TableCell>
+                        <TableCell>{product.stock_minimo ?? 10}</TableCell>
+                        <TableCell className="font-mono">
+                          {product.locationId}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PackageCheck className="h-5 w-5" />
+              Stock alto
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {productosStockAlto.length === 0 ? (
+              <EmptyState text="No hay productos con stock alto." />
+            ) : (
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader className="racknova-table-header">
+                    <TableRow>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Cantidad</TableHead>
+                      <TableHead>Stock alto</TableHead>
+                      <TableHead>Ubicación</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {productosStockAlto.map((product) => (
+                      <TableRow key={product.sku}>
+                        <TableCell className="font-mono">
+                          {product.sku}
+                        </TableCell>
+                        <TableCell>{product.nombre}</TableCell>
+                        <TableCell className="font-semibold text-blue-600">
+                          {product.cantidad}
+                        </TableCell>
+                        <TableCell>
+                          {product.stock_alto ??
+                            Number(product.stock_minimo ?? 10) * 3}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {product.locationId}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarClock className="h-5 w-5" />
+            Caducidades
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {productosCaducidad.length === 0 ? (
+            <EmptyState text="No hay productos con caducidad registrada." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
               <Table>
-                <TableHeader>
+                <TableHeader className="racknova-table-header">
                   <TableRow>
                     <TableHead>Estado</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Producto</TableHead>
                     <TableHead>Cantidad</TableHead>
-                    <TableHead>Caducidad</TableHead>
-                    <TableHead>Días restantes</TableHead>
+                    <TableHead>Caducidad próxima</TableHead>
+                    <TableHead>Días</TableHead>
+                    <TableHead>Ubicación</TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {productosPorCaducar.map((product) => (
+                  {productosCaducidad.map((product) => (
                     <TableRow key={product.sku}>
                       <TableCell>
-                        <ExpirationBadge days={product.diasRestantes} />
+                        <ExpirationBadge days={product.diasCaducidad} />
                       </TableCell>
-
-                      <TableCell>
-                        <Badge variant="outline">{product.sku}</Badge>
-                      </TableCell>
-
-                      <TableCell className="font-medium">
-                        {product.nombre}
-                      </TableCell>
-
-                      <TableCell>{product.cantidad}</TableCell>
-
+                      <TableCell className="font-mono">{product.sku}</TableCell>
+                      <TableCell>{product.nombre}</TableCell>
+                      <TableCell>{product.cantidadActual}</TableCell>
                       <TableCell>{formatDate(product.caducidad)}</TableCell>
-
                       <TableCell>
-                        {product.diasRestantes < 0
-                          ? `${Math.abs(product.diasRestantes)} día(s) vencido`
-                          : `${product.diasRestantes} día(s)`}
+                        {product.diasCaducidad !== null
+                          ? product.diasCaducidad < 0
+                            ? `${Math.abs(product.diasCaducidad)} día(s) vencido`
+                            : `${product.diasCaducidad} día(s)`
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {product.locationId}
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle>Reporte ejecutivo de recomendaciones</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Tabla general para revisar decisiones sugeridas por RackNova iA.
-            </p>
-          </CardHeader>
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Histórico de movimientos
+          </CardTitle>
+        </CardHeader>
 
-          <CardContent>
-            {recomendaciones.length === 0 ? (
-              <EmptyState text="No hay recomendaciones generadas." />
-            ) : (
+        <CardContent>
+          {movimientosFiltrados.length === 0 ? (
+            <EmptyState text="No hay movimientos en este periodo." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
               <Table>
-                <TableHeader>
+                <TableHeader className="racknova-table-header">
                   <TableRow>
-                    <TableHead>Prioridad</TableHead>
-                    <TableHead>Tipo</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Acción</TableHead>
                     <TableHead>SKU</TableHead>
                     <TableHead>Producto</TableHead>
-                    <TableHead>Diagnóstico</TableHead>
-                    <TableHead>Acción sugerida</TableHead>
-                    <TableHead>Referencia</TableHead>
+                    <TableHead>Cantidad</TableHead>
+                    <TableHead>Ubicación</TableHead>
+                    <TableHead>Ingreso</TableHead>
+                    <TableHead>Costo</TableHead>
+                    <TableHead>Ganancia</TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {recomendaciones.map((item, index) => (
-                    <TableRow key={`reporte-${item.sku}-${item.tipo}-${index}`}>
-                      <TableCell>
-                        <PriorityBadge prioridad={item.prioridad} />
-                      </TableCell>
-
-                      <TableCell>
-                        <TypeBadge tipo={item.tipo} />
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant="outline">{item.sku}</Badge>
-                      </TableCell>
-
-                      <TableCell className="font-medium">
-                        {item.nombre}
-                      </TableCell>
-
-                      <TableCell>{item.mensaje}</TableCell>
-
-                      <TableCell>{item.accion}</TableCell>
-
-                      <TableCell>{item.valorReferencia}</TableCell>
-                    </TableRow>
-                  ))}
+                  {[...movimientosFiltrados]
+                    .sort(
+                      (a, b) =>
+                        new Date(b.timestamp).getTime() -
+                        new Date(a.timestamp).getTime()
+                    )
+                    .slice(0, 50)
+                    .map((movement) => (
+                      <TableRow key={movement.id}>
+                        <TableCell>{formatDate(movement.timestamp)}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              movement.action === "Egreso"
+                                ? "destructive"
+                                : movement.action === "Ingreso"
+                                ? "outline"
+                                : "secondary"
+                            }
+                          >
+                            {movement.action}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {movement.productSku}
+                        </TableCell>
+                        <TableCell>{movement.productName}</TableCell>
+                        <TableCell>{movement.quantity}</TableCell>
+                        <TableCell className="font-mono">
+                          {movement.location}
+                        </TableCell>
+                        <TableCell>
+                          {money(Number(movement.ingreso_total ?? 0))}
+                        </TableCell>
+                        <TableCell>
+                          {money(Number(movement.costo_total ?? 0))}
+                        </TableCell>
+                        <TableCell
+                          className={
+                            Number(movement.ganancia ?? 0) >= 0
+                              ? "font-semibold text-emerald-600"
+                              : "font-semibold text-red-600"
+                          }
+                        >
+                          {money(Number(movement.ganancia ?? 0))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          )}
+
+          {movimientosFiltrados.length > 50 && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Mostrando los 50 movimientos más recientes del periodo.
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
