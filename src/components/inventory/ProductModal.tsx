@@ -14,7 +14,7 @@ import { useInventory } from "@/context/InventoryContext";
 import { Location, Product } from "@/types/inventory";
 import { useToast } from "@/hooks/use-toast";
 import { QRConfirmationModal } from "./QRConfirmationModal";
-import { AlertTriangle, Percent } from "lucide-react";
+import { AlertTriangle, Percent, LocateFixed } from "lucide-react";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -92,7 +92,8 @@ export function ProductModal({
     timestamp: Date;
   } | null>(null);
 
-  const { addProduct, updateProduct, deleteProduct, products } = useInventory();
+  const { addProduct, updateProduct, deleteProduct, buscarFisicamente } =
+  useInventory();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -370,7 +371,24 @@ export function ProductModal({
       });
     }
   };
+const handleBuscarFisicamente = async () => {
+  if (!location) {
+    toast({
+      title: "Ubicación no disponible",
+      description: "No se encontró la ubicación del producto.",
+      variant: "destructive",
+    });
+    return;
+  }
 
+  const result = await buscarFisicamente(location.id);
+
+  toast({
+    title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
+    description: result.mensaje,
+    variant: result.ok ? "default" : "destructive",
+  });
+};
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
@@ -705,6 +723,16 @@ export function ProductModal({
               Confirmar salida
             </Button>
           </DialogFooter>
+          {product && (
+  <Button
+    type="button"
+    variant="outline"
+    onClick={handleBuscarFisicamente}
+  >
+    <LocateFixed className="h-4 w-4 mr-2" />
+    Buscar físicamente
+  </Button>
+)}
         </DialogContent>
       </Dialog>
 
