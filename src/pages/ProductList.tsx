@@ -45,6 +45,7 @@ import {
   CalendarDays,
   Percent,
   Calculator,
+  LocateFixed,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
@@ -111,7 +112,8 @@ export default function ProductList() {
   const [cantidadVendida, setCantidadVendida] = useState("1");
   const [precioVenta, setPrecioVenta] = useState("");
 
-  const { products, locations, deleteProduct } = useInventory();
+  const { products, locations, deleteProduct, buscarFisicamente } =
+  useInventory();
   const { toast } = useToast();
 
   const productsWithLocation = useMemo(() => {
@@ -160,6 +162,16 @@ export default function ProductList() {
     setModalOpen(true);
   };
 
+  const handleBuscarFisicamente = async (product: Product) => {
+  const result = await buscarFisicamente(product.locationId);
+
+  toast({
+    title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
+    description: result.mensaje,
+    variant: result.ok ? "default" : "destructive",
+  });
+};
+  
   const handleOpenSale = (product: Product) => {
     setSaleProduct(product);
     setCantidadVendida("1");
