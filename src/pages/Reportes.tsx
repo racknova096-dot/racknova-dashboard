@@ -32,9 +32,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import {
   BarChart3,
@@ -46,7 +47,8 @@ import {
   CalendarClock,
   Download,
   Activity,
-  DollarSign,
+  PackageX,
+  ShoppingCart,
 } from "lucide-react";
 
 type PeriodoFiltro = "semana" | "mes" | "anio" | "todo";
@@ -55,9 +57,6 @@ type VentaProducto = {
   sku: string;
   nombre: string;
   cantidadVendida: number;
-  ingresoTotal: number;
-  costoTotal: number;
-  gananciaTotal: number;
   primeraVenta: Date | null;
   ultimaVenta: Date | null;
 };
@@ -72,17 +71,20 @@ type ProductoReporte = {
   caducidad: string | null;
   diasCaducidad: number | null;
   cantidadVendida: number;
-  ingresoTotal: number;
-  costoTotal: number;
-  gananciaTotal: number;
+  ultimaVenta: Date | null;
 };
 
-function money(value: number) {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-  }).format(Number(value || 0));
-}
+const CHART_COLORS = {
+  primary: "#2563eb",
+  emerald: "#059669",
+  amber: "#d97706",
+  red: "#dc2626",
+  purple: "#7c3aed",
+  cyan: "#0891b2",
+  slate: "#475569",
+};
+
+const STOCK_COLORS = ["#dc2626", "#2563eb", "#059669"];
 
 function numberFormat(value: number) {
   return new Intl.NumberFormat("es-MX", {
@@ -94,7 +96,9 @@ function formatDate(value: Date | string | null | undefined) {
   if (!value) return "-";
 
   const date =
-    value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    value instanceof Date
+      ? value
+      : new Date(`${String(value).slice(0, 10)}T00:00:00`);
 
   return new Intl.DateTimeFormat("es-MX", {
     day: "2-digit",
@@ -231,9 +235,6 @@ export default function Reportes() {
 
         if (current) {
           current.cantidadVendida += Number(movement.quantity ?? 0);
-          current.ingresoTotal += Number(movement.ingreso_total ?? 0);
-          current.costoTotal += Number(movement.costo_total ?? 0);
-          current.gananciaTotal += Number(movement.ganancia ?? 0);
 
           if (!current.primeraVenta || fecha < current.primeraVenta) {
             current.primeraVenta = fecha;
@@ -247,9 +248,6 @@ export default function Reportes() {
             sku,
             nombre: movement.productName,
             cantidadVendida: Number(movement.quantity ?? 0),
-            ingresoTotal: Number(movement.ingreso_total ?? 0),
-            costoTotal: Number(movement.costo_total ?? 0),
-            gananciaTotal: Number(movement.ganancia ?? 0),
             primeraVenta: fecha,
             ultimaVenta: fecha,
           });
@@ -277,31 +275,28 @@ export default function Reportes() {
         caducidad,
         diasCaducidad,
         cantidadVendida: Number(venta?.cantidadVendida ?? 0),
-        ingresoTotal: Number(venta?.ingresoTotal ?? 0),
-        costoTotal: Number(venta?.costoTotal ?? 0),
-        gananciaTotal: Number(venta?.gananciaTotal ?? 0),
+        ultimaVenta: venta?.ultimaVenta ?? null,
       };
     });
   }, [products, ventasMap]);
 
-  const ventasOrdenadas = useMemo(() => {
-    return Array.from(ventasMap.values()).sort(
-      (a, b) => b.cantidadVendida - a.cantidadVendida
-    );
+  const productosMasVendidos = useMemo(() => {
+    return Array.from(ventasMap.values())
+      .sort((a, b) => b.cantidadVendida - a.cantidadVendida)
+      .slice(0, 8);
   }, [ventasMap]);
 
-  const productosMasVendidos = ventasOrdenadas.slice(0, 8);
-
   const productosMenosVendidos = useMemo(() => {
-    return [...productosReporte]
-      .sort((a, b) => {
-        if (a.cantidadVendida !== b.cantidadVendida) {
-          return a.cantidadVendida - b.cantidadVendida;
-        }
-
-        return b.cantidadActual - a.cantidadActual;
-      })
+    return productosReporte
+      .filter((product) => product.cantidadVendida > 0)
+      .sort((a, b) => a.cantidadVendida - b.cantidadVendida)
       .slice(0, 8);
+  }, [productosReporte]);
+
+  const productosNoVendidos = useMemo(() => {
+    return productosReporte
+      .filter((product) => product.cantidadVendida === 0)
+      .sort((a, b) => b.cantidadActual - a.cantidadActual);
   }, [productosReporte]);
 
   const productosStockBajo = useMemo(() => {
@@ -343,11 +338,9 @@ export default function Reportes() {
       string,
       {
         fecha: string;
-        ingresos: number;
-        costos: number;
-        ganancia: number;
         piezasVendidas: number;
-        entradas: number;
+        piezasIngresadas: number;
+        movimientos: number;
       }
     >();
 
@@ -357,23 +350,20 @@ export default function Reportes() {
         map.get(fecha) ??
         {
           fecha,
-          ingresos: 0,
-          costos: 0,
-          ganancia: 0,
           piezasVendidas: 0,
-          entradas: 0,
+          piezasIngresadas: 0,
+          movimientos: 0,
         };
 
       if (movement.action === "Egreso") {
-        current.ingresos += Number(movement.ingreso_total ?? 0);
-        current.costos += Number(movement.costo_total ?? 0);
-        current.ganancia += Number(movement.ganancia ?? 0);
         current.piezasVendidas += Number(movement.quantity ?? 0);
       }
 
       if (movement.action === "Ingreso") {
-        current.entradas += Number(movement.quantity ?? 0);
+        current.piezasIngresadas += Number(movement.quantity ?? 0);
       }
+
+      current.movimientos += 1;
 
       map.set(fecha, current);
     });
@@ -393,9 +383,9 @@ export default function Reportes() {
       .length;
 
     return [
-      { estado: "Bajo", productos: bajo },
-      { estado: "Normal", productos: normal },
-      { estado: "Alto", productos: alto },
+      { estado: "Stock bajo", productos: bajo },
+      { estado: "Stock normal", productos: normal },
+      { estado: "Stock alto", productos: alto },
     ];
   }, [products]);
 
@@ -404,30 +394,12 @@ export default function Reportes() {
       (movement) => movement.action === "Egreso"
     );
 
-    const ingresos = ventas.reduce(
-      (total, movement) => total + Number(movement.ingreso_total ?? 0),
-      0
-    );
-
-    const costos = ventas.reduce(
-      (total, movement) => total + Number(movement.costo_total ?? 0),
-      0
-    );
-
-    const ganancia = ventas.reduce(
-      (total, movement) => total + Number(movement.ganancia ?? 0),
-      0
-    );
-
     const piezasVendidas = ventas.reduce(
       (total, movement) => total + Number(movement.quantity ?? 0),
       0
     );
 
     return {
-      ingresos,
-      costos,
-      ganancia,
       piezasVendidas,
       movimientos: movimientosFiltrados.length,
       productosActivos: products.length,
@@ -435,6 +407,7 @@ export default function Reportes() {
       stockAlto: productosStockAlto.length,
       porCaducar: productosPorCaducar.length,
       vencidos: productosVencidos.length,
+      noVendidos: productosNoVendidos.length,
     };
   }, [
     movimientosFiltrados,
@@ -443,6 +416,7 @@ export default function Reportes() {
     productosStockAlto.length,
     productosPorCaducar.length,
     productosVencidos.length,
+    productosNoVendidos.length,
   ]);
 
   const exportCSV = () => {
@@ -454,11 +428,9 @@ export default function Reportes() {
       "Stock minimo",
       "Stock alto",
       "Cantidad vendida",
-      "Ingresos",
-      "Costos",
-      "Ganancia",
       "Caducidad",
       "Dias caducidad",
+      "Ultima venta",
     ];
 
     const rows = productosReporte.map((product) => [
@@ -469,11 +441,9 @@ export default function Reportes() {
       product.stockMinimo,
       product.stockAlto,
       product.cantidadVendida,
-      product.ingresoTotal,
-      product.costoTotal,
-      product.gananciaTotal,
       product.caducidad ?? "",
       product.diasCaducidad ?? "",
+      product.ultimaVenta ? formatDate(product.ultimaVenta) : "",
     ]);
 
     const csvContent = [headers, ...rows]
@@ -508,7 +478,8 @@ export default function Reportes() {
             Reportes
           </h1>
           <p className="text-muted-foreground">
-            Gráficas y tablas de ventas, stock, caducidad y movimientos.
+            Análisis operativo de ventas, rotación, stock, caducidad y
+            movimientos.
           </p>
         </div>
 
@@ -554,43 +525,7 @@ export default function Reportes() {
                 </p>
                 <p className="text-3xl font-bold">{resumen.piezasVendidas}</p>
               </div>
-              <TrendingUp className="h-8 w-8 text-emerald-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Ingresos</p>
-                <p className="text-3xl font-bold">
-                  {money(resumen.ingresos)}
-                </p>
-              </div>
-              <DollarSign className="h-8 w-8 text-emerald-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Ganancia</p>
-                <p
-                  className={`text-3xl font-bold ${
-                    resumen.ganancia >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {money(resumen.ganancia)}
-                </p>
-              </div>
-              {resumen.ganancia >= 0 ? (
-                <TrendingUp className="h-8 w-8 text-emerald-600" />
-              ) : (
-                <TrendingDown className="h-8 w-8 text-red-600" />
-              )}
+              <ShoppingCart className="h-8 w-8 text-emerald-600" />
             </div>
           </CardContent>
         </Card>
@@ -607,6 +542,34 @@ export default function Reportes() {
                 </p>
               </div>
               <Boxes className="h-8 w-8 text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Productos sin venta
+                </p>
+                <p className="text-3xl font-bold text-slate-700">
+                  {resumen.noVendidos}
+                </p>
+              </div>
+              <PackageX className="h-8 w-8 text-slate-700" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="racknova-card">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Movimientos</p>
+                <p className="text-3xl font-bold">{resumen.movimientos}</p>
+              </div>
+              <Activity className="h-8 w-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>
@@ -662,11 +625,21 @@ export default function Reportes() {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={productosMasVendidos}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="sku" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="cantidadVendida" name="Vendidas" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="sku" stroke="#64748b" />
+                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <Tooltip
+                    formatter={(value) => [
+                      `${numberFormat(Number(value))} pieza(s)`,
+                      "Vendidas",
+                    ]}
+                  />
+                  <Bar
+                    dataKey="cantidadVendida"
+                    name="Vendidas"
+                    fill={CHART_COLORS.emerald}
+                    radius={[8, 8, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -675,33 +648,31 @@ export default function Reportes() {
 
         <Card className="racknova-card">
           <CardHeader>
-            <CardTitle>Ventas y ganancias por fecha</CardTitle>
+            <CardTitle>Productos menos vendidos</CardTitle>
           </CardHeader>
 
           <CardContent className="h-[320px]">
-            {movimientosPorFecha.length === 0 ? (
-              <EmptyState text="No hay movimientos financieros en este periodo." />
+            {productosMenosVendidos.length === 0 ? (
+              <EmptyState text="No hay productos con ventas bajas en este periodo." />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={movimientosPorFecha}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fecha" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => money(Number(value))} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="ingresos"
-                    name="Ingresos"
-                    strokeWidth={2}
+                <BarChart data={productosMenosVendidos}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="sku" stroke="#64748b" />
+                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <Tooltip
+                    formatter={(value) => [
+                      `${numberFormat(Number(value))} pieza(s)`,
+                      "Vendidas",
+                    ]}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="ganancia"
-                    name="Ganancia"
-                    strokeWidth={2}
+                  <Bar
+                    dataKey="cantidadVendida"
+                    name="Vendidas"
+                    fill={CHART_COLORS.amber}
+                    radius={[8, 8, 0, 0]}
                   />
-                </LineChart>
+                </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -711,45 +682,101 @@ export default function Reportes() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card className="racknova-card">
           <CardHeader>
-            <CardTitle>Distribución de stock</CardTitle>
+            <CardTitle>Productos no vendidos</CardTitle>
           </CardHeader>
 
-          <CardContent className="h-[280px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stockChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="estado" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="productos" name="Productos" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle>Movimientos por fecha</CardTitle>
-          </CardHeader>
-
-          <CardContent className="h-[280px]">
-            {movimientosPorFecha.length === 0 ? (
-              <EmptyState text="No hay movimientos en este periodo." />
+          <CardContent className="h-[320px]">
+            {productosNoVendidos.length === 0 ? (
+              <EmptyState text="Todos los productos actuales tuvieron venta en este periodo." />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={movimientosPorFecha}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="fecha" />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="piezasVendidas" name="Piezas vendidas" />
-                  <Bar dataKey="entradas" name="Piezas ingresadas" />
+                <BarChart data={productosNoVendidos.slice(0, 8)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="sku" stroke="#64748b" />
+                  <YAxis allowDecimals={false} stroke="#64748b" />
+                  <Tooltip
+                    formatter={(value) => [
+                      `${numberFormat(Number(value))} pieza(s)`,
+                      "Stock actual",
+                    ]}
+                  />
+                  <Bar
+                    dataKey="cantidadActual"
+                    name="Stock actual"
+                    fill={CHART_COLORS.slate}
+                    radius={[8, 8, 0, 0]}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
+
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle>Distribución de stock</CardTitle>
+          </CardHeader>
+
+          <CardContent className="h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={stockChartData}
+                  dataKey="productos"
+                  nameKey="estado"
+                  outerRadius={105}
+                  innerRadius={55}
+                  paddingAngle={4}
+                  label
+                >
+                  {stockChartData.map((_, index) => (
+                    <Cell
+                      key={`stock-cell-${index}`}
+                      fill={STOCK_COLORS[index % STOCK_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
       </div>
+
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle>Movimientos por fecha</CardTitle>
+        </CardHeader>
+
+        <CardContent className="h-[300px]">
+          {movimientosPorFecha.length === 0 ? (
+            <EmptyState text="No hay movimientos en este periodo." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={movimientosPorFecha}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="fecha" stroke="#64748b" />
+                <YAxis allowDecimals={false} stroke="#64748b" />
+                <Tooltip />
+                <Legend />
+                <Bar
+                  dataKey="piezasVendidas"
+                  name="Piezas vendidas"
+                  fill={CHART_COLORS.primary}
+                  radius={[8, 8, 0, 0]}
+                />
+                <Bar
+                  dataKey="piezasIngresadas"
+                  name="Piezas ingresadas"
+                  fill={CHART_COLORS.purple}
+                  radius={[8, 8, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card className="racknova-card">
@@ -772,8 +799,7 @@ export default function Reportes() {
                       <TableHead>SKU</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Vendidas</TableHead>
-                      <TableHead>Ingresos</TableHead>
-                      <TableHead>Ganancia</TableHead>
+                      <TableHead>Última venta</TableHead>
                     </TableRow>
                   </TableHeader>
 
@@ -785,17 +811,10 @@ export default function Reportes() {
                           {product.sku}
                         </TableCell>
                         <TableCell>{product.nombre}</TableCell>
-                        <TableCell>{product.cantidadVendida}</TableCell>
-                        <TableCell>{money(product.ingresoTotal)}</TableCell>
-                        <TableCell
-                          className={
-                            product.gananciaTotal >= 0
-                              ? "font-semibold text-emerald-600"
-                              : "font-semibold text-red-600"
-                          }
-                        >
-                          {money(product.gananciaTotal)}
+                        <TableCell className="font-semibold text-emerald-600">
+                          {product.cantidadVendida}
                         </TableCell>
+                        <TableCell>{formatDate(product.ultimaVenta)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -809,13 +828,13 @@ export default function Reportes() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingDown className="h-5 w-5" />
-              Menos vendidos / sin venta
+              Productos menos vendidos
             </CardTitle>
           </CardHeader>
 
           <CardContent>
             {productosMenosVendidos.length === 0 ? (
-              <EmptyState text="No hay productos para analizar." />
+              <EmptyState text="No hay productos con ventas bajas en este periodo." />
             ) : (
               <div className="overflow-x-auto rounded-lg border">
                 <Table>
@@ -823,8 +842,8 @@ export default function Reportes() {
                     <TableRow>
                       <TableHead>SKU</TableHead>
                       <TableHead>Producto</TableHead>
-                      <TableHead>Stock actual</TableHead>
                       <TableHead>Vendidas</TableHead>
+                      <TableHead>Stock actual</TableHead>
                       <TableHead>Ubicación</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -836,14 +855,10 @@ export default function Reportes() {
                           {product.sku}
                         </TableCell>
                         <TableCell>{product.nombre}</TableCell>
-                        <TableCell>{product.cantidadActual}</TableCell>
-                        <TableCell>
-                          {product.cantidadVendida === 0 ? (
-                            <Badge variant="outline">Sin venta</Badge>
-                          ) : (
-                            product.cantidadVendida
-                          )}
+                        <TableCell className="font-semibold text-amber-600">
+                          {product.cantidadVendida}
                         </TableCell>
+                        <TableCell>{product.cantidadActual}</TableCell>
                         <TableCell className="font-mono">
                           {product.locationId}
                         </TableCell>
@@ -856,6 +871,74 @@ export default function Reportes() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <PackageX className="h-5 w-5" />
+            Productos no vendidos
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {productosNoVendidos.length === 0 ? (
+            <EmptyState text="Todos los productos activos tuvieron venta en este periodo." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader className="racknova-table-header">
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Stock actual</TableHead>
+                    <TableHead>Stock</TableHead>
+                    <TableHead>Ubicación</TableHead>
+                    <TableHead>Caducidad</TableHead>
+                  </TableRow>
+                </TableHeader>
+
+                <TableBody>
+                  {productosNoVendidos.slice(0, 20).map((product) => {
+                    const original = products.find((p) => p.sku === product.sku);
+
+                    return (
+                      <TableRow key={product.sku}>
+                        <TableCell className="font-mono">
+                          {product.sku}
+                        </TableCell>
+                        <TableCell>{product.nombre}</TableCell>
+                        <TableCell className="font-semibold">
+                          {product.cantidadActual}
+                        </TableCell>
+                        <TableCell>
+                          {original ? (
+                            <StockBadge product={original} />
+                          ) : (
+                            <Badge variant="outline">-</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono">
+                          {product.locationId}
+                        </TableCell>
+                        <TableCell>
+                          <ExpirationBadge days={product.diasCaducidad} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+
+              {productosNoVendidos.length > 20 && (
+                <p className="text-xs text-muted-foreground p-3">
+                  Mostrando 20 de {productosNoVendidos.length} productos sin
+                  venta.
+                </p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card className="racknova-card">
@@ -995,7 +1078,9 @@ export default function Reportes() {
                       <TableCell>
                         {product.diasCaducidad !== null
                           ? product.diasCaducidad < 0
-                            ? `${Math.abs(product.diasCaducidad)} día(s) vencido`
+                            ? `${Math.abs(
+                                product.diasCaducidad
+                              )} día(s) vencido`
                             : `${product.diasCaducidad} día(s)`
                           : "-"}
                       </TableCell>
@@ -1033,9 +1118,6 @@ export default function Reportes() {
                     <TableHead>Producto</TableHead>
                     <TableHead>Cantidad</TableHead>
                     <TableHead>Ubicación</TableHead>
-                    <TableHead>Ingreso</TableHead>
-                    <TableHead>Costo</TableHead>
-                    <TableHead>Ganancia</TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -1070,21 +1152,6 @@ export default function Reportes() {
                         <TableCell>{movement.quantity}</TableCell>
                         <TableCell className="font-mono">
                           {movement.location}
-                        </TableCell>
-                        <TableCell>
-                          {money(Number(movement.ingreso_total ?? 0))}
-                        </TableCell>
-                        <TableCell>
-                          {money(Number(movement.costo_total ?? 0))}
-                        </TableCell>
-                        <TableCell
-                          className={
-                            Number(movement.ganancia ?? 0) >= 0
-                              ? "font-semibold text-emerald-600"
-                              : "font-semibold text-red-600"
-                          }
-                        >
-                          {money(Number(movement.ganancia ?? 0))}
                         </TableCell>
                       </TableRow>
                     ))}
