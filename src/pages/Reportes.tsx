@@ -556,29 +556,7 @@ export default function Reportes() {
   inventario sin mezclarlo con métricas financieras avanzadas.
 </PageHero>
 
-        <div className="flex flex-col sm:flex-row gap-2">
-          <Select
-            value={periodo}
-            onValueChange={(value) => setPeriodo(value as PeriodoFiltro)}
-          >
-            <SelectTrigger className="w-[190px]">
-              <SelectValue placeholder="Periodo" />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="semana">Últimos 7 días</SelectItem>
-              <SelectItem value="mes">Mes actual</SelectItem>
-              <SelectItem value="anio">Año actual</SelectItem>
-              <SelectItem value="todo">Todo el historial</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button variant="outline" onClick={exportCSV}>
-            <Download className="h-4 w-4 mr-2" />
-            Exportar CSV
-          </Button>
-        </div>
-      </div>
+        
 
      
 
