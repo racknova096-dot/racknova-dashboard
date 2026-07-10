@@ -24,7 +24,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useInventory } from "@/context/InventoryContext";
 import {
-  AreaChart,
+  ComposedChart,
   Area,
   BarChart,
   Bar,
@@ -34,7 +34,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  LineChart,
   Line,
 } from "recharts";
 import {
@@ -53,6 +52,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   BarChart3,
+  PiggyBank,
+  Target,
+  PackageCheck,
 } from "lucide-react";
 
 type PeriodoFiltro = "semana" | "mes" | "anio" | "todo";
@@ -127,7 +129,9 @@ function formatDate(value: Date | string | null | undefined) {
   if (!value) return "-";
 
   const date =
-    value instanceof Date ? value : new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    value instanceof Date
+      ? value
+      : new Date(`${String(value).slice(0, 10)}T00:00:00`);
 
   return new Intl.DateTimeFormat("es-MX", {
     day: "2-digit",
@@ -201,6 +205,22 @@ function marginBadge(margen: number) {
   return <Badge className="bg-emerald-600 hover:bg-emerald-600">Alto</Badge>;
 }
 
+function investmentBadge(porcentaje: number) {
+  if (porcentaje <= 0) {
+    return <Badge variant="outline">Sin recuperación</Badge>;
+  }
+
+  if (porcentaje < 50) {
+    return <Badge className="bg-orange-500 hover:bg-orange-500">En proceso</Badge>;
+  }
+
+  if (porcentaje < 100) {
+    return <Badge className="bg-blue-600 hover:bg-blue-600">Avanzado</Badge>;
+  }
+
+  return <Badge className="bg-emerald-600 hover:bg-emerald-600">Recuperado</Badge>;
+}
+
 export default function Finanzas() {
   const { movements } = useInventory();
   const [periodo, setPeriodo] = useState<PeriodoFiltro>("mes");
@@ -212,6 +232,65 @@ export default function Finanzas() {
         isMovementInsidePeriod(new Date(movement.timestamp), periodo)
       );
   }, [movements, periodo]);
+
+  const investmentRecovery = useMemo(() => {
+    const ingresosInventario = movements.filter(
+      (movement) => movement.action === "Ingreso"
+    );
+
+    const ventasHistoricas = movements.filter(
+      (movement) => movement.action === "Egreso"
+    );
+
+    const inversionAcumulada = ingresosInventario.reduce(
+      (total, movement) => total + Number(movement.costo_total ?? 0),
+      0
+    );
+
+    const capitalRecuperado = ventasHistoricas.reduce(
+      (total, movement) => total + Number(movement.costo_total ?? 0),
+      0
+    );
+
+    const ingresosHistoricos = ventasHistoricas.reduce(
+      (total, movement) => total + Number(movement.ingreso_total ?? 0),
+      0
+    );
+
+    const costosHistoricos = capitalRecuperado;
+    const gananciaHistorica = ingresosHistoricos - costosHistoricos;
+
+    const pendientePorRecuperar = Math.max(
+      inversionAcumulada - capitalRecuperado,
+      0
+    );
+
+    const porcentajeRecuperado =
+      inversionAcumulada > 0
+        ? (capitalRecuperado / inversionAcumulada) * 100
+        : 0;
+
+    const progresoVisual = Math.min(Math.max(porcentajeRecuperado, 0), 100);
+
+    const roiInventario =
+      inversionAcumulada > 0
+        ? (gananciaHistorica / inversionAcumulada) * 100
+        : 0;
+
+    return {
+      inversionAcumulada,
+      capitalRecuperado,
+      pendientePorRecuperar,
+      porcentajeRecuperado,
+      progresoVisual,
+      roiInventario,
+      ingresosHistoricos,
+      costosHistoricos,
+      gananciaHistorica,
+      movimientosIngreso: ingresosInventario.length,
+      ventasHistoricas: ventasHistoricas.length,
+    };
+  }, [movements]);
 
   const financialByDate = useMemo(() => {
     const map = new Map<string, FinancialDatePoint>();
@@ -240,7 +319,6 @@ export default function Finanzas() {
       current.ganancia += ganancia;
       current.piezasVendidas += Number(movement.quantity ?? 0);
       current.ventas += 1;
-
       current.margen = getMargin(current.ingresos, current.ganancia);
 
       map.set(fecha, current);
@@ -389,6 +467,24 @@ export default function Finanzas() {
     return `El periodo seleccionado generó ${ingresosTexto}, con utilidad neta de ${gananciaTexto} y margen de ${margenTexto}. El desempeño financiero es positivo.`;
   }, [ventasFiltradas.length, resumen]);
 
+  const investmentMessage = useMemo(() => {
+    if (investmentRecovery.inversionAcumulada <= 0) {
+      return "Todavía no hay inversión de inventario registrada. Cuando agregues productos con costo proveedor, aquí se calculará la recuperación de inversión.";
+    }
+
+    if (investmentRecovery.porcentajeRecuperado >= 100) {
+      return `La inversión acumulada de inventario ya fue recuperada. El sistema registra un ROI de ${percent(
+        investmentRecovery.roiInventario
+      )} sobre la inversión histórica.`;
+    }
+
+    return `Has recuperado ${percent(
+      investmentRecovery.porcentajeRecuperado
+    )} de la inversión acumulada de inventario. Aún falta recuperar ${money(
+      investmentRecovery.pendientePorRecuperar
+    )} en costo de inventario.`;
+  }, [investmentRecovery]);
+
   const exportCSV = () => {
     const headers = [
       "Fecha",
@@ -444,14 +540,14 @@ export default function Finanzas() {
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
-      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 text-white shadow-xl">
-        <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-blue-500/30 blur-3xl" />
+      <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-blue-50 via-white to-slate-100 text-slate-950 shadow-xl dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 dark:text-white">
+        <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl dark:bg-blue-500/30" />
         <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
 
         <div className="relative p-6 md:p-8">
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm border border-white/20">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-sm border border-slate-200 text-slate-700 dark:bg-white/10 dark:border-white/20 dark:text-blue-50">
                 <Wallet className="h-4 w-4" />
                 Panel financiero RackNova
               </div>
@@ -460,14 +556,14 @@ export default function Finanzas() {
                 <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
                   Finanzas
                 </h1>
-                <p className="text-blue-100 mt-2 max-w-2xl">
+                <p className="text-slate-600 mt-2 max-w-2xl dark:text-blue-100">
                   Control de ingresos, costos, ganancia neta, margen de utilidad
-                  y rentabilidad por producto.
+                  y recuperación de inversión del inventario.
                 </p>
               </div>
 
-              <div className="rounded-xl bg-white/10 border border-white/15 p-4 max-w-3xl">
-                <p className="text-sm leading-relaxed text-blue-50">
+              <div className="rounded-xl bg-white/75 border border-slate-200 p-4 max-w-3xl dark:bg-white/10 dark:border-white/15">
+                <p className="text-sm leading-relaxed text-slate-700 dark:text-blue-50">
                   {executiveMessage}
                 </p>
               </div>
@@ -478,7 +574,7 @@ export default function Finanzas() {
                 value={periodo}
                 onValueChange={(value) => setPeriodo(value as PeriodoFiltro)}
               >
-                <SelectTrigger className="bg-white text-slate-950 border-white">
+                <SelectTrigger className="bg-white text-slate-950 border-slate-200 dark:border-white">
                   <SelectValue placeholder="Periodo" />
                 </SelectTrigger>
 
@@ -493,7 +589,7 @@ export default function Finanzas() {
               <Button
                 variant="secondary"
                 onClick={exportCSV}
-                className="bg-white text-slate-950 hover:bg-blue-50"
+                className="bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-blue-50"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Exportar CSV
@@ -502,23 +598,31 @@ export default function Finanzas() {
           </div>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
-              <p className="text-sm text-blue-100">Periodo</p>
+            <div className="rounded-xl bg-white/75 border border-slate-200 p-4 dark:bg-white/10 dark:border-white/15">
+              <p className="text-sm text-slate-500 dark:text-blue-100">
+                Periodo
+              </p>
               <p className="text-xl font-bold">{getPeriodoLabel(periodo)}</p>
             </div>
 
-            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
-              <p className="text-sm text-blue-100">Ventas registradas</p>
+            <div className="rounded-xl bg-white/75 border border-slate-200 p-4 dark:bg-white/10 dark:border-white/15">
+              <p className="text-sm text-slate-500 dark:text-blue-100">
+                Ventas registradas
+              </p>
               <p className="text-xl font-bold">{resumen.ventas}</p>
             </div>
 
-            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
-              <p className="text-sm text-blue-100">Piezas vendidas</p>
+            <div className="rounded-xl bg-white/75 border border-slate-200 p-4 dark:bg-white/10 dark:border-white/15">
+              <p className="text-sm text-slate-500 dark:text-blue-100">
+                Piezas vendidas
+              </p>
               <p className="text-xl font-bold">{resumen.piezasVendidas}</p>
             </div>
 
-            <div className="rounded-xl bg-white/10 border border-white/15 p-4">
-              <p className="text-sm text-blue-100">Producto más rentable</p>
+            <div className="rounded-xl bg-white/75 border border-slate-200 p-4 dark:bg-white/10 dark:border-white/15">
+              <p className="text-sm text-slate-500 dark:text-blue-100">
+                Producto más rentable
+              </p>
               <p className="text-xl font-bold truncate">
                 {resumen.productoMasRentable?.nombre ?? "-"}
               </p>
@@ -615,6 +719,137 @@ export default function Finanzas() {
         </Card>
       </div>
 
+      <Card className="racknova-card overflow-hidden border-blue-200 dark:border-blue-900">
+        <CardHeader>
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <PiggyBank className="h-5 w-5 text-blue-600" />
+                Recuperación de inversión de inventario
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Esta sección usa todo el historial de movimientos, no solo el
+                periodo seleccionado.
+              </p>
+            </div>
+
+            {investmentBadge(investmentRecovery.porcentajeRecuperado)}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          <div className="rounded-xl border bg-gradient-to-br from-blue-50 to-emerald-50 p-5 dark:from-blue-950/40 dark:to-emerald-950/30">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  Progreso de recuperación
+                </p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {percent(investmentRecovery.porcentajeRecuperado)}
+                </p>
+              </div>
+
+              <div className="text-sm text-muted-foreground md:text-right max-w-xl">
+                {investmentMessage}
+              </div>
+            </div>
+
+            <div className="mt-5 h-4 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-sky-500 via-blue-500 to-emerald-500 transition-all duration-700"
+                style={{
+                  width: `${investmentRecovery.progresoVisual}%`,
+                }}
+              />
+            </div>
+
+            <div className="flex justify-between text-xs text-muted-foreground mt-2">
+              <span>0%</span>
+              <span>50%</span>
+              <span>100%</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wallet className="h-4 w-4 text-blue-600" />
+                  <p className="text-sm text-muted-foreground">
+                    Inversión acumulada
+                  </p>
+                </div>
+                <p className="text-xl font-bold">
+                  {money(investmentRecovery.inversionAcumulada)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <PackageCheck className="h-4 w-4 text-emerald-600" />
+                  <p className="text-sm text-muted-foreground">
+                    Capital recuperado
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-emerald-600">
+                  {money(investmentRecovery.capitalRecuperado)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="h-4 w-4 text-orange-600" />
+                  <p className="text-sm text-muted-foreground">
+                    Pendiente
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-orange-600">
+                  {money(investmentRecovery.pendientePorRecuperar)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Percent className="h-4 w-4 text-purple-600" />
+                  <p className="text-sm text-muted-foreground">
+                    Recuperado
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-purple-600">
+                  {percent(investmentRecovery.porcentajeRecuperado)}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingUp className="h-4 w-4 text-blue-600" />
+                  <p className="text-sm text-muted-foreground">
+                    ROI inventario
+                  </p>
+                </div>
+                <p
+                  className={`text-xl font-bold ${
+                    investmentRecovery.roiInventario >= 0
+                      ? "text-blue-600"
+                      : "text-red-600"
+                  }`}
+                >
+                  {percent(investmentRecovery.roiInventario)}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="racknova-card">
           <CardContent className="p-5">
@@ -634,7 +869,9 @@ export default function Finanzas() {
 
         <Card className="racknova-card">
           <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Productos con pérdida</p>
+            <p className="text-sm text-muted-foreground">
+              Productos con pérdida
+            </p>
             <p className="text-2xl font-bold text-red-600">
               {resumen.productosConPerdida}
             </p>
@@ -665,9 +902,15 @@ export default function Finanzas() {
               <EmptyState text="No hay ventas financieras en este periodo." />
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={financialByDate}>
+                <ComposedChart data={financialByDate}>
                   <defs>
-                    <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient
+                      id="incomeGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
                       <stop
                         offset="5%"
                         stopColor={CHART_COLORS.income}
@@ -680,7 +923,13 @@ export default function Finanzas() {
                       />
                     </linearGradient>
 
-                    <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient
+                      id="profitGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
                       <stop
                         offset="5%"
                         stopColor={CHART_COLORS.profit}
@@ -736,7 +985,7 @@ export default function Finanzas() {
                     strokeWidth={3}
                     dot={false}
                   />
-                </AreaChart>
+                </ComposedChart>
               </ResponsiveContainer>
             )}
           </CardContent>
@@ -771,7 +1020,10 @@ export default function Finanzas() {
                     contentStyle={TOOLTIP_STYLE}
                     labelStyle={TOOLTIP_LABEL_STYLE}
                     itemStyle={TOOLTIP_ITEM_STYLE}
-                    formatter={(value) => [`${numberFormat(Number(value))}%`, "Margen"]}
+                    formatter={(value) => [
+                      `${numberFormat(Number(value))}%`,
+                      "Margen",
+                    ]}
                   />
                   <Bar
                     dataKey="margen"
@@ -996,10 +1248,11 @@ export default function Finanzas() {
             <div>
               <p className="font-semibold">Cálculo financiero usado</p>
               <p className="text-sm text-muted-foreground mt-1">
-                La ganancia neta se calcula como ingresos totales menos costos
-                totales. El margen se calcula como ganancia dividida entre
-                ingresos totales. Esta página solo considera movimientos de tipo
-                salida/venta.
+                La ganancia neta del periodo se calcula como ingresos totales
+                menos costos totales. El margen se calcula como ganancia
+                dividida entre ingresos. La recuperación de inversión usa todo
+                el historial: inversión acumulada de ingresos de inventario
+                contra capital recuperado por productos vendidos.
               </p>
             </div>
           </div>
