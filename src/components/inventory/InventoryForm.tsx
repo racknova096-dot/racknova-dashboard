@@ -328,45 +328,94 @@ export function InventoryForm() {
     loadLots();
   }, [selectedInventoryProduct?.sku]);
 
-  const handleAutocompleteEnter = (
-    e: React.KeyboardEvent<HTMLInputElement>,
-    term: string
-  ) => {
-    if (e.key !== "Enter") return;
+ const resolveAutocomplete = async (
+  term: string,
+  options?: { showToast?: boolean }
+) => {
+  if (selectedSource) return;
 
-    const cleanTerm = term.trim().toLowerCase();
+  const cleanTerm = term.trim();
 
-    if (!cleanTerm) return;
+  if (!cleanTerm) return;
 
-    const inventoryMatch = findInventoryExactMatch(cleanTerm);
+  const cleanTermLower = cleanTerm.toLowerCase();
 
-    if (inventoryMatch) {
-      e.preventDefault();
-      handleSelectInventoryProduct(inventoryMatch);
+  const inventoryMatch = findInventoryExactMatch(cleanTermLower);
+
+  if (inventoryMatch) {
+    handleSelectInventoryProduct(inventoryMatch);
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_URL}/catalogo/productos/buscar?query=${encodeURIComponent(
+        cleanTerm
+      )}`
+    );
+
+    if (!response.ok) {
+      if (options?.showToast) {
+        toast({
+          title: "Sin coincidencia exacta",
+          description:
+            "No se encontró un SKU o nombre exacto. Puedes continuar como producto nuevo.",
+        });
+      }
+
       return;
     }
 
-    const catalogMatch = catalogResults.find((item) => {
+    const data = await response.json();
+
+    const results: ProductoCatalogo[] = Array.isArray(data)
+      ? data
+      : data?.productos ?? data?.resultados ?? [];
+
+    setCatalogResults(results);
+
+    const catalogMatch = results.find((item) => {
       const itemSku = item.sku?.trim().toLowerCase();
       const itemNombre = item.nombre?.trim().toLowerCase();
 
-      return itemSku === cleanTerm || itemNombre === cleanTerm;
+      return itemSku === cleanTermLower || itemNombre === cleanTermLower;
     });
 
     if (catalogMatch) {
-      e.preventDefault();
       handleSelectCatalogProduct(catalogMatch);
       return;
     }
 
-    e.preventDefault();
+    if (options?.showToast) {
+      toast({
+        title: "Sin coincidencia exacta",
+        description:
+          "No se encontró un SKU o nombre exacto. Puedes continuar como producto nuevo.",
+      });
+    }
+  } catch (error) {
+    console.error("Error resolviendo autollenado:", error);
 
-    toast({
-      title: "Sin coincidencia exacta",
-      description:
-        "No se encontró un SKU o nombre exacto. Selecciona una coincidencia de la lista o continúa como producto nuevo.",
-    });
-  };
+    if (options?.showToast) {
+      toast({
+        title: "Error",
+        description: "No se pudo revisar el catálogo.",
+        variant: "destructive",
+      });
+    }
+  }
+};
+
+const handleAutocompleteEnter = (
+  e: React.KeyboardEvent<HTMLInputElement>,
+  term: string
+) => {
+  if (e.key !== "Enter") return;
+
+  e.preventDefault();
+
+  resolveAutocomplete(term, { showToast: true });
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -773,29 +822,34 @@ export function InventoryForm() {
                     <div className="relative">
                       <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input
-                        id="sku"
-                        value={sku}
-                        onChange={(e) => setSku(e.target.value)}
-                        onKeyDown={(e) => handleAutocompleteEnter(e, sku)}
-                        placeholder="Ej: SKU001"
-                        className="pl-9"
-                        required
-                        disabled={identityLocked}
-                      />
-                    </div>
+    id="sku"
+    value={sku}
+    onChange={(e) => setSku(e.target.value)}
+    onKeyDown={(e) => handleAutocompleteEnter(e, sku)}
+    onBlur={(e) => {
+      resolveAutocomplete(e.target.value, { showToast: false });
+    }}
+    placeholder="Ej: SKU001"
+    className="pl-9"
+    required
+    disabled={identityLocked}
+  />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="nombre">Nombre del Producto *</Label>
                     <Input
-                      id="nombre"
-                      value={nombre}
-                      onChange={(e) => setNombre(e.target.value)}
-                      onKeyDown={(e) => handleAutocompleteEnter(e, nombre)}
-                      placeholder="Ej: Coca Cola 600 ml"
-                      required
-                      disabled={identityLocked}
-                    />
+  id="nombre"
+  value={nombre}
+  onChange={(e) => setNombre(e.target.value)}
+  onKeyDown={(e) => handleAutocompleteEnter(e, nombre)}
+  onBlur={(e) => {
+    resolveAutocomplete(e.target.value, { showToast: false });
+  }}
+  placeholder="Ej: Coca Cola 600 ml"
+  required
+  disabled={identityLocked}
+/>
                   </div>
 
                   <div className="space-y-2">
