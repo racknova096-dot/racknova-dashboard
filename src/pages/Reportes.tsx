@@ -1,3 +1,4 @@
+import { PageHero } from "@/components/layout/PageHero";
 import React, { useMemo, useState } from "react";
 import {
   Card,
@@ -495,17 +496,65 @@ export default function Reportes() {
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="racknova-page-title flex items-center gap-2">
-            <BarChart3 className="h-7 w-7 text-primary" />
-            Reportes
-          </h1>
-          <p className="text-muted-foreground">
-            Análisis operativo de ventas, rotación, stock, caducidad y
-            movimientos.
-          </p>
-        </div>
+     <PageHero
+  badge="Centro operativo RackNova"
+  title="Reportes"
+  description="Análisis operativo de ventas, rotación, stock, caducidad y movimientos."
+  icon={BarChart3}
+  actions={
+    <>
+      <Select
+        value={periodo}
+        onValueChange={(value) => setPeriodo(value as PeriodoFiltro)}
+      >
+        <SelectTrigger className="bg-white text-slate-950 border-slate-200 dark:border-white">
+          <SelectValue placeholder="Periodo" />
+        </SelectTrigger>
+
+        <SelectContent>
+          <SelectItem value="semana">Últimos 7 días</SelectItem>
+          <SelectItem value="mes">Mes actual</SelectItem>
+          <SelectItem value="anio">Año actual</SelectItem>
+          <SelectItem value="todo">Todo el historial</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Button
+        variant="secondary"
+        onClick={exportCSV}
+        className="bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-blue-50"
+      >
+        <Download className="h-4 w-4 mr-2" />
+        Exportar CSV
+      </Button>
+    </>
+  }
+  stats={[
+    {
+      label: "Periodo",
+      value: getPeriodoLabel(periodo),
+      tone: "blue",
+    },
+    {
+      label: "Piezas vendidas",
+      value: resumen.piezasVendidas,
+      tone: "green",
+    },
+    {
+      label: "Productos sin venta",
+      value: resumen.noVendidos,
+      tone: "cyan",
+    },
+    {
+      label: "Movimientos",
+      value: resumen.movimientos,
+      tone: "purple",
+    },
+  ]}
+>
+  El periodo seleccionado permite revisar el comportamiento operativo del
+  inventario sin mezclarlo con métricas financieras avanzadas.
+</PageHero>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Select
@@ -531,13 +580,7 @@ export default function Reportes() {
         </div>
       </div>
 
-      <Card className="racknova-card">
-        <CardHeader>
-          <CardTitle className="text-base">
-            Periodo seleccionado: {getPeriodoLabel(periodo)}
-          </CardTitle>
-        </CardHeader>
-      </Card>
+     
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="racknova-card">
