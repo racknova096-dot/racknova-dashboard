@@ -214,7 +214,11 @@ function getPriorityBadge(priority: PriorityLevel) {
   }
 
   if (priority === "Media") {
-    return <Badge className="bg-amber-500 hover:bg-amber-500">Prioridad media</Badge>;
+    return (
+      <Badge className="bg-amber-500 hover:bg-amber-500">
+        Prioridad media
+      </Badge>
+    );
   }
 
   return <Badge className="bg-blue-600 hover:bg-blue-600">Monitoreo</Badge>;
@@ -467,7 +471,8 @@ export default function RackNovaIA() {
       },
       {
         name: "Monitoreo",
-        value: productAnalysis.filter((p) => p.prioridad === "Monitoreo").length,
+        value: productAnalysis.filter((p) => p.prioridad === "Monitoreo")
+          .length,
       },
     ];
   }, [productAnalysis]);
@@ -804,163 +809,126 @@ export default function RackNovaIA() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <Card className="racknova-card xl:col-span-2">
-  <CardHeader>
-    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
-      <div>
-        <CardTitle className="flex items-center gap-2">
-          <Brain className="h-5 w-5 text-blue-600" />
-          Productos con mayor prioridad IA
-        </CardTitle>
-        <p className="text-sm text-muted-foreground mt-1">
-          Los puntos IA indican qué tan urgente es revisar un producto. Entre más
-          alto sea el puntaje, mayor prioridad tiene.
-        </p>
-      </div>
+        <Card className="racknova-card xl:col-span-2">
+          <CardHeader>
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-blue-600" />
+                  Productos con mayor prioridad IA
+                </CardTitle>
 
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="destructive">Alta: 50+ pts</Badge>
-        <Badge className="bg-amber-500 hover:bg-amber-500">
-          Media: 25-49 pts
-        </Badge>
-        <Badge className="bg-blue-600 hover:bg-blue-600">
-          Monitoreo: 0-24 pts
-        </Badge>
-      </div>
-    </div>
-  </CardHeader>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Los puntos IA indican qué tan urgente es revisar un producto.
+                  Entre más alto sea el puntaje, mayor prioridad tiene.
+                </p>
+              </div>
 
-  <CardContent className="space-y-4">
-    <div className="h-[300px]">
-      {priorityBarData.length === 0 ? (
-        <EmptyState text="No hay datos suficientes para generar prioridades." />
-      ) : (
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={priorityBarData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis
-              dataKey="sku"
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8" }}
-            />
-            <YAxis
-              stroke="#94a3b8"
-              tick={{ fill: "#94a3b8" }}
-              allowDecimals={false}
-            />
-            <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              labelStyle={TOOLTIP_LABEL_STYLE}
-              itemStyle={TOOLTIP_ITEM_STYLE}
-              labelFormatter={productTooltipLabel}
-              formatter={(value) => [
-                `${numberFormat(Number(value))} puntos`,
-                "Prioridad IA",
-              ]}
-            />
-            <Bar
-              dataKey="score"
-              name="Prioridad IA"
-              fill={CHART_COLORS.primary}
-              radius={[8, 8, 0, 0]}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      )}
-    </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="destructive">Alta: 50+ pts</Badge>
+                <Badge className="bg-amber-500 hover:bg-amber-500">
+                  Media: 25-49 pts
+                </Badge>
+                <Badge className="bg-blue-600 hover:bg-blue-600">
+                  Monitoreo: 0-24 pts
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
 
-    <div className="rounded-xl border bg-muted/30 p-4">
-      <p className="font-semibold mb-3 flex items-center gap-2">
-        <Lightbulb className="h-4 w-4 text-amber-500" />
-        ¿Cómo se calculan los puntos IA?
-      </p>
+          <CardContent className="space-y-4">
+            <div className="h-[300px]">
+              {priorityBarData.length === 0 ? (
+                <EmptyState text="No hay datos suficientes para generar prioridades." />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={priorityBarData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="sku"
+                      stroke="#94a3b8"
+                      tick={{ fill: "#94a3b8" }}
+                    />
+                    <YAxis
+                      stroke="#94a3b8"
+                      tick={{ fill: "#94a3b8" }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      contentStyle={TOOLTIP_STYLE}
+                      labelStyle={TOOLTIP_LABEL_STYLE}
+                      itemStyle={TOOLTIP_ITEM_STYLE}
+                      labelFormatter={productTooltipLabel}
+                      formatter={(value) => [
+                        `${numberFormat(Number(value))} puntos`,
+                        "Prioridad IA",
+                      ]}
+                    />
+                    <Bar
+                      dataKey="score"
+                      name="Prioridad IA"
+                      fill={CHART_COLORS.primary}
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Producto vencido</span>
-          <span className="font-bold text-red-600">+40 pts</span>
-        </div>
+            <div className="rounded-xl border bg-muted/30 p-4">
+              <p className="font-semibold mb-3 flex items-center gap-2">
+                <Lightbulb className="h-4 w-4 text-amber-500" />
+                ¿Cómo se calculan los puntos IA?
+              </p>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Caducidad menor o igual a 7 días</span>
-          <span className="font-bold text-red-600">+30 pts</span>
-        </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Producto vencido</span>
+                  <span className="font-bold text-red-600">+40 pts</span>
+                </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Caducidad menor o igual a 15 días</span>
-          <span className="font-bold text-amber-600">+25 pts</span>
-        </div>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Caducidad menor o igual a 7 días</span>
+                  <span className="font-bold text-red-600">+30 pts</span>
+                </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Stock bajo</span>
-          <span className="font-bold text-red-600">+25 pts</span>
-        </div>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Caducidad menor o igual a 15 días</span>
+                  <span className="font-bold text-amber-600">+25 pts</span>
+                </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Producto sin ventas registradas</span>
-          <span className="font-bold text-sky-600">+20 pts</span>
-        </div>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Stock bajo</span>
+                  <span className="font-bold text-red-600">+25 pts</span>
+                </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Margen bajo</span>
-          <span className="font-bold text-orange-600">+15 pts</span>
-        </div>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Producto sin ventas registradas</span>
+                  <span className="font-bold text-sky-600">+20 pts</span>
+                </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Próximo a caducar, hasta 30 días</span>
-          <span className="font-bold text-amber-600">+15 pts</span>
-        </div>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Margen bajo</span>
+                  <span className="font-bold text-orange-600">+15 pts</span>
+                </div>
 
-        <div className="flex items-center justify-between rounded-lg bg-background border p-3">
-          <span>Stock alto sin movimiento</span>
-          <span className="font-bold text-blue-600">+10 pts</span>
-        </div>
-      </div>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Próximo a caducar, hasta 30 días</span>
+                  <span className="font-bold text-amber-600">+15 pts</span>
+                </div>
 
-      <p className="text-xs text-muted-foreground mt-3">
-        Un producto puede acumular varios puntos si tiene más de un problema, por
-        ejemplo: stock bajo, caducidad cercana y baja rotación.
-      </p>
-    </div>
-  </CardContent>
-</Card>
+                <div className="flex items-center justify-between rounded-lg bg-background border p-3">
+                  <span>Stock alto sin movimiento</span>
+                  <span className="font-bold text-blue-600">+10 pts</span>
+                </div>
+              </div>
 
-          <CardContent className="h-[340px]">
-            {priorityBarData.length === 0 ? (
-              <EmptyState text="No hay datos suficientes para generar prioridades." />
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={priorityBarData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis
-                    dataKey="sku"
-                    stroke="#94a3b8"
-                    tick={{ fill: "#94a3b8" }}
-                  />
-                  <YAxis
-                    stroke="#94a3b8"
-                    tick={{ fill: "#94a3b8" }}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={TOOLTIP_STYLE}
-                    labelStyle={TOOLTIP_LABEL_STYLE}
-                    itemStyle={TOOLTIP_ITEM_STYLE}
-                    labelFormatter={productTooltipLabel}
-                    formatter={(value) => [
-                      `${numberFormat(Number(value))} puntos`,
-                      "Prioridad IA",
-                    ]}
-                  />
-                  <Bar
-                    dataKey="score"
-                    name="Prioridad IA"
-                    fill={CHART_COLORS.primary}
-                    radius={[8, 8, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+              <p className="text-xs text-muted-foreground mt-3">
+                Un producto puede acumular varios puntos si tiene más de un
+                problema, por ejemplo: stock bajo, caducidad cercana y baja
+                rotación.
+              </p>
+            </div>
           </CardContent>
         </Card>
 
@@ -1061,12 +1029,16 @@ export default function RackNovaIA() {
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
                       <div className="rounded-lg bg-muted/50 p-3">
                         <p className="text-muted-foreground">Caducidad</p>
-                        <p className="font-semibold">{formatDate(product.caducidad)}</p>
+                        <p className="font-semibold">
+                          {formatDate(product.caducidad)}
+                        </p>
                       </div>
 
                       <div className="rounded-lg bg-muted/50 p-3">
                         <p className="text-muted-foreground">Vendidas</p>
-                        <p className="font-semibold">{product.cantidadVendida}</p>
+                        <p className="font-semibold">
+                          {product.cantidadVendida}
+                        </p>
                       </div>
 
                       <div className="rounded-lg bg-muted/50 p-3">
@@ -1176,104 +1148,106 @@ export default function RackNovaIA() {
           </CardContent>
         </Card>
 
-       <Card className="racknova-card">
-  <CardHeader>
-    <div className="space-y-2">
-      <CardTitle className="flex items-center gap-2">
-        <ShoppingCart className="h-5 w-5 text-red-600" />
-        Restock urgente
-      </CardTitle>
+        <Card className="racknova-card">
+          <CardHeader>
+            <div className="space-y-2">
+              <CardTitle className="flex items-center gap-2">
+                <ShoppingCart className="h-5 w-5 text-red-600" />
+                Restock urgente
+              </CardTitle>
 
-      <div className="rounded-lg border bg-muted/40 p-3 text-sm">
-        <p className="font-semibold text-foreground">
-          ¿Por qué aparece como restock urgente?
-        </p>
-        <p className="text-muted-foreground mt-1">
-          Un producto entra en esta lista cuando su cantidad actual es menor o
-          igual al stock mínimo configurado para ese producto.
-        </p>
-        <p className="text-xs text-muted-foreground mt-2">
-          Fórmula usada:{" "}
-          <span className="font-semibold text-foreground">
-            cantidad actual ≤ stock mínimo
-          </span>
-        </p>
-      </div>
-    </div>
-  </CardHeader>
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <p className="font-semibold text-foreground">
+                  ¿Por qué aparece como restock urgente?
+                </p>
 
-  <CardContent>
-    {lowStockProducts.length === 0 ? (
-      <EmptyState text="No hay productos con stock bajo." />
-    ) : (
-      <div className="space-y-3">
-        {lowStockProducts.map((product) => {
-          const faltanteSugerido = Math.max(
-            product.stockMinimo - product.cantidad,
-            0
-          );
+                <p className="text-muted-foreground mt-1">
+                  Un producto entra en esta lista cuando su cantidad actual es
+                  menor o igual al stock mínimo configurado para ese producto.
+                </p>
 
-          return (
-            <div
-              key={product.sku}
-              className="rounded-lg border p-3 space-y-3"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-medium">{product.nombre}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {product.sku} · Ubicación {product.locationId}
-                  </p>
-                </div>
-
-                <Badge variant="destructive">Restock urgente</Badge>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Fórmula usada:{" "}
+                  <span className="font-semibold text-foreground">
+                    cantidad actual ≤ stock mínimo
+                  </span>
+                </p>
               </div>
-
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div className="rounded-md bg-muted/50 p-2">
-                  <p className="text-xs text-muted-foreground">
-                    Stock actual
-                  </p>
-                  <p className="font-bold text-red-600">
-                    {product.cantidad}
-                  </p>
-                </div>
-
-                <div className="rounded-md bg-muted/50 p-2">
-                  <p className="text-xs text-muted-foreground">
-                    Stock mínimo
-                  </p>
-                  <p className="font-bold">{product.stockMinimo}</p>
-                </div>
-
-                <div className="rounded-md bg-muted/50 p-2">
-                  <p className="text-xs text-muted-foreground">
-                    Faltante mínimo
-                  </p>
-                  <p className="font-bold text-orange-600">
-                    {faltanteSugerido}
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-xs text-muted-foreground">
-                Se recomienda resurtir porque el stock actual de{" "}
-                <span className="font-semibold text-foreground">
-                  {product.cantidad}
-                </span>{" "}
-                está por debajo o igual al mínimo configurado de{" "}
-                <span className="font-semibold text-foreground">
-                  {product.stockMinimo}
-                </span>
-                .
-              </p>
             </div>
-          );
-        })}
-      </div>
-    )}
-  </CardContent>
-</Card>
+          </CardHeader>
+
+          <CardContent>
+            {lowStockProducts.length === 0 ? (
+              <EmptyState text="No hay productos con stock bajo." />
+            ) : (
+              <div className="space-y-3">
+                {lowStockProducts.map((product) => {
+                  const faltanteSugerido = Math.max(
+                    product.stockMinimo - product.cantidad,
+                    0
+                  );
+
+                  return (
+                    <div
+                      key={product.sku}
+                      className="rounded-lg border p-3 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{product.nombre}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {product.sku} · Ubicación {product.locationId}
+                          </p>
+                        </div>
+
+                        <Badge variant="destructive">Restock urgente</Badge>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 text-sm">
+                        <div className="rounded-md bg-muted/50 p-2">
+                          <p className="text-xs text-muted-foreground">
+                            Stock actual
+                          </p>
+                          <p className="font-bold text-red-600">
+                            {product.cantidad}
+                          </p>
+                        </div>
+
+                        <div className="rounded-md bg-muted/50 p-2">
+                          <p className="text-xs text-muted-foreground">
+                            Stock mínimo
+                          </p>
+                          <p className="font-bold">{product.stockMinimo}</p>
+                        </div>
+
+                        <div className="rounded-md bg-muted/50 p-2">
+                          <p className="text-xs text-muted-foreground">
+                            Faltante mínimo
+                          </p>
+                          <p className="font-bold text-orange-600">
+                            {faltanteSugerido}
+                          </p>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        Se recomienda resurtir porque el stock actual de{" "}
+                        <span className="font-semibold text-foreground">
+                          {product.cantidad}
+                        </span>{" "}
+                        está por debajo o igual al mínimo configurado de{" "}
+                        <span className="font-semibold text-foreground">
+                          {product.stockMinimo}
+                        </span>
+                        .
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1303,7 +1277,9 @@ export default function RackNovaIA() {
                     </div>
 
                     <div className="text-right">
-                      <p className="font-bold text-sky-600">{product.cantidad}</p>
+                      <p className="font-bold text-sky-600">
+                        {product.cantidad}
+                      </p>
                       <p className="text-xs text-muted-foreground">stock</p>
                     </div>
                   </div>
