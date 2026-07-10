@@ -51,7 +51,13 @@ interface PendingDeletion {
   locationId: string;
   venta?: SaleData;
 }
-
+interface PhysicalSearchResult {
+  ok: boolean;
+  topic?: string;
+  comando?: string;
+  mensaje: string;
+  mqttDisabled?: boolean;
+}
 const InventoryContext = createContext<InventoryContextType | undefined>(
   undefined
 );
