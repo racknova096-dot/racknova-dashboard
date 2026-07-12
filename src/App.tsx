@@ -60,6 +60,7 @@ const App = () => {
                     <Route path="/reportes" element={<Reportes />} />
                     <Route path="/racknova-ia" element={<RackNovaIA />} />
                     <Route path="/rackview" element={<RackView />} />
+                    <Route path="/usuarios" element={<Usuarios />} />
                   </Route>
 
                   {/* Página no encontrada */}
