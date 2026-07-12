@@ -11,6 +11,7 @@ import {
   BarChart3,
   BookOpen,
   Bot,
+  LogOut,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -89,9 +90,19 @@ const navItems: {
   },
 ];
 
+const getRoleLabel = (role: UserRole | null) => {
+  if (role === "admin") return "Administrador";
+  if (role === "operator") return "Operador";
+  if (role === "viewer") return "Visor";
+  return "Usuario";
+};
+
 export function Navigation() {
   const location = useLocation();
   const role = getCurrentRole();
+
+  const usuario = localStorage.getItem("usuario");
+  const nombre = localStorage.getItem("nombre");
 
   const visibleItems = navItems.filter(
     (item) => role && item.allowedRoles.includes(role)
@@ -100,6 +111,15 @@ export function Navigation() {
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
     return location.pathname.startsWith(path);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("usuario");
+    localStorage.removeItem("nombre");
+    localStorage.removeItem("rol");
+
+    window.location.href = "/login";
   };
 
   return (
@@ -143,9 +163,25 @@ export function Navigation() {
               );
             })}
 
-            <div className="ml-1">
-              <ThemeToggle />
+            <div className="hidden xl:flex flex-col items-end px-3 py-1 rounded-xl border bg-muted/40">
+              <span className="text-xs font-medium leading-tight">
+                {nombre || usuario || "Usuario"}
+              </span>
+              <span className="text-[11px] text-muted-foreground leading-tight">
+                {getRoleLabel(role)}
+              </span>
             </div>
+
+            <ThemeToggle />
+
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:border-red-900 dark:hover:bg-red-950/30"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Cerrar sesión
+            </Button>
           </div>
         </div>
       </div>
