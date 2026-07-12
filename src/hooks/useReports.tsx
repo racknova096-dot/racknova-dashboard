@@ -1442,11 +1442,11 @@ export function useReports() {
     const buffer = await workbook.xlsx.writeBuffer();
 
     saveAs(
-      new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      }),
-      getReportFileName("racknova-reporte-profesional", "xlsx")
-    );
+  new Blob([buffer as BlobPart], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  }),
+  getReportFileName("racknova-reporte-profesional", "xlsx")
+);
   };
 
   return {
