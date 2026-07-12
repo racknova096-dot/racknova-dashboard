@@ -1,3 +1,4 @@
+import { canUseIA } from "@/lib/roles";
 import React, { useState } from "react";
 import { API_URL } from "@/config";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,9 @@ const quickQuestions = [
 ];
 
 export function RackNovaIAAssistant() {
+  if (!canUseIA()) {
+  return null;
+}
   const [isOpen, setIsOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
