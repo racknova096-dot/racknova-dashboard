@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { canModifyInventory } from "@/lib/roles";
 import { API_URL } from "@/config";
 
 import {
@@ -65,6 +66,8 @@ export function InventoryDashboard() {
   const { toast } = useToast();
   const { downloadPDF, downloadExcel } = useReports();
 
+  const canModify = canModifyInventory();
+
   const totalSlots = locations.filter(
     (location) => location.rack === selectedRack
   ).length;
@@ -93,19 +96,29 @@ export function InventoryDashboard() {
   };
 
   const handleSlotClick = (location: Location, hasProduct: boolean) => {
-    setSelectedLocation(location);
+  if (!canModify && !hasProduct) {
+    toast({
+      title: "Solo lectura",
+      description: "Tu usuario no puede agregar productos.",
+      variant: "destructive",
+    });
 
-    if (hasProduct) {
-      const product = getProductByLocation(location.id);
-      setSelectedProduct(product || null);
-      setModalMode("edit");
-    } else {
-      setSelectedProduct(null);
-      setModalMode("add");
-    }
+    return;
+  }
 
-    setModalOpen(true);
-  };
+  setSelectedLocation(location);
+
+  if (hasProduct) {
+    const product = getProductByLocation(location.id);
+    setSelectedProduct(product || null);
+    setModalMode("edit");
+  } else {
+    setSelectedProduct(null);
+    setModalMode("add");
+  }
+
+  setModalOpen(true);
+};
 
   const handleClearRack = async () => {
     const confirmar = window.confirm(
@@ -161,7 +174,8 @@ export function InventoryDashboard() {
   title="Inventario por Rack y Nivel"
   description="Supervisa el estado físico del rack, la ocupación por nivel, productos activos y control de admisión."
   icon={Package}
-  actions={
+ actions={
+  canModify ? (
     <>
       <Button
         onClick={handleAdmitir}
@@ -182,7 +196,8 @@ export function InventoryDashboard() {
         Limpiar Rack {selectedRack}
       </Button>
     </>
-  }
+  ) : null
+}
 >
   Haz clic en un slot verde para agregar producto rápidamente o usa la página
   Agregar para capturar inventario con más detalle.
