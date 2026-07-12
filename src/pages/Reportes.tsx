@@ -6,7 +6,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -46,7 +45,6 @@ import {
   Boxes,
   PackageCheck,
   CalendarClock,
-  Download,
   Activity,
   PackageX,
   ShoppingCart,
@@ -444,55 +442,7 @@ export default function Reportes() {
     productosNoVendidos.length,
   ]);
 
-  const exportCSV = () => {
-    const headers = [
-      "SKU",
-      "Producto",
-      "Ubicacion",
-      "Cantidad actual",
-      "Stock minimo",
-      "Stock alto",
-      "Cantidad vendida",
-      "Caducidad",
-      "Dias caducidad",
-      "Ultima venta",
-    ];
-
-    const rows = productosReporte.map((product) => [
-      product.sku,
-      product.nombre,
-      product.locationId,
-      product.cantidadActual,
-      product.stockMinimo,
-      product.stockAlto,
-      product.cantidadVendida,
-      product.caducidad ?? "",
-      product.diasCaducidad ?? "",
-      product.ultimaVenta ? formatDate(product.ultimaVenta) : "",
-    ]);
-
-    const csvContent = [headers, ...rows]
-      .map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
-      )
-      .join("\n");
-
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `racknova-reportes-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-
-    link.click();
-
-    URL.revokeObjectURL(url);
-  };
+  
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
@@ -519,14 +469,7 @@ export default function Reportes() {
         </SelectContent>
       </Select>
 
-      <Button
-        variant="secondary"
-        onClick={exportCSV}
-        className="bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-blue-50"
-      >
-        <Download className="h-4 w-4 mr-2" />
-        Exportar CSV
-      </Button>
+     
     </>
   }
 >
