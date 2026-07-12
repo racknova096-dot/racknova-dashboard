@@ -1,6 +1,5 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import {
   Package,
   Table,
@@ -13,67 +12,90 @@ import {
   BookOpen,
   Bot,
 } from "lucide-react";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
-const navItems = [
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { getCurrentRole, UserRole } from "@/lib/roles";
+
+const navItems: {
+  path: string;
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  allowedRoles: UserRole[];
+}[] = [
   {
     path: "/",
     label: "Dashboard",
     icon: LayoutDashboard,
     color: "from-blue-500 to-cyan-500",
+    allowedRoles: ["admin", "operator", "viewer"],
   },
   {
     path: "/add",
     label: "Agregar",
     icon: Plus,
     color: "from-emerald-500 to-teal-500",
+    allowedRoles: ["admin", "operator"],
   },
   {
     path: "/products",
     label: "Productos",
     icon: Table,
     color: "from-orange-500 to-amber-500",
+    allowedRoles: ["admin", "operator", "viewer"],
   },
   {
     path: "/tracking",
     label: "Trackeo",
     icon: Activity,
     color: "from-purple-500 to-violet-500",
+    allowedRoles: ["admin", "operator", "viewer"],
   },
   {
     path: "/finanzas",
     label: "Finanzas",
     icon: DollarSign,
     color: "from-green-500 to-emerald-500",
+    allowedRoles: ["admin"],
   },
   {
     path: "/reportes",
     label: "Reportes",
     icon: BarChart3,
     color: "from-pink-500 to-rose-500",
+    allowedRoles: ["admin", "operator", "viewer"],
   },
   {
-  path: "/catalogo",
-  label: "Catálogo",
-  icon: BookOpen,
-  color: "from-sky-500 to-blue-500",
-},
+    path: "/catalogo",
+    label: "Catálogo",
+    icon: BookOpen,
+    color: "from-sky-500 to-blue-500",
+    allowedRoles: ["admin", "operator"],
+  },
   {
-  path: "/racknova-ia",
-  label: "RackNova IA",
-  icon: Bot,
-  color: "from-blue-600 to-cyan-500",
-},
+    path: "/racknova-ia",
+    label: "RackNova IA",
+    icon: Bot,
+    color: "from-blue-600 to-cyan-500",
+    allowedRoles: ["admin", "operator"],
+  },
   {
-  path: "/usuarios",
-  label: "Usuarios",
-  icon: Users,
-  color: "from-indigo-500 to-purple-500",
-},
+    path: "/usuarios",
+    label: "Usuarios",
+    icon: Users,
+    color: "from-indigo-500 to-purple-500",
+    allowedRoles: ["admin"],
+  },
 ];
 
 export function Navigation() {
   const location = useLocation();
+  const role = getCurrentRole();
+
+  const visibleItems = navItems.filter(
+    (item) => role && item.allowedRoles.includes(role)
+  );
 
   const isActive = (path: string) => {
     if (path === "/") return location.pathname === "/";
@@ -100,7 +122,7 @@ export function Navigation() {
           </Link>
 
           <div className="flex flex-wrap items-center gap-2">
-            {navItems.map((item) => {
+            {visibleItems.map((item) => {
               const Icon = item.icon;
               const active = isActive(item.path);
 
@@ -120,8 +142,6 @@ export function Navigation() {
                 </Link>
               );
             })}
-
-            
 
             <div className="ml-1">
               <ThemeToggle />
