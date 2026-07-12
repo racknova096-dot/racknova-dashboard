@@ -1,14 +1,14 @@
-import { canModifyInventory } from "@/lib/roles";
-import { API_URL } from "../config";
 import React, {
   createContext,
+  useCallback,
   useContext,
-  useState,
-  ReactNode,
   useEffect,
   useRef,
-  useCallback,
+  useState,
+  ReactNode,
 } from "react";
+
+import { API_URL } from "@/config";
 import {
   Product,
   Location,
@@ -19,6 +19,7 @@ import {
 } from "@/types/inventory";
 import { MovementRecord } from "@/types/movement";
 import { SaleData } from "@/types/finance";
+import { canModifyInventory } from "@/lib/roles";
 
 /**
  * MODO PRUEBA:
@@ -26,6 +27,14 @@ import { SaleData } from "@/types/finance";
  * false = usa MQTT normal con ESP32.
  */
 const TEST_MODE_NO_MQTT = true;
+
+interface PhysicalSearchResult {
+  ok: boolean;
+  topic?: string;
+  comando?: string;
+  mensaje: string;
+  mqttDisabled?: boolean;
+}
 
 interface InventoryContextType {
   products: Product[];
@@ -35,8 +44,8 @@ interface InventoryContextType {
   addProduct: (product: Omit<Product, "id">) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (sku: string, venta?: SaleData) => Promise<void>;
-
   clearRack: (rack: Rack) => void;
+
   getProductByLocation: (locationId: string) => Product | undefined;
   getProductsWithLocation: () => ProductWithLocation[];
   getTotalProducts: () => number;
@@ -46,32 +55,27 @@ interface InventoryContextType {
   updateSlotStatus: (locationId: string, status: SlotStatus) => void;
   startProductPlacement: (locationId: string) => void;
   confirmProductPlacement: (locationId: string) => void;
- buscarFisicamente: (locationId: string) => Promise<PhysicalSearchResult>; 
+
+  buscarFisicamente: (locationId: string) => Promise<PhysicalSearchResult>;
 }
 
 interface PendingDeletion {
   locationId: string;
   venta?: SaleData;
 }
-interface PhysicalSearchResult {
-  ok: boolean;
-  topic?: string;
-  comando?: string;
-  mensaje: string;
-  mqttDisabled?: boolean;
-}
+
 const InventoryContext = createContext<InventoryContextType | undefined>(
   undefined
 );
 
 const generateLocations = (): Location[] => {
-  const locations: Location[] = [];
+  const generatedLocations: Location[] = [];
   const racks: Rack[] = ["A", "B", "C", "D", "E"];
 
   racks.forEach((rack) => {
     [1, 2, 3].forEach((nivel) => {
       Array.from({ length: 6 }, (_, i) => i + 1).forEach((slot) => {
-        locations.push({
+        generatedLocations.push({
           id: `${rack}-${nivel}-${slot}`,
           rack,
           nivel: nivel as Nivel,
@@ -82,7 +86,7 @@ const generateLocations = (): Location[] => {
     });
   });
 
-  return locations;
+  return generatedLocations;
 };
 
 const mapBackendProduct = (p: any): Product => {
@@ -125,16 +129,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<Location[]>(generateLocations());
   const [movements, setMovements] = useState<MovementRecord[]>([]);
-  const [processedIngresos, setProcessedIngresos] = useState<string[]>([]);
   const [pendingDeletions, setPendingDeletions] = useState<PendingDeletion[]>(
     []
   );
 
-  const productsRef = useRef<Product[]>(products);
-  const pendingProductsRef = useRef<Product[]>(pendingProducts);
-  const pendingDeletionsRef = useRef<PendingDeletion[]>(pendingDeletions);
-  const locationsRef = useRef<Location[]>(locations);
-  const processedIngresosRef = useRef<string[]>(processedIngresos);
+  const productsRef = useRef(products);
+  const pendingProductsRef = useRef(pendingProducts);
+  const pendingDeletionsRef = useRef(pendingDeletions);
+  const locationsRef = useRef(locations);
   const lastEventTimeRef = useRef(0);
 
   useEffect(() => {
@@ -153,9 +155,25 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     locationsRef.current = locations;
   }, [locations]);
 
-  useEffect(() => {
-    processedIngresosRef.current = processedIngresos;
-  }, [processedIngresos]);
+  const getCurrentUserName = () => {
+    const nombre = localStorage.getItem("nombre");
+    const usuario = localStorage.getItem("usuario");
+    const rol = localStorage.getItem("rol");
+
+    if (nombre && nombre.trim()) {
+      return nombre.trim();
+    }
+
+    if (usuario && usuario.trim()) {
+      return usuario.trim();
+    }
+
+    if (rol && rol.trim()) {
+      return rol.trim();
+    }
+
+    return "Sistema";
+  };
 
   useEffect(() => {
     const loadInitialProducts = async () => {
@@ -221,7 +239,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         }));
 
         setMovements(mapped);
-        console.log("Movimientos cargados desde MySQL:", mapped);
+        console.log("Movimientos cargados desde backend:", mapped);
       } catch (err) {
         console.error("❌ Error al cargar movimientos:", err);
       }
@@ -230,68 +248,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     loadMovements();
   }, []);
 
-  const getCurrentUserName = () => {
-  const nombre = localStorage.getItem("nombre");
-  const usuario = localStorage.getItem("usuario");
-  const rol = localStorage.getItem("rol");
+  const addMovement = async (
+    movement: Omit<MovementRecord, "id" | "timestamp">
+  ) => {
+    const currentUser = movement.user || getCurrentUserName();
 
-  if (nombre && nombre.trim()) {
-    return nombre.trim();
-  }
-
-  if (usuario && usuario.trim()) {
-    return usuario.trim();
-  }
-
-  if (rol && rol.trim()) {
-    return rol.trim();
-  }
-
-  return "Sistema";
-};
-  
- const addMovement = async (
-  movement: Omit<MovementRecord, "id" | "timestamp">
-) => {
-  const currentUser = movement.user || getCurrentUserName();
-
-  const newMovement: MovementRecord = {
-    ...movement,
-    user: currentUser,
-    id: Date.now().toString(),
-    timestamp: new Date(),
-  };
-
-  setMovements((prev) => [...prev, newMovement]);
-
-  try {
-    const resp = await fetch(`${API_URL}/movimientos`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        accion: newMovement.action,
-        sku: newMovement.productSku,
-        producto: newMovement.productName,
-        cantidad: newMovement.quantity,
-        ubicacion: newMovement.location,
-        usuario: currentUser,
-        costo_proveedor: newMovement.costo_proveedor ?? 0,
-        precio_venta: newMovement.precio_venta ?? 0,
-        ingreso_total: newMovement.ingreso_total ?? 0,
-        costo_total: newMovement.costo_total ?? 0,
-        ganancia: newMovement.ganancia ?? 0,
-      }),
-    });
-
-    if (!resp.ok) {
-      console.error("❌ Error guardando movimiento:", resp.status);
-    }
-  } catch (error) {
-    console.error("❌ Error enviando movimiento al backend:", error);
-  }
-};
+    const newMovement: MovementRecord = {
+      ...movement,
+      user: currentUser,
+      id: Date.now().toString(),
+      timestamp: new Date(),
+    };
 
     setMovements((prev) => [...prev, newMovement]);
 
@@ -302,17 +269,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          accion: movement.action,
-          sku: movement.productSku,
-          producto: movement.productName,
-          cantidad: movement.quantity,
-          ubicacion: movement.location,
-          usuario: movement.user ?? "Admin",
-          costo_proveedor: movement.costo_proveedor ?? 0,
-          precio_venta: movement.precio_venta ?? 0,
-          ingreso_total: movement.ingreso_total ?? 0,
-          costo_total: movement.costo_total ?? 0,
-          ganancia: movement.ganancia ?? 0,
+          accion: newMovement.action,
+          sku: newMovement.productSku,
+          producto: newMovement.productName,
+          cantidad: newMovement.quantity,
+          ubicacion: newMovement.location,
+          usuario: currentUser,
+          costo_proveedor: newMovement.costo_proveedor ?? 0,
+          precio_venta: newMovement.precio_venta ?? 0,
+          ingreso_total: newMovement.ingreso_total ?? 0,
+          costo_total: newMovement.costo_total ?? 0,
+          ganancia: newMovement.ganancia ?? 0,
         }),
       });
 
@@ -326,22 +293,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const addProduct = async (product: Omit<Product, "id">) => {
     if (!canModifyInventory()) {
-  alert("Tu usuario es de solo lectura. No puedes agregar productos.");
-  return;
-}
+      alert("Tu usuario es de solo lectura. No puedes agregar productos.");
+      return;
+    }
+
     try {
       const productoExistente = products.find((p) => {
         const skuActual = p.sku.trim().toLowerCase();
         const nombreActual = p.nombre.trim().toLowerCase();
-
         const skuNuevo = product.sku.trim().toLowerCase();
         const nombreNuevo = product.nombre.trim().toLowerCase();
 
         return skuActual === skuNuevo || nombreActual === nombreNuevo;
       });
 
-      const finalLocationId =
-        productoExistente?.locationId ?? product.locationId;
+      const finalLocationId = productoExistente?.locationId ?? product.locationId;
 
       const location = locations.find((loc) => loc.id === finalLocationId);
 
@@ -492,15 +458,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         await sendMQTT(topicCorrecto, comando);
         console.log(`Enviado a ESP32 → ${topicCorrecto} → ${comando}`);
       } else if (esRestock) {
-        console.log(
-          "Restock detectado. Se conserva ubicación actual:",
-          finalLocationId
-        );
+        console.log("Restock detectado. Se conserva ubicación actual:", finalLocationId);
       } else {
-        console.warn(
-          "⚠️ No existe pin o topic para esta ubicación:",
-          finalLocationId
-        );
+        console.warn("⚠️ No existe pin o topic para esta ubicación:", finalLocationId);
       }
 
       setPendingProducts((prev) => {
@@ -520,9 +480,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
     if (!canModifyInventory()) {
-  alert("Tu usuario es de solo lectura. No puedes modificar productos.");
-  return;
-}
+      alert("Tu usuario es de solo lectura. No puedes modificar productos.");
+      return;
+    }
+
     const originalProduct = products.find((p) => p.id === id);
 
     if (!originalProduct) {
@@ -546,9 +507,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       stock_minimo: Number(
         updates.stock_minimo ?? originalProduct.stock_minimo ?? 10
       ),
-      stock_alto: Number(
-        updates.stock_alto ?? originalProduct.stock_alto ?? 30
-      ),
+      stock_alto: Number(updates.stock_alto ?? originalProduct.stock_alto ?? 30),
     };
 
     const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
@@ -585,9 +544,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     const saved = await resp.json();
     const savedProduct = mapBackendProduct(saved);
 
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? savedProduct : p))
-    );
+    setProducts((prev) => prev.map((p) => (p.id === id ? savedProduct : p)));
 
     if (updates.cantidad !== undefined) {
       await addMovement({
@@ -609,9 +566,12 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const deleteProduct = async (sku: string, venta?: SaleData) => {
     if (!canModifyInventory()) {
-  alert("Tu usuario es de solo lectura. No puedes registrar salidas ni eliminar productos.");
-  return;
-}
+      alert(
+        "Tu usuario es de solo lectura. No puedes registrar salidas ni eliminar productos."
+      );
+      return;
+    }
+
     try {
       const product = products.find((p) => p.sku === sku);
 
@@ -782,9 +742,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
   const clearRack = (rack: Rack) => {
     if (!canModifyInventory()) {
-  alert("Tu usuario es de solo lectura. No puedes limpiar racks.");
-  return;
-}
+      alert("Tu usuario es de solo lectura. No puedes limpiar racks.");
+      return;
+    }
+
     const rackProducts = products.filter((p) => {
       const location = locations.find((loc) => loc.id === p.locationId);
       return location?.rack === rack;
@@ -815,9 +776,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     );
 
     setLocations((prev) =>
-      prev.map((loc) =>
-        loc.rack === rack ? { ...loc, status: "libre" } : loc
-      )
+      prev.map((loc) => (loc.rack === rack ? { ...loc, status: "libre" } : loc))
     );
   };
 
@@ -853,42 +812,59 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     updateSlotStatus(locationId, "ocupado");
 
   const buscarFisicamente = async (
-  locationId: string
-): Promise<PhysicalSearchResult> => {
-  const [, nivelStr, slotStr] = locationId.split("-");
+    locationId: string
+  ): Promise<PhysicalSearchResult> => {
+    const [, nivelStr, slotStr] = locationId.split("-");
 
-  const nivel = parseInt(nivelStr);
-  const slot = parseInt(slotStr);
+    const nivel = parseInt(nivelStr);
+    const slot = parseInt(slotStr);
 
-  const pinMap: Record<number, number> = {
-    1: 14,
-    2: 12,
-    3: 32,
-    4: 26,
-    5: 27,
-    6: 33,
-  };
-
-  const topicByLevel: Record<number, string> = {
-    1: "Entrada/L3",
-    2: "Entrada/L2",
-    3: "Entrada/L1",
-  };
-
-  const pin = pinMap[slot];
-  const topic = topicByLevel[nivel];
-
-  if (!pin || !topic) {
-    return {
-      ok: false,
-      mensaje: `No hay pin/topic configurado para la ubicación ${locationId}.`,
+    const pinMap: Record<number, number> = {
+      1: 14,
+      2: 12,
+      3: 32,
+      4: 26,
+      5: 27,
+      6: 33,
     };
-  }
 
-  const comando = `b${pin}b`;
+    const topicByLevel: Record<number, string> = {
+      1: "Entrada/L3",
+      2: "Entrada/L2",
+      3: "Entrada/L1",
+    };
 
-  if (TEST_MODE_NO_MQTT) {
-    console.log("[MODO PRUEBA] Buscar físicamente:", {
+    const pin = pinMap[slot];
+    const topic = topicByLevel[nivel];
+
+    if (!pin || !topic) {
+      return {
+        ok: false,
+        mensaje: `No hay pin/topic configurado para la ubicación ${locationId}.`,
+      };
+    }
+
+    const comando = `b${pin}b`;
+
+    if (TEST_MODE_NO_MQTT) {
+      console.log("[MODO PRUEBA] Buscar físicamente:", {
+        locationId,
+        topic,
+        comando,
+      });
+
+      return {
+        ok: true,
+        topic,
+        comando,
+        mqttDisabled: true,
+        mensaje: `Modo prueba activo. Se simuló búsqueda física: ${topic} → ${comando}`,
+      };
+    }
+
+    await sendMQTT(topic, comando);
+
+    console.log("Buscar físicamente enviado:", {
       locationId,
       topic,
       comando,
@@ -898,26 +874,9 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       ok: true,
       topic,
       comando,
-      mqttDisabled: true,
-      mensaje: `Modo prueba activo. Se simuló búsqueda física: ${topic} → ${comando}`,
+      mensaje: `Comando enviado: ${topic} → ${comando}`,
     };
-  }
-
-  await sendMQTT(topic, comando);
-
-  console.log("Buscar físicamente enviado:", {
-    locationId,
-    topic,
-    comando,
-  });
-
-  return {
-    ok: true,
-    topic,
-    comando,
-    mensaje: `Comando enviado: ${topic} → ${comando}`,
   };
-};
 
   const handleMQTT = useCallback((topic: string, data: any) => {
     if (TEST_MODE_NO_MQTT) {
@@ -950,10 +909,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       const level = topic.includes("/L3/")
         ? 1
         : topic.includes("/L2/")
-        ? 2
-        : topic.includes("/L1/")
-        ? 3
-        : null;
+          ? 2
+          : topic.includes("/L1/")
+            ? 3
+            : null;
 
       if (level === null) {
         console.warn("⚠️ No se pudo detectar nivel en topic:", topic);
@@ -1034,18 +993,22 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         products,
         locations,
         movements,
+
         addProduct,
         updateProduct,
         deleteProduct,
         clearRack,
+
         getProductByLocation,
         getProductsWithLocation,
         getTotalProducts,
         getLowStockProducts,
         getMovements,
+
         updateSlotStatus,
         startProductPlacement,
         confirmProductPlacement,
+
         buscarFisicamente,
       }}
     >
