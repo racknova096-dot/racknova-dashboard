@@ -1,3 +1,4 @@
+import { canModifyInventory } from "@/lib/roles";
 import { API_URL } from "../config";
 import React, {
   createContext,
@@ -270,6 +271,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   const addProduct = async (product: Omit<Product, "id">) => {
+    if (!canModifyInventory()) {
+  alert("Tu usuario es de solo lectura. No puedes agregar productos.");
+  return;
+}
     try {
       const productoExistente = products.find((p) => {
         const skuActual = p.sku.trim().toLowerCase();
@@ -460,6 +465,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProduct = async (id: string, updates: Partial<Product>) => {
+    if (!canModifyInventory()) {
+  alert("Tu usuario es de solo lectura. No puedes modificar productos.");
+  return;
+}
     const originalProduct = products.find((p) => p.id === id);
 
     if (!originalProduct) {
@@ -545,6 +554,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   const deleteProduct = async (sku: string, venta?: SaleData) => {
+    if (!canModifyInventory()) {
+  alert("Tu usuario es de solo lectura. No puedes registrar salidas ni eliminar productos.");
+  return;
+}
     try {
       const product = products.find((p) => p.sku === sku);
 
@@ -714,6 +727,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   };
 
   const clearRack = (rack: Rack) => {
+    if (!canModifyInventory()) {
+  alert("Tu usuario es de solo lectura. No puedes limpiar racks.");
+  return;
+}
     const rackProducts = products.filter((p) => {
       const location = locations.find((loc) => loc.id === p.locationId);
       return location?.rack === rack;
