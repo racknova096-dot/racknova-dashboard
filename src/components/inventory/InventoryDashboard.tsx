@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 import {
   Select,
   SelectContent,
@@ -15,7 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { Button } from "@/components/ui/button";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,13 +27,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import { useInventory } from "@/context/InventoryContext";
-import { useReports } from "@/hooks/useReports";
+import { useReports, ReportPeriod } from "@/hooks/useReports";
+
 import { SlotGrid } from "./SlotGrid";
 import { ProductModal } from "./ProductModal";
 import { RealTimeCharts } from "./RealTimeCharts";
 import { PageHero } from "@/components/layout/PageHero";
 
 import { Location, Product, Rack, Nivel } from "@/types/inventory";
+
 import {
   Package,
   AlertTriangle,
@@ -39,7 +44,13 @@ import {
   Download,
   FileText,
   ChevronDown,
+  ShieldCheck,
+  ShieldOff,
+  Layers3,
+  Boxes,
+  BarChart3,
 } from "lucide-react";
+
 import { useToast } from "@/hooks/use-toast";
 import { publishMQTT } from "@/mqtt/mqttClient";
 
@@ -51,10 +62,11 @@ export function InventoryDashboard() {
   );
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
-
   const [systemState, setSystemState] = useState<
     "admitido" | "restringido" | null
   >(null);
+
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("all");
 
   const {
     locations,
@@ -76,12 +88,15 @@ export function InventoryDashboard() {
     .filter((location) => location.rack === selectedRack)
     .filter((location) => getProductByLocation(location.id)).length;
 
+  const freeSlots = totalSlots - occupiedSlots;
+
   const occupancyPercentage =
     totalSlots > 0 ? Math.round((occupiedSlots / totalSlots) * 100) : 0;
 
   const getNivelStats = (nivel: Nivel) => {
     const nivelLocations = locations.filter(
-      (location) => location.rack === selectedRack && location.nivel === nivel
+      (location) =>
+        location.rack === selectedRack && location.nivel === nivel
     );
 
     const occupiedInNivel = nivelLocations.filter((location) =>
@@ -96,31 +111,41 @@ export function InventoryDashboard() {
   };
 
   const handleSlotClick = (location: Location, hasProduct: boolean) => {
-  if (!canModify && !hasProduct) {
-    toast({
-      title: "Solo lectura",
-      description: "Tu usuario no puede agregar productos.",
-      variant: "destructive",
-    });
+    if (!canModify && !hasProduct) {
+      toast({
+        title: "Solo lectura",
+        description: "Tu usuario no puede agregar productos.",
+        variant: "destructive",
+      });
 
-    return;
-  }
+      return;
+    }
 
-  setSelectedLocation(location);
+    setSelectedLocation(location);
 
-  if (hasProduct) {
-    const product = getProductByLocation(location.id);
-    setSelectedProduct(product || null);
-    setModalMode("edit");
-  } else {
-    setSelectedProduct(null);
-    setModalMode("add");
-  }
+    if (hasProduct) {
+      const product = getProductByLocation(location.id);
+      setSelectedProduct(product || null);
+      setModalMode("edit");
+    } else {
+      setSelectedProduct(null);
+      setModalMode("add");
+    }
 
-  setModalOpen(true);
-};
+    setModalOpen(true);
+  };
 
   const handleClearRack = async () => {
+    if (!canModify) {
+      toast({
+        title: "Solo lectura",
+        description: "Tu usuario no puede limpiar racks.",
+        variant: "destructive",
+      });
+
+      return;
+    }
+
     const confirmar = window.confirm(
       "⚠️ Esto borrará TODOS los productos y TODOS los movimientos de la base de datos.\n\n¿Seguro que quieres continuar?"
     );
@@ -160,85 +185,107 @@ export function InventoryDashboard() {
   const handleAdmitir = () => {
     publishMQTT("Entrada/admision", "8113");
     setSystemState("admitido");
+
+    toast({
+      title: "Sistema admitido",
+      description: "Se envió el comando ADMITIDO al rack.",
+    });
   };
 
   const handleRestringir = () => {
     publishMQTT("Entrada/admision", "0");
     setSystemState("restringido");
+
+    toast({
+      title: "Sistema restringido",
+      description: "Se envió el comando RESTRINGIDO al rack.",
+    });
+  };
+
+  const getReportPeriodLabel = (period: ReportPeriod) => {
+    if (period === "7d") return "Últimos 7 días";
+    if (period === "30d") return "Últimos 30 días";
+    if (period === "month") return "Mes actual";
+    if (period === "year") return "Año actual";
+    return "Todo el historial";
   };
 
   return (
-    <div className="min-h-screen bg-background p-6 space-y-6">
-    <PageHero
-  badge="Centro de control RackNova"
-  title="Inventario por Rack y Nivel"
-  description="Supervisa el estado físico del rack, la ocupación por nivel, productos activos y control de admisión."
-  icon={Package}
- actions={
-  canModify ? (
-    <>
-      <Button
-        onClick={handleAdmitir}
-        className="bg-green-600 text-white hover:bg-green-700"
-      >
-        Admitir
-      </Button>
+    <div className="space-y-8">
+      <PageHero
+        badge="Centro operativo RackNova"
+        title="Dashboard"
+        description="Monitorea el estado del inventario, controla el rack y descarga el reporte maestro completo del sistema."
+        icon={Package}
+        actions={
+          canModify ? (
+            <>
+              <Button
+                onClick={handleAdmitir}
+                className="bg-green-600 text-white hover:bg-green-700"
+              >
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                Admitir
+              </Button>
 
-      <Button
-        onClick={handleRestringir}
-        className="bg-red-600 text-white hover:bg-red-700"
-      >
-        Restringir
-      </Button>
+              <Button
+                onClick={handleRestringir}
+                className="bg-red-600 text-white hover:bg-red-700"
+              >
+                <ShieldOff className="h-4 w-4 mr-2" />
+                Restringir
+              </Button>
 
-      <Button variant="destructive" onClick={handleClearRack}>
-        <Trash2 className="h-4 w-4 mr-2" />
-        Limpiar Rack {selectedRack}
-      </Button>
-    </>
-  ) : null
-}
->
-  Haz clic en un slot verde para agregar producto rápidamente o usa la página
-  Agregar para capturar inventario con más detalle.
-</PageHero>
+              <Button variant="destructive" onClick={handleClearRack}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Limpiar Rack {selectedRack}
+              </Button>
+            </>
+          ) : null
+        }
+      >
+        Haz clic en un slot verde para agregar producto rápidamente o usa la
+        página Agregar para capturar inventario con más detalle.
+      </PageHero>
 
       {systemState && (
-        <Card
-          className={`border ${
-            systemState === "admitido"
-              ? "border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-900"
-              : "border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900"
-          }`}
-        >
-          <CardContent className="p-4">
+        <Card className="racknova-card">
+          <CardContent className="pt-6">
             <div
-              className={`flex items-center gap-2 font-medium ${
+              className={`flex items-center gap-3 rounded-xl border p-4 ${
                 systemState === "admitido"
-                  ? "text-green-700 dark:text-green-300"
-                  : "text-red-700 dark:text-red-300"
+                  ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-950/30 dark:border-green-900 dark:text-green-200"
+                  : "bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-900 dark:text-red-200"
               }`}
             >
-              <AlertTriangle className="h-5 w-5" />
-              {systemState === "admitido"
-                ? "Sistema en modo ADMITIDO"
-                : "Sistema en modo RESTRINGIDO"}
+              {systemState === "admitido" ? (
+                <ShieldCheck className="h-5 w-5" />
+              ) : (
+                <ShieldOff className="h-5 w-5" />
+              )}
+
+              <p className="font-medium">
+                {systemState === "admitido"
+                  ? "Sistema en modo ADMITIDO"
+                  : "Sistema en modo RESTRINGIDO"}
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="racknova-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Boxes className="h-4 w-4" />
               Total de Productos
             </CardTitle>
           </CardHeader>
 
           <CardContent>
             <div className="text-3xl font-bold">{getTotalProducts()}</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               productos en inventario
             </p>
           </CardContent>
@@ -246,7 +293,8 @@ export function InventoryDashboard() {
 
         <Card className="racknova-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
               Stock Bajo
             </CardTitle>
           </CardHeader>
@@ -255,7 +303,7 @@ export function InventoryDashboard() {
             <div className="text-3xl font-bold text-amber-600">
               {getLowStockProducts().length}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               productos con stock crítico
             </p>
           </CardContent>
@@ -263,16 +311,15 @@ export function InventoryDashboard() {
 
         <Card className="racknova-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Layers3 className="h-4 w-4" />
               Slots Ocupados
             </CardTitle>
           </CardHeader>
 
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {occupiedSlots}
-            </div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-3xl font-bold">{occupiedSlots}</div>
+            <p className="text-sm text-muted-foreground">
               de {totalSlots} slots disponibles
             </p>
           </CardContent>
@@ -280,38 +327,41 @@ export function InventoryDashboard() {
 
         <Card className="racknova-card">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
               Rack Actual
             </CardTitle>
           </CardHeader>
 
           <CardContent>
-            <div className="text-3xl font-bold text-purple-600">
-              {selectedRack}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {occupancyPercentage}% ocupado
+            <div className="text-3xl font-bold">{selectedRack}</div>
+            <p className="text-sm text-muted-foreground">
+              {occupancyPercentage}% ocupado · {freeSlots} libres
             </p>
           </CardContent>
         </Card>
       </div>
 
       <Card className="racknova-card">
-        <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <CardTitle>Rack {selectedRack} - Todos los Niveles</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Selecciona un rack para visualizar sus niveles y slots.
-              </p>
-            </div>
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Rack {selectedRack} - Todos los Niveles
+            </CardTitle>
 
+            <p className="text-sm text-muted-foreground mt-1">
+              Selecciona un rack para visualizar sus niveles y slots.
+            </p>
+          </div>
+
+          <div className="w-full lg:w-48">
             <Select
               value={selectedRack}
               onValueChange={(value) => setSelectedRack(value as Rack)}
             >
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Seleccionar Rack" />
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona rack" />
               </SelectTrigger>
 
               <SelectContent>
@@ -325,139 +375,138 @@ export function InventoryDashboard() {
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="border bg-muted/30">
-              <CardHeader>
-                <CardTitle className="text-lg">Nivel 1</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {getNivelStats(1).free} libres / {getNivelStats(1).occupied}{" "}
-                  ocupados
-                </p>
-              </CardHeader>
+        <CardContent className="space-y-8">
+          {[1, 2, 3].map((nivel) => {
+            const stats = getNivelStats(nivel as Nivel);
 
-              <CardContent>
+            return (
+              <div key={nivel} className="space-y-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-lg font-semibold">Nivel {nivel}</h3>
+
+                  <p className="text-sm text-muted-foreground">
+                    {stats.free} libres / {stats.occupied} ocupados
+                  </p>
+                </div>
+
                 <SlotGrid
                   rack={selectedRack}
-                  nivel={1}
+                  nivel={nivel as Nivel}
                   onSlotClick={handleSlotClick}
                 />
-              </CardContent>
-            </Card>
-
-            <Card className="border bg-muted/30">
-              <CardHeader>
-                <CardTitle className="text-lg">Nivel 2</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {getNivelStats(2).free} libres / {getNivelStats(2).occupied}{" "}
-                  ocupados
-                </p>
-              </CardHeader>
-
-              <CardContent>
-                <SlotGrid
-                  rack={selectedRack}
-                  nivel={2}
-                  onSlotClick={handleSlotClick}
-                />
-              </CardContent>
-            </Card>
-
-            <Card className="border bg-muted/30">
-              <CardHeader>
-                <CardTitle className="text-lg">Nivel 3</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {getNivelStats(3).free} libres / {getNivelStats(3).occupied}{" "}
-                  ocupados
-                </p>
-              </CardHeader>
-
-              <CardContent>
-                <SlotGrid
-                  rack={selectedRack}
-                  nivel={3}
-                  onSlotClick={handleSlotClick}
-                />
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            );
+          })}
 
           <div className="rounded-xl border bg-muted/30 p-4">
             <h3 className="font-semibold mb-3">Leyenda de estados</h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="flex items-center gap-2">
-                <span className="h-4 w-4 rounded-full bg-green-500" />
-                Slot libre
+                <span className="h-4 w-4 rounded bg-green-500" />
+                <span className="text-sm">Slot libre</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="h-4 w-4 rounded-full bg-yellow-400" />
-                En proceso de colocación
+                <span className="h-4 w-4 rounded bg-yellow-400" />
+                <span className="text-sm">En proceso de colocación</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="h-4 w-4 rounded-full bg-red-500" />
-                Slot ocupado
+                <span className="h-4 w-4 rounded bg-red-500" />
+                <span className="text-sm">Slot ocupado</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="h-4 w-4 rounded-full bg-purple-500" />
-                Quitando producto
+                <span className="h-4 w-4 rounded bg-purple-500" />
+                <span className="text-sm">Quitando producto</span>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <RealTimeCharts />
-
       <Card className="racknova-card">
         <CardHeader>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Reportes
-              </CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                Descargar reporte completo del inventario, productos,
-                ubicaciones, stock bajo y estadísticas generales.
+          <CardTitle className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            Reporte maestro RackNova
+          </CardTitle>
+
+          <p className="text-sm text-muted-foreground">
+            Descarga el reporte más completo del sistema: inventario,
+            finanzas, ventas, movimientos, caducidades, stock, productos sin
+            venta, alertas y gráficas.
+          </p>
+        </CardHeader>
+
+        <CardContent>
+          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Periodo del reporte</p>
+
+              <Select
+                value={reportPeriod}
+                onValueChange={(value) =>
+                  setReportPeriod(value as ReportPeriod)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un periodo" />
+                </SelectTrigger>
+
+                <SelectContent>
+                  <SelectItem value="7d">Últimos 7 días</SelectItem>
+                  <SelectItem value="30d">Últimos 30 días</SelectItem>
+                  <SelectItem value="month">Mes actual</SelectItem>
+                  <SelectItem value="year">Año actual</SelectItem>
+                  <SelectItem value="all">Todo el historial</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <p className="text-xs text-muted-foreground">
+                Periodo seleccionado:{" "}
+                <span className="font-medium">
+                  {getReportPeriodLabel(reportPeriod)}
+                </span>
+                . El inventario se exporta completo; el periodo filtra
+                movimientos, ventas, ingresos, costos y análisis operativo.
               </p>
             </div>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button>
+                <Button className="w-full lg:w-auto">
                   <Download className="h-4 w-4 mr-2" />
-                  Descargar Reporte
+                  Descargar reporte maestro
                   <ChevronDown className="h-4 w-4 ml-2" />
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={downloadPDF}>
+                <DropdownMenuItem onClick={() => downloadPDF(reportPeriod)}>
+                  <FileText className="h-4 w-4 mr-2" />
                   Descargar PDF
                 </DropdownMenuItem>
 
-                <DropdownMenuItem onClick={downloadExcel}>
+                <DropdownMenuItem onClick={() => downloadExcel(reportPeriod)}>
+                  <Download className="h-4 w-4 mr-2" />
                   Descargar Excel
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </CardHeader>
 
-        <CardContent>
-          <div className="rounded-xl border bg-muted/30 p-4 flex items-start gap-3">
-            <TrendingUp className="h-5 w-5 text-primary mt-0.5" />
-            <p className="text-sm text-muted-foreground">
-              Los reportes toman la información actual del inventario y ayudan a
-              revisar ocupación, productos existentes y alertas de bajo stock.
-            </p>
+          <div className="mt-4 rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            El reporte maestro incluye resumen ejecutivo, parte financiera,
+            análisis tipo Reportes, inventario completo, movimientos del
+            periodo, ventas por producto, productos sin venta, recuperación de
+            inversión, stock, caducidades y gráficas.
           </div>
         </CardContent>
       </Card>
+
+      <RealTimeCharts />
 
       <ProductModal
         isOpen={modalOpen}
