@@ -1,15 +1,17 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Lock, User } from "lucide-react";
+
+import { API_URL } from "../config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Lock, User } from "lucide-react";
-import { API_URL } from "../config";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
   const navigate = useNavigate();
 
   const handleLogin = async () => {
@@ -18,64 +20,86 @@ export default function Login() {
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username,
+          password,
+        }),
       });
 
       const data = await response.json();
-      console.log("📦 Respuesta del servidor:", data);
+      console.log("Respuesta del servidor:", data);
 
-      // ✅ Verificamos la respuesta HTTP
       if (!response.ok) {
         setError(data.detail || "Usuario o contraseña incorrectos");
         return;
       }
 
-      // ✅ Login exitoso
-      console.log("✅ Login exitoso:", data);
+      const user = data.user;
+      const role = user?.role;
 
-      // (Opcional) Guarda el usuario en localStorage
-      localStorage.setItem("usuario", username);
-      localStorage.setItem("rol", data.rol);
+      if (!role) {
+        setError("El servidor no regresó el rol del usuario.");
+        return;
+      }
 
-      // 🚀 Redirige al dashboard principal
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("usuario", user?.email || username);
+      localStorage.setItem("nombre", user?.name || username);
+      localStorage.setItem("rol", role);
+
       navigate("/");
     } catch (error) {
-      console.error("⚠️ Error en login:", error);
-      setError("No se pudo conectar al servidor");
+      console.error("Error en login:", error);
+      setError("No se pudo conectar con el servidor");
     }
   };
 
   return (
-    <div className="flex justify-center items-center h-screen bg-gradient-to-br from-blue-50 to-blue-100">
-      <Card className="w-full max-w-md shadow-lg border border-blue-200">
+    <div className="min-h-screen flex items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-md racknova-card">
         <CardHeader>
-          <CardTitle className="text-center text-2xl font-bold text-blue-800">
+          <CardTitle className="text-center text-2xl">
             RackNova - Acceso Seguro
           </CardTitle>
         </CardHeader>
+
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2">
-            <User className="text-blue-600" />
+          <div className="relative">
+            <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Usuario"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="Usuario o correo"
+              className="pl-9"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Lock className="text-blue-600" />
+
+          <div className="relative">
+            <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               type="password"
-              placeholder="Contraseña"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Contraseña"
+              className="pl-9"
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  handleLogin();
+                }
+              }}
             />
           </div>
 
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:border-red-900 dark:text-red-200">
+              {error}
+            </div>
+          )}
 
-          <Button className="w-full mt-4" onClick={handleLogin}>
+          <Button onClick={handleLogin} className="w-full">
             Iniciar sesión
           </Button>
         </CardContent>
