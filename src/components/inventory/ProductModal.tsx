@@ -77,6 +77,7 @@ export function ProductModal({
   const [caducidad, setCaducidad] = useState("");
   const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
   const [stockMinimo, setStockMinimo] = useState("");
+  const [stockAlto, setStockAlto] = useState("");
 
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [cantidadVendida, setCantidadVendida] = useState("1");
@@ -92,8 +93,14 @@ export function ProductModal({
     timestamp: Date;
   } | null>(null);
 
-  const { addProduct, updateProduct, deleteProduct, buscarFisicamente } =
-  useInventory();
+ const {
+  products,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  buscarFisicamente,
+} = useInventory();
+  
   const { toast } = useToast();
 
   useEffect(() => {
@@ -108,6 +115,7 @@ export function ProductModal({
       setCaducidad(product.caducidad ? product.caducidad.slice(0, 10) : "");
       setCaducidadNoAplica(!product.caducidad);
       setStockMinimo(product.stock_minimo?.toString() ?? "");
+      setStockAlto(product.stock_alto?.toString() ?? "");
     } else {
       setSku("");
       setNombre("");
@@ -117,6 +125,7 @@ export function ProductModal({
       setCaducidad("");
       setCaducidadNoAplica(true);
       setStockMinimo("");
+      setStockAlto("");
     }
   }, [mode, product, isOpen]);
 
@@ -128,12 +137,14 @@ export function ProductModal({
     return getDiscountSuggestion(diasCaducidad);
   }, [diasCaducidad]);
 
-  const precioBaseSugerido = Number(product?.precio_venta_sugerido ?? 0);
+ const precioBaseDescuento = Number(
+  precioVenta || product?.precio_venta_sugerido || 0
+);
 
-  const precioConDescuento =
-    precioBaseSugerido > 0 && descuentoSugerido > 0
-      ? precioBaseSugerido * (1 - descuentoSugerido / 100)
-      : 0;
+const precioConDescuento =
+  precioBaseDescuento > 0 && descuentoSugerido > 0
+    ? precioBaseDescuento * (1 - descuentoSugerido / 100)
+    : 0;
 
   const cantidadSalidaNum = Number(cantidadVendida || 0);
 
@@ -215,6 +226,18 @@ export function ProductModal({
       return;
     }
 
+    const stockAltoNum =
+  stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
+
+if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
+  toast({
+    title: "Error",
+    description: "El stock alto debe ser mayor al stock crítico.",
+    variant: "destructive",
+  });
+  return;
+}
+
     const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
 
     if (mode === "add") {
@@ -234,15 +257,16 @@ export function ProductModal({
 
       try {
         await addProduct({
-          locationId: location.id,
-          sku,
-          nombre,
-          cantidad: cantidadNum,
-          costo_proveedor: costoProveedorNum,
-          precio_venta_sugerido: precioVentaSugeridoNum,
-          caducidad: caducidadValue,
-          stock_minimo: stockMinimoNum,
-        });
+  locationId: location.id,
+  sku,
+  nombre,
+  cantidad: cantidadNum,
+  costo_proveedor: costoProveedorNum,
+  precio_venta_sugerido: precioVentaSugeridoNum,
+  caducidad: caducidadValue,
+  stock_minimo: stockMinimoNum,
+  stock_alto: stockAltoNum,
+});
 
         setLastAddedProduct({
           sku,
@@ -282,6 +306,7 @@ export function ProductModal({
           precio_venta_sugerido: precioVentaSugeridoNum,
           caducidad: caducidadValue,
           stock_minimo: stockMinimoNum,
+          stock_alto: stockAltoNum,
         });
 
         toast({
@@ -537,6 +562,21 @@ const handleBuscarFisicamente = async () => {
               </p>
             </div>
 
+            <div className="space-y-2">
+  <Label>Stock alto personalizado</Label>
+  <Input
+    type="number"
+    value={stockAlto}
+    onChange={(e) => setStockAlto(e.target.value)}
+    placeholder="Opcional. Por defecto: stock crítico x 3"
+    min="1"
+  />
+  <p className="text-xs text-muted-foreground">
+    El producto se marcará como stock alto cuando la cantidad sea mayor o igual
+    a este valor.
+  </p>
+</div>
+
             <DialogFooter className="gap-2">
               {mode === "edit" && (
                 <Button
@@ -648,7 +688,7 @@ const handleBuscarFisicamente = async () => {
                   </p>
 
                   <p>
-                    Precio sugerido con descuento:{" "}
+                    Precio con descuento:{" "}
                     <strong>{formatMoney(precioConDescuento)}</strong>
                   </p>
 
