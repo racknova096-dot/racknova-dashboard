@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { canModifyInventory } from "@/lib/roles";
+import { canModifyInventory, isAdmin } from "@/lib/roles";
 import { API_URL } from "@/config";
 
 import {
@@ -48,7 +48,6 @@ import {
   ShieldOff,
   Layers3,
   Boxes,
-  BarChart3,
 } from "lucide-react";
 
 import { useToast } from "@/hooks/use-toast";
@@ -79,6 +78,7 @@ export function InventoryDashboard() {
   const { downloadPDF, downloadExcel } = useReports();
 
   const canModify = canModifyInventory();
+  const canSeeMasterReport = isAdmin();
 
   const totalSlots = locations.filter(
     (location) => location.rack === selectedRack
@@ -95,8 +95,7 @@ export function InventoryDashboard() {
 
   const getNivelStats = (nivel: Nivel) => {
     const nivelLocations = locations.filter(
-      (location) =>
-        location.rack === selectedRack && location.nivel === nivel
+      (location) => location.rack === selectedRack && location.nivel === nivel
     );
 
     const occupiedInNivel = nivelLocations.filter((location) =>
@@ -210,42 +209,107 @@ export function InventoryDashboard() {
     return "Todo el historial";
   };
 
+  const masterReportControls = canSeeMasterReport ? (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="w-full sm:w-52">
+        <Select
+          value={reportPeriod}
+          onValueChange={(value) => setReportPeriod(value as ReportPeriod)}
+        >
+          <SelectTrigger className="bg-white/90 dark:bg-slate-950/80">
+            <SelectValue placeholder="Periodo" />
+          </SelectTrigger>
+
+          <SelectContent>
+            <SelectItem value="7d">Últimos 7 días</SelectItem>
+            <SelectItem value="30d">Últimos 30 días</SelectItem>
+            <SelectItem value="month">Mes actual</SelectItem>
+            <SelectItem value="year">Año actual</SelectItem>
+            <SelectItem value="all">Todo el historial</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="bg-blue-600 text-white hover:bg-blue-700">
+            <Download className="h-4 w-4 mr-2" />
+            Reporte maestro
+            <ChevronDown className="h-4 w-4 ml-2" />
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => downloadPDF(reportPeriod)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Descargar PDF
+          </DropdownMenuItem>
+
+          <DropdownMenuItem onClick={() => downloadExcel(reportPeriod)}>
+            <Download className="h-4 w-4 mr-2" />
+            Descargar Excel
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-8">
       <PageHero
         badge="Centro operativo RackNova"
         title="Dashboard"
-        description="Monitorea el estado del inventario, controla el rack y descarga el reporte maestro completo del sistema."
+        description={
+          canSeeMasterReport
+            ? `Control del rack, monitoreo del inventario y reporte maestro completo. Periodo actual del reporte: ${getReportPeriodLabel(
+                reportPeriod
+              )}.`
+            : "Control del rack y monitoreo del inventario."
+        }
         icon={Package}
         actions={
-          canModify ? (
-            <>
-              <Button
-                onClick={handleAdmitir}
-                className="bg-green-600 text-white hover:bg-green-700"
-              >
-                <ShieldCheck className="h-4 w-4 mr-2" />
-                Admitir
-              </Button>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            {masterReportControls}
 
-              <Button
-                onClick={handleRestringir}
-                className="bg-red-600 text-white hover:bg-red-700"
-              >
-                <ShieldOff className="h-4 w-4 mr-2" />
-                Restringir
-              </Button>
+            {canModify && (
+              <>
+                <Button
+                  onClick={handleAdmitir}
+                  className="bg-green-600 text-white hover:bg-green-700"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Admitir
+                </Button>
 
-              <Button variant="destructive" onClick={handleClearRack}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Limpiar Rack {selectedRack}
-              </Button>
-            </>
-          ) : null
+                <Button
+                  onClick={handleRestringir}
+                  className="bg-red-600 text-white hover:bg-red-700"
+                >
+                  <ShieldOff className="h-4 w-4 mr-2" />
+                  Restringir
+                </Button>
+
+                <Button variant="destructive" onClick={handleClearRack}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Limpiar Rack {selectedRack}
+                </Button>
+              </>
+            )}
+          </div>
         }
       >
-        Haz clic en un slot verde para agregar producto rápidamente o usa la
-        página Agregar para capturar inventario con más detalle.
+        {canSeeMasterReport ? (
+          <>
+            El reporte maestro incluye inventario completo, finanzas, ventas,
+            movimientos, recuperación de inversión, productos sin venta, stock,
+            caducidades, alertas y gráficas.
+          </>
+        ) : (
+          <>
+            Haz clic en un slot verde para agregar producto rápidamente o usa la
+            página Agregar para capturar inventario con más detalle.
+          </>
+        )}
       </PageHero>
 
       {systemState && (
@@ -422,86 +486,6 @@ export function InventoryDashboard() {
                 <span className="text-sm">Quitando producto</span>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="racknova-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Reporte maestro RackNova
-          </CardTitle>
-
-          <p className="text-sm text-muted-foreground">
-            Descarga el reporte más completo del sistema: inventario,
-            finanzas, ventas, movimientos, caducidades, stock, productos sin
-            venta, alertas y gráficas.
-          </p>
-        </CardHeader>
-
-        <CardContent>
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Periodo del reporte</p>
-
-              <Select
-                value={reportPeriod}
-                onValueChange={(value) =>
-                  setReportPeriod(value as ReportPeriod)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un periodo" />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="7d">Últimos 7 días</SelectItem>
-                  <SelectItem value="30d">Últimos 30 días</SelectItem>
-                  <SelectItem value="month">Mes actual</SelectItem>
-                  <SelectItem value="year">Año actual</SelectItem>
-                  <SelectItem value="all">Todo el historial</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <p className="text-xs text-muted-foreground">
-                Periodo seleccionado:{" "}
-                <span className="font-medium">
-                  {getReportPeriodLabel(reportPeriod)}
-                </span>
-                . El inventario se exporta completo; el periodo filtra
-                movimientos, ventas, ingresos, costos y análisis operativo.
-              </p>
-            </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="w-full lg:w-auto">
-                  <Download className="h-4 w-4 mr-2" />
-                  Descargar reporte maestro
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-              </DropdownMenuTrigger>
-
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => downloadPDF(reportPeriod)}>
-                  <FileText className="h-4 w-4 mr-2" />
-                  Descargar PDF
-                </DropdownMenuItem>
-
-                <DropdownMenuItem onClick={() => downloadExcel(reportPeriod)}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Descargar Excel
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <div className="mt-4 rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
-            El reporte maestro incluye resumen ejecutivo, parte financiera,
-            análisis tipo Reportes, inventario completo, movimientos del
-            periodo, ventas por producto, productos sin venta, recuperación de
-            inversión, stock, caducidades y gráficas.
           </div>
         </CardContent>
       </Card>
