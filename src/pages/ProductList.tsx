@@ -241,12 +241,13 @@ export default function ProductList() {
     const precio = Number(precioVenta || 0);
     const costoProveedor = Number(saleProduct.costo_proveedor ?? 0);
     const precioSugerido = Number(saleProduct.precio_venta_sugerido ?? 0);
-    const descuento = getSuggestedDiscount(saleProduct.caducidad);
+const precioBaseDescuento = Number(precioVenta || precioSugerido || 0);
+const descuento = getSuggestedDiscount(saleProduct.caducidad);
 
-    const precioConDescuento =
-      precioSugerido > 0
-        ? Number((precioSugerido * (1 - descuento / 100)).toFixed(2))
-        : 0;
+const precioConDescuento =
+  precioBaseDescuento > 0
+    ? Number((precioBaseDescuento * (1 - descuento / 100)).toFixed(2))
+    : 0;
 
     const diasCaducidad = getDaysToExpire(saleProduct.caducidad);
     const vencido = diasCaducidad !== null && diasCaducidad < 0;
@@ -674,7 +675,7 @@ export default function ProductList() {
                   />
                   <p className="text-xs text-muted-foreground">
                     Precio sugerido:{" "}
-                    {formatCurrency(saleCalculations.precioSugerido)}
+                    {formatCurrency(Number(precioVenta || saleCalculations.precioSugerido || 0))}
                   </p>
                 </div>
               </div>
