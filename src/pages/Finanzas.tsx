@@ -5,7 +5,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -45,7 +44,6 @@ import {
   Percent,
   Trophy,
   AlertTriangle,
-  Download,
   Activity,
   ShoppingCart,
   Calculator,
@@ -485,58 +483,7 @@ export default function Finanzas() {
     )} en costo de inventario.`;
   }, [investmentRecovery]);
 
-  const exportCSV = () => {
-    const headers = [
-      "Fecha",
-      "SKU",
-      "Producto",
-      "Cantidad",
-      "Ingreso",
-      "Costo",
-      "Ganancia",
-      "Margen",
-    ];
-
-    const rows = ventasFiltradas.map((movement) => {
-      const ingreso = Number(movement.ingreso_total ?? 0);
-      const costo = Number(movement.costo_total ?? 0);
-      const ganancia = ingreso - costo;
-      const margen = getMargin(ingreso, ganancia);
-
-      return [
-        formatDate(movement.timestamp),
-        movement.productSku,
-        movement.productName,
-        movement.quantity,
-        ingreso,
-        costo,
-        ganancia,
-        margen,
-      ];
-    });
-
-    const csvContent = [headers, ...rows]
-      .map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
-      )
-      .join("\n");
-
-    const blob = new Blob([csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = `racknova-finanzas-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-
-    link.click();
-
-    URL.revokeObjectURL(url);
-  };
+  
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-6">
@@ -586,14 +533,7 @@ export default function Finanzas() {
                 </SelectContent>
               </Select>
 
-              <Button
-                variant="secondary"
-                onClick={exportCSV}
-                className="bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-blue-50"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Exportar CSV
-              </Button>
+              
             </div>
           </div>
 
