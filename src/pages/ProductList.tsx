@@ -1,3 +1,4 @@
+import { canModifyInventory } from "@/lib/roles";
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -119,6 +120,7 @@ export default function ProductList() {
     useInventory();
 
   const { toast } = useToast();
+  const canModify = canModifyInventory();
 
   const productsWithLocation = useMemo(() => {
     return products.map((product) => ({
@@ -557,34 +559,38 @@ const precioConDescuento =
                       <TableCell>{getStockBadge(product)}</TableCell>
 
                       <TableCell>
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleBuscarFisicamente(product)}
-                          >
-                            <LocateFixed className="h-4 w-4 mr-1" />
-                            Buscar
-                          </Button>
+                       <div className="flex justify-end gap-2">
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={() => handleBuscarFisicamente(product)}
+  >
+    <LocateFixed className="h-4 w-4 mr-1" />
+    Buscar
+  </Button>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(product)}
-                          >
-                            <Pencil className="h-4 w-4 mr-1" />
-                            Editar
-                          </Button>
+  {canModify && (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => handleEdit(product)}
+      >
+        <Pencil className="h-4 w-4 mr-1" />
+        Editar
+      </Button>
 
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleOpenSale(product)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Salida
-                          </Button>
-                        </div>
+      <Button
+        variant="destructive"
+        size="sm"
+        onClick={() => handleOpenSale(product)}
+      >
+        <Trash2 className="h-4 w-4 mr-1" />
+        Salida
+      </Button>
+    </>
+  )}
+</div>
                       </TableCell>
                     </TableRow>
                   ))
