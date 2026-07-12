@@ -64,6 +64,12 @@ const navItems = [
   icon: Bot,
   color: "from-blue-600 to-cyan-500",
 },
+  {
+  path: "/usuarios",
+  label: "Usuarios",
+  icon: Users,
+  color: "from-indigo-500 to-purple-500",
+},
 ];
 
 export function Navigation() {
@@ -115,17 +121,7 @@ export function Navigation() {
               );
             })}
 
-            {false && (
-              <Link to="/usuarios">
-                <Button
-                  variant={isActive("/usuarios") ? "default" : "ghost"}
-                  className="flex items-center gap-2"
-                >
-                  <Users className="h-4 w-4" />
-                  Usuarios
-                </Button>
-              </Link>
-            )}
+            
 
             <div className="ml-1">
               <ThemeToggle />
