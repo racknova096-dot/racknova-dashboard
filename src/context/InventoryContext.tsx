@@ -230,14 +230,68 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     loadMovements();
   }, []);
 
-  const addMovement = async (
-    movement: Omit<MovementRecord, "id" | "timestamp">
-  ) => {
-    const newMovement: MovementRecord = {
-      ...movement,
-      id: Date.now().toString(),
-      timestamp: new Date(),
-    };
+  const getCurrentUserName = () => {
+  const nombre = localStorage.getItem("nombre");
+  const usuario = localStorage.getItem("usuario");
+  const rol = localStorage.getItem("rol");
+
+  if (nombre && nombre.trim()) {
+    return nombre.trim();
+  }
+
+  if (usuario && usuario.trim()) {
+    return usuario.trim();
+  }
+
+  if (rol && rol.trim()) {
+    return rol.trim();
+  }
+
+  return "Sistema";
+};
+  
+ const addMovement = async (
+  movement: Omit<MovementRecord, "id" | "timestamp">
+) => {
+  const currentUser = movement.user || getCurrentUserName();
+
+  const newMovement: MovementRecord = {
+    ...movement,
+    user: currentUser,
+    id: Date.now().toString(),
+    timestamp: new Date(),
+  };
+
+  setMovements((prev) => [...prev, newMovement]);
+
+  try {
+    const resp = await fetch(`${API_URL}/movimientos`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        accion: newMovement.action,
+        sku: newMovement.productSku,
+        producto: newMovement.productName,
+        cantidad: newMovement.quantity,
+        ubicacion: newMovement.location,
+        usuario: currentUser,
+        costo_proveedor: newMovement.costo_proveedor ?? 0,
+        precio_venta: newMovement.precio_venta ?? 0,
+        ingreso_total: newMovement.ingreso_total ?? 0,
+        costo_total: newMovement.costo_total ?? 0,
+        ganancia: newMovement.ganancia ?? 0,
+      }),
+    });
+
+    if (!resp.ok) {
+      console.error("❌ Error guardando movimiento:", resp.status);
+    }
+  } catch (error) {
+    console.error("❌ Error enviando movimiento al backend:", error);
+  }
+};
 
     setMovements((prev) => [...prev, newMovement]);
 
@@ -394,7 +448,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           productName: savedProduct.nombre,
           quantity: cantidadIngreso,
           location: savedProduct.locationId,
-          user: "Admin",
+          user: getCurrentUserName(),
           costo_proveedor: costoProveedorIngreso,
           precio_venta: 0,
           ingreso_total: 0,
@@ -542,7 +596,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         productName: originalProduct.nombre,
         quantity: Number(updates.cantidad),
         location: originalProduct.locationId,
-        user: "Admin",
+        user: getCurrentUserName(),
         costo_proveedor:
           updates.costo_proveedor ?? originalProduct.costo_proveedor ?? 0,
         precio_venta: 0,
@@ -620,7 +674,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
           productName: product.nombre,
           quantity: cantidadVendida,
           location: product.locationId,
-          user: "Admin",
+          user: getCurrentUserName(),
           costo_proveedor: costoProveedor,
           precio_venta: precioVenta,
           ingreso_total: ingresoTotal,
@@ -743,7 +797,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         productName: product.nombre,
         quantity: product.cantidad,
         location: product.locationId,
-        user: "Admin",
+        user: getCurrentUserName(),
         costo_proveedor: product.costo_proveedor ?? 0,
         precio_venta: 0,
         ingreso_total: 0,
