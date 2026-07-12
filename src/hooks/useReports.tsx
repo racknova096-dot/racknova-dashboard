@@ -1,235 +1,476 @@
-import { useInventory } from '@/context/InventoryContext';
-import { useToast } from '@/hooks/use-toast';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+import { useInventory } from "@/context/InventoryContext";
+import { Product } from "@/types/inventory";
+import { MovementRecord } from "@/types/movement";
+
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
+
+const money = (value: number) =>
+  new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+  }).format(Number(value || 0));
+
+const formatDate = (value?: string | Date | null) => {
+  if (!value) return "Sin fecha";
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Sin fecha";
+  }
+
+  return date.toLocaleDateString("es-MX", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
+};
+
+const formatDateTime = (value?: string | Date | null) => {
+  if (!value) return "Sin fecha";
+
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Sin fecha";
+  }
+
+  return date.toLocaleString("es-MX", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const getStockStatus = (product: Product) => {
+  const stockMinimo = Number(product.stock_minimo ?? 10);
+  const stockAlto = Number(product.stock_alto ?? stockMinimo * 3);
+
+  if (product.cantidad <= stockMinimo) return "Stock bajo";
+  if (product.cantidad >= stockAlto) return "Stock alto";
+
+  return "Stock normal";
+};
+
+const getExpirationStatus = (caducidad?: string | null) => {
+  if (!caducidad) return "Sin caducidad";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const expiration = new Date(`${caducidad.slice(0, 10)}T00:00:00`);
+  expiration.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.ceil(
+    (expiration.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays < 0) return `Vencido hace ${Math.abs(diffDays)} día(s)`;
+  if (diffDays === 0) return "Vence hoy";
+  if (diffDays <= 30) return `Caduca en ${diffDays} día(s)`;
+
+  return "Vigente";
+};
+
+const getLocationText = (locationId: string) => {
+  const [rack, nivel, slot] = locationId.split("-");
+
+  return `Rack ${rack} / Nivel ${nivel} / Slot ${slot}`;
+};
+
+const getReportFileName = (base: string, extension: string) => {
+  const today = new Date();
+
+  const stamp = today
+    .toISOString()
+    .slice(0, 10);
+
+  return `${base}-${stamp}.${extension}`;
+};
 
 export function useReports() {
-  const { 
-    locations, 
-    getTotalProducts, 
-    getLowStockProducts, 
-    getProductByLocation 
-  } = useInventory();
-  const { toast } = useToast();
+  const { products, locations, movements } = useInventory();
 
-  const generateReportData = () => {
-    // Get all products with their locations
-    const allProducts = locations
-      .map(location => {
-        const product = getProductByLocation(location.id);
-        return product ? {
-          sku: product.sku,
-          nombre: product.nombre,
-          cantidad: product.cantidad,
-          rack: location.rack,
-          nivel: location.nivel,
-          slot: location.slot,
-          ubicacion: `${location.rack}-${location.nivel}-${location.slot}`,
-          estado: product.cantidad <= 10 ? 'Stock Bajo' : 'Normal'
-        } : null;
-      })
-      .filter(Boolean);
+  const getSummary = () => {
+    const totalProductos = products.length;
+    const totalPiezas = products.reduce(
+      (total, product) => total + Number(product.cantidad || 0),
+      0
+    );
 
-    const totalSlots = locations.length;
-    const occupiedSlots = allProducts.length;
-    const freeSlots = totalSlots - occupiedSlots;
-    const lowStockProducts = getLowStockProducts();
+    const stockBajo = products.filter((product) => {
+      const minimo = Number(product.stock_minimo ?? 10);
+      return product.cantidad <= minimo;
+    }).length;
+
+    const stockAlto = products.filter((product) => {
+      const minimo = Number(product.stock_minimo ?? 10);
+      const alto = Number(product.stock_alto ?? minimo * 3);
+      return product.cantidad >= alto;
+    }).length;
+
+    const vencidos = products.filter((product) => {
+      if (!product.caducidad) return false;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const expiration = new Date(`${product.caducidad.slice(0, 10)}T00:00:00`);
+      expiration.setHours(0, 0, 0, 0);
+
+      return expiration < today;
+    }).length;
+
+    const proximosCaducar = products.filter((product) => {
+      if (!product.caducidad) return false;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const expiration = new Date(`${product.caducidad.slice(0, 10)}T00:00:00`);
+      expiration.setHours(0, 0, 0, 0);
+
+      const diffDays = Math.ceil(
+        (expiration.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      return diffDays >= 0 && diffDays <= 30;
+    }).length;
+
+    const valorInventario = products.reduce(
+      (total, product) =>
+        total +
+        Number(product.cantidad || 0) * Number(product.costo_proveedor || 0),
+      0
+    );
+
+    const ventas = movements.filter((movement) => movement.action === "Egreso");
+
+    const ingresos = ventas.reduce(
+      (total, movement) => total + Number(movement.ingreso_total ?? 0),
+      0
+    );
+
+    const costos = ventas.reduce(
+      (total, movement) => total + Number(movement.costo_total ?? 0),
+      0
+    );
+
+    const ganancia = ingresos - costos;
+
+    const slotsOcupados = products.length;
+    const slotsTotales = locations.length;
 
     return {
-      products: allProducts,
-      summary: {
-        totalProducts: getTotalProducts(),
-        occupiedSlots,
-        freeSlots,
-        totalSlots,
-        lowStockCount: lowStockProducts.length
-      },
-      lowStockProducts,
-      reportDate: new Date().toLocaleString('es-ES')
+      totalProductos,
+      totalPiezas,
+      stockBajo,
+      stockAlto,
+      vencidos,
+      proximosCaducar,
+      valorInventario,
+      ingresos,
+      costos,
+      ganancia,
+      slotsOcupados,
+      slotsTotales,
     };
   };
 
   const downloadPDF = () => {
-    try {
-      const data = generateReportData();
-      const doc = new jsPDF();
+    const summary = getSummary();
 
-      // Header
-      doc.setFontSize(20);
-      doc.text('Sistema de Inventario', 14, 22);
-      doc.setFontSize(16);
-      doc.text('Reporte de Inventario', 14, 32);
-      
-      // Date
-      doc.setFontSize(10);
-      doc.text(`Fecha del reporte: ${data.reportDate}`, 14, 42);
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: "a4",
+    });
 
-      // Summary section
-      doc.setFontSize(12);
-      doc.text('Resumen General', 14, 55);
-      
-      const summaryData = [
-        ['Total de productos', data.summary.totalProducts.toString()],
-        ['Slots ocupados', data.summary.occupiedSlots.toString()],
-        ['Slots libres', data.summary.freeSlots.toString()],
-        ['Total de slots', data.summary.totalSlots.toString()],
-        ['Productos con stock bajo', data.summary.lowStockCount.toString()]
-      ];
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("RackNova", 14, 18);
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text("Reporte general de inventario", 14, 26);
+
+    doc.setFontSize(9);
+    doc.text(`Generado: ${formatDateTime(new Date())}`, 14, 33);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Resumen general", 14, 45);
+
+    autoTable(doc, {
+      startY: 50,
+      head: [["Métrica", "Valor", "Métrica", "Valor"]],
+      body: [
+        [
+          "Productos activos",
+          summary.totalProductos,
+          "Piezas en inventario",
+          summary.totalPiezas,
+        ],
+        [
+          "Stock bajo",
+          summary.stockBajo,
+          "Stock alto",
+          summary.stockAlto,
+        ],
+        [
+          "Próximos a caducar",
+          summary.proximosCaducar,
+          "Vencidos",
+          summary.vencidos,
+        ],
+        [
+          "Slots ocupados",
+          `${summary.slotsOcupados} / ${summary.slotsTotales}`,
+          "Valor de inventario",
+          money(summary.valorInventario),
+        ],
+        [
+          "Ingresos por ventas",
+          money(summary.ingresos),
+          "Ganancia registrada",
+          money(summary.ganancia),
+        ],
+      ],
+      theme: "grid",
+      styles: {
+        fontSize: 8,
+        cellPadding: 2,
+      },
+      headStyles: {
+        fillColor: [15, 23, 42],
+        textColor: [255, 255, 255],
+      },
+    });
+
+    const productosOrdenados = [...products].sort((a, b) =>
+      a.locationId.localeCompare(b.locationId)
+    );
+
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 10,
+      head: [
+        [
+          "Ubicación",
+          "SKU",
+          "Producto",
+          "Cantidad",
+          "Costo",
+          "Precio sugerido",
+          "Caducidad",
+          "Estado caducidad",
+          "Stock",
+        ],
+      ],
+      body: productosOrdenados.map((product) => [
+        getLocationText(product.locationId),
+        product.sku,
+        product.nombre,
+        product.cantidad,
+        money(Number(product.costo_proveedor ?? 0)),
+        money(Number(product.precio_venta_sugerido ?? 0)),
+        formatDate(product.caducidad),
+        getExpirationStatus(product.caducidad),
+        getStockStatus(product),
+      ]),
+      theme: "striped",
+      styles: {
+        fontSize: 7,
+        cellPadding: 1.8,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: [255, 255, 255],
+      },
+      alternateRowStyles: {
+        fillColor: [245, 247, 250],
+      },
+      didDrawPage: () => {
+        const pageNumber = doc.getNumberOfPages();
+
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text(
+          `RackNova · Reporte de inventario · Página ${pageNumber}`,
+          pageWidth - 85,
+          doc.internal.pageSize.getHeight() - 8
+        );
+      },
+    });
+
+    const movimientosRecientes = [...movements]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 25);
+
+    if (movimientosRecientes.length > 0) {
+      doc.addPage();
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("Movimientos recientes", 14, 18);
 
       autoTable(doc, {
-        startY: 60,
-        head: [['Métrica', 'Valor']],
-        body: summaryData,
-        theme: 'grid',
-        styles: { fontSize: 10 },
-        headStyles: { fillColor: [66, 139, 202] }
-      });
-
-      // Products table
-      if (data.products.length > 0) {
-        doc.addPage();
-        doc.setFontSize(12);
-        doc.text('Lista de Productos', 14, 22);
-
-        const productsData = data.products.map(product => [
-          product?.sku || '',
-          product?.nombre || '',
-          product?.cantidad?.toString() || '',
-          product?.ubicacion || '',
-          product?.estado || ''
-        ]);
-
-        autoTable(doc, {
-          startY: 30,
-          head: [['SKU', 'Nombre', 'Cantidad', 'Ubicación', 'Estado']],
-          body: productsData,
-          theme: 'grid',
-          styles: { fontSize: 9 },
-          headStyles: { fillColor: [66, 139, 202] },
-          columnStyles: {
-            0: { cellWidth: 30 },
-            1: { cellWidth: 60 },
-            2: { cellWidth: 25 },
-            3: { cellWidth: 30 },
-            4: { cellWidth: 30 }
-          }
-        });
-      }
-
-      // Low stock section
-      if (data.lowStockProducts.length > 0) {
-        doc.addPage();
-        doc.setFontSize(12);
-        doc.text('Productos con Stock Bajo (≤ 10)', 14, 22);
-
-        const lowStockData = data.lowStockProducts.map(product => [
-          product.sku,
-          product.nombre,
-          product.cantidad.toString()
-        ]);
-
-        autoTable(doc, {
-          startY: 30,
-          head: [['SKU', 'Nombre', 'Cantidad']],
-          body: lowStockData,
-          theme: 'grid',
-          styles: { fontSize: 10 },
-          headStyles: { fillColor: [220, 53, 69] }
-        });
-      }
-
-      doc.save(`reporte-inventario-${new Date().toISOString().split('T')[0]}.pdf`);
-      
-      toast({
-        title: "Reporte generado",
-        description: "El reporte PDF se ha descargado exitosamente",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Error al generar el reporte PDF",
-        variant: "destructive",
+        startY: 25,
+        head: [
+          [
+            "Fecha",
+            "Acción",
+            "SKU",
+            "Producto",
+            "Cantidad",
+            "Ubicación",
+            "Usuario",
+            "Ingreso",
+            "Costo",
+            "Ganancia",
+          ],
+        ],
+        body: movimientosRecientes.map((movement) => [
+          formatDateTime(movement.timestamp),
+          movement.action,
+          movement.productSku,
+          movement.productName,
+          movement.quantity,
+          movement.location,
+          movement.user,
+          money(Number(movement.ingreso_total ?? 0)),
+          money(Number(movement.costo_total ?? 0)),
+          money(Number(movement.ganancia ?? 0)),
+        ]),
+        theme: "striped",
+        styles: {
+          fontSize: 7,
+          cellPadding: 1.8,
+        },
+        headStyles: {
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
+        },
       });
     }
+
+    doc.save(getReportFileName("racknova-reporte-inventario", "pdf"));
   };
 
   const downloadExcel = () => {
-    try {
-      const data = generateReportData();
-      
-      // Create workbook
-      const wb = XLSX.utils.book_new();
+    const summary = getSummary();
 
-      // Summary sheet
-      const summaryData = [
-        ['Reporte de Inventario'],
-        [`Fecha: ${data.reportDate}`],
-        [''],
-        ['Métrica', 'Valor'],
-        ['Total de productos', data.summary.totalProducts],
-        ['Slots ocupados', data.summary.occupiedSlots],
-        ['Slots libres', data.summary.freeSlots],
-        ['Total de slots', data.summary.totalSlots],
-        ['Productos con stock bajo', data.summary.lowStockCount]
-      ];
+    const workbook = XLSX.utils.book_new();
 
-      const summaryWS = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, summaryWS, 'Resumen');
+    const resumenData = [
+      ["Reporte", "RackNova - Inventario"],
+      ["Fecha de generación", formatDateTime(new Date())],
+      [],
+      ["Métrica", "Valor"],
+      ["Productos activos", summary.totalProductos],
+      ["Piezas en inventario", summary.totalPiezas],
+      ["Stock bajo", summary.stockBajo],
+      ["Stock alto", summary.stockAlto],
+      ["Próximos a caducar", summary.proximosCaducar],
+      ["Vencidos", summary.vencidos],
+      ["Slots ocupados", summary.slotsOcupados],
+      ["Slots totales", summary.slotsTotales],
+      ["Valor de inventario", summary.valorInventario],
+      ["Ingresos por ventas", summary.ingresos],
+      ["Costos por ventas", summary.costos],
+      ["Ganancia registrada", summary.ganancia],
+    ];
 
-      // Products sheet
-      if (data.products.length > 0) {
-        const productsData = [
-          ['SKU', 'Nombre', 'Cantidad', 'Rack', 'Nivel', 'Slot', 'Ubicación', 'Estado'],
-          ...data.products.map(product => [
-            product?.sku || '',
-            product?.nombre || '',
-            product?.cantidad || '',
-            product?.rack || '',
-            product?.nivel || '',
-            product?.slot || '',
-            product?.ubicacion || '',
-            product?.estado || ''
-          ])
-        ];
+    const resumenSheet = XLSX.utils.aoa_to_sheet(resumenData);
+    XLSX.utils.book_append_sheet(workbook, resumenSheet, "Resumen");
 
-        const productsWS = XLSX.utils.aoa_to_sheet(productsData);
-        XLSX.utils.book_append_sheet(wb, productsWS, 'Productos');
-      }
+    const productosData = products.map((product) => ({
+      Ubicación: getLocationText(product.locationId),
+      SKU: product.sku,
+      Nombre: product.nombre,
+      Descripción: product.descripcion ?? "",
+      Cantidad: product.cantidad,
+      "Costo proveedor": Number(product.costo_proveedor ?? 0),
+      "Precio sugerido": Number(product.precio_venta_sugerido ?? 0),
+      Caducidad: product.caducidad ?? "",
+      "Estado caducidad": getExpirationStatus(product.caducidad),
+      "Stock mínimo": Number(product.stock_minimo ?? 10),
+      "Stock alto": Number(product.stock_alto ?? 30),
+      "Estado stock": getStockStatus(product),
+      "Valor inventario":
+        Number(product.cantidad ?? 0) * Number(product.costo_proveedor ?? 0),
+    }));
 
-      // Low stock sheet
-      if (data.lowStockProducts.length > 0) {
-        const lowStockData = [
-          ['SKU', 'Nombre', 'Cantidad'],
-          ...data.lowStockProducts.map(product => [
-            product.sku,
-            product.nombre,
-            product.cantidad
-          ])
-        ];
+    const productosSheet = XLSX.utils.json_to_sheet(productosData);
+    XLSX.utils.book_append_sheet(workbook, productosSheet, "Productos");
 
-        const lowStockWS = XLSX.utils.aoa_to_sheet(lowStockData);
-        XLSX.utils.book_append_sheet(wb, lowStockWS, 'Stock Bajo');
-      }
+    const movimientosData = movements
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .map((movement) => ({
+        Fecha: formatDateTime(movement.timestamp),
+        Acción: movement.action,
+        SKU: movement.productSku,
+        Producto: movement.productName,
+        Cantidad: movement.quantity,
+        Ubicación: movement.location,
+        Usuario: movement.user,
+        "Costo proveedor": Number(movement.costo_proveedor ?? 0),
+        "Precio venta": Number(movement.precio_venta ?? 0),
+        "Ingreso total": Number(movement.ingreso_total ?? 0),
+        "Costo total": Number(movement.costo_total ?? 0),
+        Ganancia: Number(movement.ganancia ?? 0),
+      }));
 
-      XLSX.writeFile(wb, `reporte-inventario-${new Date().toISOString().split('T')[0]}.xlsx`);
-      
-      toast({
-        title: "Reporte generado",
-        description: "El reporte Excel se ha descargado exitosamente",
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Error al generar el reporte Excel",
-        variant: "destructive",
-      });
-    }
+    const movimientosSheet = XLSX.utils.json_to_sheet(movimientosData);
+    XLSX.utils.book_append_sheet(workbook, movimientosSheet, "Movimientos");
+
+    const stockBajoData = products
+      .filter((product) => {
+        const minimo = Number(product.stock_minimo ?? 10);
+        return product.cantidad <= minimo;
+      })
+      .map((product) => ({
+        SKU: product.sku,
+        Producto: product.nombre,
+        Cantidad: product.cantidad,
+        "Stock mínimo": Number(product.stock_minimo ?? 10),
+        "Stock alto": Number(product.stock_alto ?? 30),
+        Ubicación: getLocationText(product.locationId),
+      }));
+
+    const stockBajoSheet = XLSX.utils.json_to_sheet(stockBajoData);
+    XLSX.utils.book_append_sheet(workbook, stockBajoSheet, "Stock bajo");
+
+    const caducidadesData = products
+      .filter((product) => product.caducidad)
+      .sort((a, b) =>
+        String(a.caducidad).localeCompare(String(b.caducidad))
+      )
+      .map((product) => ({
+        SKU: product.sku,
+        Producto: product.nombre,
+        Cantidad: product.cantidad,
+        Caducidad: product.caducidad,
+        Estado: getExpirationStatus(product.caducidad),
+        Ubicación: getLocationText(product.locationId),
+      }));
+
+    const caducidadesSheet = XLSX.utils.json_to_sheet(caducidadesData);
+    XLSX.utils.book_append_sheet(workbook, caducidadesSheet, "Caducidades");
+
+    XLSX.writeFile(
+      workbook,
+      getReportFileName("racknova-reporte-inventario", "xlsx")
+    );
   };
 
   return {
     downloadPDF,
     downloadExcel,
-    generateReportData
   };
 }
