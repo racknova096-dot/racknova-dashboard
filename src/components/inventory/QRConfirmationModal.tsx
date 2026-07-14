@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
 import {
@@ -21,6 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+
 import {
   formatDateDDMMYYYY,
   formatDateTimeDDMMYYYY,
@@ -63,11 +64,48 @@ const sanitizeFileName = (value: string) =>
 const loadImage = (src: string) =>
   new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
-
     image.onload = () => resolve(image);
     image.onerror = reject;
     image.src = src;
   });
+
+const drawWrappedText = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines = 2
+) => {
+  const words = text.split(" ");
+  let line = "";
+  let currentY = y;
+  let lines = 0;
+
+  for (let index = 0; index < words.length; index++) {
+    const testLine = line + words[index] + " ";
+    const metrics = ctx.measureText(testLine);
+
+    if (metrics.width > maxWidth && index > 0) {
+      lines++;
+
+      if (lines >= maxLines) {
+        ctx.fillText(line.trim() + "...", x, currentY);
+        return currentY;
+      }
+
+      ctx.fillText(line.trim(), x, currentY);
+      line = words[index] + " ";
+      currentY += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+
+  ctx.fillText(line.trim(), x, currentY);
+  return currentY;
+};
 
 export function QRConfirmationModal({
   isOpen,
@@ -75,9 +113,8 @@ export function QRConfirmationModal({
   productData,
 }: QRConfirmationModalProps) {
   const [qrDataUrl, setQrDataUrl] = useState("");
+  const [barcodeDataUrl, setBarcodeDataUrl] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("qr");
-
-  const barcodeRef = useRef<SVGSVGElement | null>(null);
 
   const ubicacionTexto = useMemo(() => {
     if (!productData) return "";
@@ -116,12 +153,12 @@ export function QRConfirmationModal({
   }, [productData, ubicacionTexto]);
 
   useEffect(() => {
-    const generateQRCode = async () => {
+    const generateCodes = async () => {
       if (!productData || !isOpen) return;
 
       try {
-        const dataUrl = await QRCode.toDataURL(readableQRText, {
-          width: 420,
+        const generatedQR = await QRCode.toDataURL(readableQRText, {
+          width: 480,
           margin: 2,
           errorCorrectionLevel: "M",
           color: {
@@ -130,34 +167,35 @@ export function QRConfirmationModal({
           },
         });
 
-        setQrDataUrl(dataUrl);
+        setQrDataUrl(generatedQR);
       } catch (error) {
         console.error("Error generating QR code:", error);
         setQrDataUrl("");
       }
+
+      try {
+        const canvas = document.createElement("canvas");
+
+        JsBarcode(canvas, productData.sku || "SIN-SKU", {
+          format: "CODE128",
+          lineColor: "#0f172a",
+          background: "#ffffff",
+          width: 2,
+          height: 90,
+          displayValue: true,
+          fontSize: 20,
+          margin: 14,
+        });
+
+        setBarcodeDataUrl(canvas.toDataURL("image/png"));
+      } catch (error) {
+        console.error("Error generating barcode:", error);
+        setBarcodeDataUrl("");
+      }
     };
 
-    generateQRCode();
+    generateCodes();
   }, [productData, isOpen, readableQRText]);
-
-  useEffect(() => {
-    if (!productData || !isOpen || !barcodeRef.current) return;
-
-    try {
-      JsBarcode(barcodeRef.current, productData.sku, {
-        format: "CODE128",
-        lineColor: "#0f172a",
-        background: "#ffffff",
-        width: 2,
-        height: 78,
-        displayValue: true,
-        fontSize: 18,
-        margin: 10,
-      });
-    } catch (error) {
-      console.error("Error generating barcode:", error);
-    }
-  }, [productData, isOpen]);
 
   const copyQRText = async () => {
     try {
@@ -183,39 +221,22 @@ export function QRConfirmationModal({
   };
 
   const downloadBarcode = () => {
-    if (!barcodeRef.current || !productData) return;
+    if (!barcodeDataUrl || !productData) return;
 
-    const svg = barcodeRef.current;
-    const serializer = new XMLSerializer();
-    const source = serializer.serializeToString(svg);
-
-    const blob = new Blob([source], {
-      type: "image/svg+xml;charset=utf-8",
-    });
-
-    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
 
-    link.download = `BARCODE_${sanitizeFileName(productData.sku)}.svg`;
-    link.href = url;
+    link.download = `BARCODE_${sanitizeFileName(productData.sku)}.png`;
+    link.href = barcodeDataUrl;
 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
   };
 
   const downloadLabel = async () => {
-    if (!productData || !qrDataUrl || !barcodeRef.current) return;
+    if (!productData || !qrDataUrl || !barcodeDataUrl) return;
 
     try {
-      const serializer = new XMLSerializer();
-      const barcodeSvg = serializer.serializeToString(barcodeRef.current);
-      const barcodeDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-        barcodeSvg
-      )}`;
-
       const [qrImage, barcodeImage] = await Promise.all([
         loadImage(qrDataUrl),
         loadImage(barcodeDataUrl),
@@ -223,7 +244,7 @@ export function QRConfirmationModal({
 
       const canvas = document.createElement("canvas");
       canvas.width = 1100;
-      canvas.height = 680;
+      canvas.height = 700;
 
       const ctx = canvas.getContext("2d");
 
@@ -248,23 +269,35 @@ export function QRConfirmationModal({
 
       ctx.fillStyle = "#0f172a";
       ctx.font = "bold 30px Arial";
-      ctx.fillText(productData.nombre, 55, 160);
+      const lastTitleY = drawWrappedText(
+        ctx,
+        productData.nombre,
+        55,
+        155,
+        640,
+        34,
+        2
+      );
 
       ctx.font = "bold 24px Arial";
-      ctx.fillText(`SKU: ${productData.sku}`, 55, 205);
+      ctx.fillText(`SKU: ${productData.sku}`, 55, lastTitleY + 50);
 
       ctx.font = "20px Arial";
-      ctx.fillText(`Ubicación: ${ubicacionTexto}`, 55, 250);
+      ctx.fillText(`Ubicación: ${ubicacionTexto}`, 55, lastTitleY + 92);
 
       if (productData.cantidad !== undefined) {
-        ctx.fillText(`Cantidad registrada: ${productData.cantidad}`, 55, 290);
+        ctx.fillText(
+          `Cantidad registrada: ${productData.cantidad}`,
+          55,
+          lastTitleY + 132
+        );
       }
 
       if (productData.costoProveedor !== undefined) {
         ctx.fillText(
           `Costo proveedor: ${money(productData.costoProveedor)}`,
           55,
-          330
+          lastTitleY + 172
         );
       }
 
@@ -272,7 +305,7 @@ export function QRConfirmationModal({
         ctx.fillText(
           `Precio sugerido: ${money(productData.precioVentaSugerido)}`,
           55,
-          370
+          lastTitleY + 212
         );
       }
 
@@ -283,7 +316,7 @@ export function QRConfirmationModal({
             : "No aplica"
         }`,
         55,
-        410
+        lastTitleY + 252
       );
 
       ctx.fillStyle = "#64748b";
@@ -291,20 +324,20 @@ export function QRConfirmationModal({
       ctx.fillText(
         `Generado: ${formatDateTimeDDMMYYYY(productData.timestamp)}`,
         55,
-        455
+        lastTitleY + 292
       );
 
-      ctx.drawImage(qrImage, 760, 135, 250, 250);
+      ctx.drawImage(qrImage, 770, 140, 245, 245);
 
       ctx.fillStyle = "#0f172a";
       ctx.font = "bold 18px Arial";
-      ctx.fillText("Código QR", 835, 410);
+      ctx.fillText("Código QR", 845, 415);
 
-      ctx.drawImage(barcodeImage, 85, 505, 560, 120);
+      ctx.drawImage(barcodeImage, 80, 515, 600, 120);
 
       ctx.fillStyle = "#0f172a";
       ctx.font = "bold 18px Arial";
-      ctx.fillText("Código de barras SKU", 260, 650);
+      ctx.fillText("Código de barras SKU", 275, 665);
 
       const labelUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
@@ -324,9 +357,11 @@ export function QRConfirmationModal({
 
   if (!productData) return null;
 
+  const codesReady = Boolean(qrDataUrl && barcodeDataUrl);
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="w-[calc(100vw-1.5rem)] max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Check className="h-5 w-5 text-green-600" />
@@ -334,57 +369,67 @@ export function QRConfirmationModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-4">
-            <Card>
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_330px]">
+          <div className="min-w-0 space-y-4">
+            <Card className="min-w-0">
               <CardContent className="pt-6 space-y-3">
                 <div className="flex items-center gap-2">
                   <Package className="h-5 w-5 text-blue-600" />
-                  <h3 className="font-semibold">Información del producto</h3>
+                  <h3 className="font-semibold">
+                    Información del producto
+                  </h3>
                 </div>
 
                 <div className="grid gap-3 text-sm">
-                  <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="min-w-0 rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground">SKU</p>
-                    <p className="font-semibold">{productData.sku}</p>
+                    <p className="break-words font-semibold">
+                      {productData.sku}
+                    </p>
                   </div>
 
-                  <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="min-w-0 rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground">Producto</p>
-                    <p className="font-semibold">{productData.nombre}</p>
+                    <p className="break-words font-semibold">
+                      {productData.nombre}
+                    </p>
                   </div>
 
                   {productData.descripcion && (
-                    <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="min-w-0 rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground">
                         Descripción
                       </p>
-                      <p className="font-semibold">{productData.descripcion}</p>
+                      <p className="break-words font-semibold">
+                        {productData.descripcion}
+                      </p>
                     </div>
                   )}
 
-                  <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="min-w-0 rounded-lg border bg-muted/30 p-3">
                     <p className="text-xs text-muted-foreground">Ubicación</p>
-                    <p className="font-semibold">{ubicacionTexto}</p>
+                    <p className="break-words font-semibold">
+                      {ubicacionTexto}
+                    </p>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="min-w-0 rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground">
                         Caducidad
                       </p>
-                      <p className="font-semibold">
+                      <p className="break-words font-semibold">
                         {productData.caducidad
                           ? formatDateDDMMYYYY(productData.caducidad)
                           : "No aplica"}
                       </p>
                     </div>
 
-                    <div className="rounded-lg border bg-muted/30 p-3">
+                    <div className="min-w-0 rounded-lg border bg-muted/30 p-3">
                       <p className="text-xs text-muted-foreground">
                         Generado
                       </p>
-                      <p className="font-semibold">
+                      <p className="break-words font-semibold">
                         {formatDateTimeDDMMYYYY(productData.timestamp)}
                       </p>
                     </div>
@@ -393,11 +438,11 @@ export function QRConfirmationModal({
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="min-w-0">
               <CardContent className="pt-6">
                 <h3 className="font-semibold mb-2">Contenido del QR</h3>
 
-                <pre className="max-h-52 overflow-auto rounded-lg border bg-muted/40 p-3 text-xs whitespace-pre-wrap">
+                <pre className="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-muted/40 p-3 text-[11px] sm:text-xs">
                   {readableQRText}
                 </pre>
 
@@ -411,7 +456,7 @@ export function QRConfirmationModal({
             </Card>
           </div>
 
-          <Card>
+          <Card className="min-w-0">
             <CardContent className="pt-6 space-y-4">
               <div className="grid grid-cols-2 gap-2">
                 <Button
@@ -431,41 +476,48 @@ export function QRConfirmationModal({
                 </Button>
               </div>
 
-              <div className="rounded-xl border bg-white p-4 min-h-[320px] flex items-center justify-center">
+              <div className="flex min-h-[300px] items-center justify-center rounded-xl border bg-white p-3">
                 {viewMode === "qr" ? (
                   qrDataUrl ? (
                     <img
                       src={qrDataUrl}
                       alt={`QR ${productData.sku}`}
-                      className="h-72 w-72 object-contain"
+                      className="h-auto max-h-72 w-full max-w-72 object-contain"
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       Generando QR...
                     </p>
                   )
+                ) : barcodeDataUrl ? (
+                  <img
+                    src={barcodeDataUrl}
+                    alt={`Código de barras ${productData.sku}`}
+                    className="h-auto w-full max-w-[300px] object-contain"
+                  />
                 ) : (
-                  <div className="w-full overflow-x-auto">
-                    <svg ref={barcodeRef} className="mx-auto" />
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Generando código de barras...
+                  </p>
                 )}
               </div>
 
               <p className="text-center text-xs text-muted-foreground">
-                El QR contiene datos en formato legible. El código de barras usa
-                el SKU del producto.
+                El QR contiene datos legibles. El código de barras usa el SKU
+                del producto.
               </p>
 
               <div className="grid gap-2">
                 <Button
                   variant="outline"
                   onClick={viewMode === "qr" ? downloadQR : downloadBarcode}
+                  disabled={!codesReady}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Descargar {viewMode === "qr" ? "QR" : "código de barras"}
                 </Button>
 
-                <Button onClick={downloadLabel}>
+                <Button onClick={downloadLabel} disabled={!codesReady}>
                   <FileDown className="h-4 w-4 mr-2" />
                   Descargar etiqueta completa
                 </Button>
