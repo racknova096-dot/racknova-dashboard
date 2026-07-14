@@ -1,6 +1,33 @@
-//modificacion inicia
-import React, { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  BarChart3,
+  Boxes,
+  PieChart as PieChartIcon,
+  ShoppingCart,
+  TrendingUp,
+} from "lucide-react";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
 import {
   Select,
   SelectContent,
@@ -8,124 +35,185 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { useInventory } from "@/context/InventoryContext";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
-import { TrendingUp, BarChart3, PieChart as PieChartIcon } from "lucide-react";
+
+type TimeFilter = "7days" | "30days" | "90days";
+
+const money = (value: number) =>
+  new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+  }).format(Number(value || 0));
+
+const toDate = (value: string | Date) => {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+};
+
+const formatDay = (value: Date) => {
+  const day = String(value.getDate()).padStart(2, "0");
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+
+  return `${day}/${month}`;
+};
+
+const isInsideTimeFilter = (value: string | Date, filter: TimeFilter) => {
+  const date = toDate(value);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+
+  const from = new Date(today);
+
+  if (filter === "7days") {
+    from.setDate(today.getDate() - 7);
+  }
+
+  if (filter === "30days") {
+    from.setDate(today.getDate() - 30);
+  }
+
+  if (filter === "90days") {
+    from.setDate(today.getDate() - 90);
+  }
+
+  from.setHours(0, 0, 0, 0);
+
+  return date >= from && date <= today;
+};
+
+const getTimeFilterLabel = (filter: TimeFilter) => {
+  if (filter === "7days") return "Últimos 7 días";
+  if (filter === "30days") return "Últimos 30 días";
+  return "Últimos 90 días";
+};
 
 export function RealTimeCharts() {
-  const [timeFilter, setTimeFilter] = useState<"7days" | "30days" | "90days">(
-    "7days"
-  );
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("7days");
 
-  // 👇 Ahora tomamos 'movements' directamente del contexto
   const { locations, products, movements } = useInventory();
 
-  // Datos para gráfica de ocupación de racks
+  const filteredMovements = useMemo(() => {
+    return movements.filter((movement) =>
+      isInsideTimeFilter(movement.timestamp, timeFilter)
+    );
+  }, [movements, timeFilter]);
+
   const rackOccupationData = useMemo(() => {
     const racks = ["A", "B", "C", "D", "E"];
+
     return racks.map((rack) => {
-      const rackLocations = locations.filter((loc) => loc.rack === rack);
-      const occupiedSlots = rackLocations.filter((loc) =>
-        products.some((product) => product.locationId === loc.id)
+      const rackLocations = locations.filter((location) => location.rack === rack);
+
+      const occupiedSlots = rackLocations.filter((location) =>
+        products.some((product) => product.locationId === location.id)
       ).length;
+
       const freeSlots = rackLocations.length - occupiedSlots;
+
       const percentage =
         rackLocations.length > 0
-          ? (occupiedSlots / rackLocations.length) * 100
+          ? Math.round((occupiedSlots / rackLocations.length) * 100)
           : 0;
 
       return {
         name: `Rack ${rack}`,
         occupied: occupiedSlots,
         free: freeSlots,
-        percentage: Math.round(percentage),
+        percentage,
       };
     });
   }, [locations, products]);
 
-  // ✅ Movimientos por día (se actualiza con cada cambio en movements)
   const movementData = useMemo(() => {
-    const days = timeFilter === "7days" ? 7 : timeFilter === "30days" ? 30 : 90;
-    const today = new Date();
-    const dailyData = [];
+    const days =
+      timeFilter === "7days" ? 7 : timeFilter === "30days" ? 30 : 90;
 
-    for (let i = days - 1; i >= 0; i--) {
+    const today = new Date();
+
+    return Array.from({ length: days }, (_, index) => {
       const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toLocaleDateString("es-ES", {
-        month: "short",
-        day: "numeric",
+      date.setDate(today.getDate() - (days - 1 - index));
+
+      const dayMovements = movements.filter((movement) => {
+        const movementDate = toDate(movement.timestamp);
+
+        return (
+          movementDate.getFullYear() === date.getFullYear() &&
+          movementDate.getMonth() === date.getMonth() &&
+          movementDate.getDate() === date.getDate()
+        );
       });
 
-      const dayMovements = movements.filter(
-        (movement) =>
-          new Date(movement.timestamp).toDateString() === date.toDateString()
-      );
+      const ingresos = dayMovements
+        .filter((movement) => movement.action === "Ingreso")
+        .reduce((total, movement) => total + Number(movement.quantity ?? 0), 0);
 
-      const ingresos = dayMovements.filter(
-        (m) => m.action === "Ingreso"
-      ).length;
-      const egresos = dayMovements.filter((m) => m.action === "Egreso").length;
+      const egresos = dayMovements
+        .filter((movement) => movement.action === "Egreso")
+        .reduce((total, movement) => total + Number(movement.quantity ?? 0), 0);
 
-      dailyData.push({
-        date: dateStr,
+      return {
+        date: formatDay(date),
         ingresos,
         egresos,
         total: ingresos + egresos,
-      });
-    }
-
-    return dailyData;
+      };
+    });
   }, [movements, timeFilter]);
 
-  // ✅ Top 5 productos más movidos (también depende de movements)
-  const topProductsData = useMemo(() => {
-    const productMovements = new Map<
+  const topSoldProductsData = useMemo(() => {
+    const productSales = new Map<
       string,
-      { name: string; count: number; sku: string }
+      {
+        name: string;
+        sku: string;
+        quantity: number;
+        income: number;
+        profit: number;
+        movements: number;
+      }
     >();
 
-    movements.forEach((movement) => {
-      const key = movement.productSku;
-      if (productMovements.has(key)) {
-        const existing = productMovements.get(key)!;
-        productMovements.set(key, {
-          ...existing,
-          count: existing.count + 1,
-        });
-      } else {
-        productMovements.set(key, {
+    filteredMovements
+      .filter((movement) => movement.action === "Egreso")
+      .forEach((movement) => {
+        const key = movement.productSku;
+
+        const current = productSales.get(key) ?? {
           name: movement.productName,
           sku: movement.productSku,
-          count: 1,
-        });
-      }
-    });
+          quantity: 0,
+          income: 0,
+          profit: 0,
+          movements: 0,
+        };
 
-    return Array.from(productMovements.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [movements]);
+        current.quantity += Number(movement.quantity ?? 0);
+        current.income += Number(movement.ingreso_total ?? 0);
+        current.profit += Number(movement.ganancia ?? 0);
+        current.movements += 1;
 
-  // Gráfica de dona (ocupación general)
+        productSales.set(key, current);
+      });
+
+    return Array.from(productSales.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5)
+      .map((item) => ({
+        ...item,
+        shortName:
+          item.name.length > 18 ? `${item.name.slice(0, 18)}...` : item.name,
+      }));
+  }, [filteredMovements]);
+
   const overallOccupationData = useMemo(() => {
     const totalSlots = locations.length;
-    const occupiedSlots = locations.filter((loc) =>
-      products.some((product) => product.locationId === loc.id)
+
+    const occupiedSlots = locations.filter((location) =>
+      products.some((product) => product.locationId === location.id)
     ).length;
+
     const freeSlots = totalSlots - occupiedSlots;
 
     return [
@@ -142,6 +230,21 @@ export function RealTimeCharts() {
     ];
   }, [locations, products]);
 
+  const totalSoldPieces = topSoldProductsData.reduce(
+    (total, product) => total + product.quantity,
+    0
+  );
+
+  const totalSoldIncome = topSoldProductsData.reduce(
+    (total, product) => total + product.income,
+    0
+  );
+
+  const totalSoldProfit = topSoldProductsData.reduce(
+    (total, product) => total + product.profit,
+    0
+  );
+
   const COLORS = {
     occupied: "hsl(var(--slot-occupied))",
     free: "hsl(var(--slot-free))",
@@ -149,191 +252,242 @@ export function RealTimeCharts() {
     egresos: "hsl(var(--slot-occupied))",
     primary: "hsl(var(--primary))",
     accent: "hsl(var(--accent))",
+    warning: "hsl(var(--warning))",
+    profit: "hsl(var(--profit))",
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-          <p className="font-medium">{label}</p>
+    if (!active || !payload || !payload.length) return null;
+
+    return (
+      <div className="rounded-lg border bg-background p-3 shadow-lg">
+        <p className="mb-2 font-semibold">{label}</p>
+
+        <div className="space-y-1">
           {payload.map((entry: any, index: number) => (
-            <p key={index} style={{ color: entry.color }}>
+            <p key={index} className="text-sm">
+              <span
+                className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
               {entry.name}: {entry.value}
             </p>
           ))}
         </div>
-      );
-    }
-    return null;
+      </div>
+    );
+  };
+
+  const SalesTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || !payload.length) return null;
+
+    const data = payload[0].payload;
+
+    return (
+      <div className="rounded-lg border bg-background p-3 shadow-lg">
+        <p className="font-semibold">{data.name}</p>
+        <p className="text-xs text-muted-foreground">SKU: {data.sku}</p>
+
+        <div className="mt-2 space-y-1 text-sm">
+          <p>Piezas vendidas: {data.quantity}</p>
+          <p>Ingreso total: {money(data.income)}</p>
+          <p>Ganancia: {money(data.profit)}</p>
+          <p>Movimientos de salida: {data.movements}</p>
+        </div>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <TrendingUp className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold">
-          Análisis de Inventario en Tiempo Real
-        </h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <BarChart3 className="h-6 w-6" />
+            Análisis de Inventario en Tiempo Real
+          </h2>
+
+          <p className="text-sm text-muted-foreground">
+            Visualiza ocupación, movimientos y productos con mayor salida.
+          </p>
+        </div>
+
+        <div className="w-full sm:w-56">
+          <Select
+            value={timeFilter}
+            onValueChange={(value) => setTimeFilter(value as TimeFilter)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Periodo" />
+            </SelectTrigger>
+
+            <SelectContent>
+              <SelectItem value="7days">Últimos 7 días</SelectItem>
+              <SelectItem value="30days">Últimos 30 días</SelectItem>
+              <SelectItem value="90days">Últimos 90 días</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Ocupación general */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium flex items-center gap-2">
-              <PieChartIcon className="h-4 w-4" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <PieChartIcon className="h-5 w-5" />
               Ocupación General de Slots
             </CardTitle>
           </CardHeader>
+
           <CardContent>
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={overallOccupationData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={5}
+                    innerRadius={65}
+                    outerRadius={105}
+                    paddingAngle={4}
                     dataKey="value"
                   >
-                    {overallOccupationData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    {overallOccupationData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
                     ))}
                   </Pie>
+
                   <Tooltip
                     content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        const total = overallOccupationData.reduce(
-                          (sum, item) => sum + item.value,
-                          0
-                        );
-                        const percentage = ((data.value / total) * 100).toFixed(
-                          1
-                        );
-                        return (
-                          <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium">{data.name}</p>
-                            <p style={{ color: data.color }}>
-                              {data.value} slots ({percentage}%)
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
+                      if (!active || !payload || !payload.length) return null;
+
+                      const data = payload[0].payload;
+                      const total = overallOccupationData.reduce(
+                        (sum, item) => sum + item.value,
+                        0
+                      );
+
+                      const percentage =
+                        total > 0 ? ((data.value / total) * 100).toFixed(1) : 0;
+
+                      return (
+                        <div className="rounded-lg border bg-background p-3 shadow-lg">
+                          <p className="font-semibold">{data.name}</p>
+                          <p className="text-sm">
+                            {data.value} slots ({percentage}%)
+                          </p>
+                        </div>
+                      );
                     }}
                   />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex justify-center gap-4 mt-4">
-              {overallOccupationData.map((item, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
+
+            <div className="mt-4 flex justify-center gap-6">
+              {overallOccupationData.map((item) => (
+                <div key={item.name} className="flex items-center gap-2">
+                  <span
+                    className="h-3 w-3 rounded-full"
                     style={{ backgroundColor: item.color }}
                   />
-                  <span className="text-sm">{item.name}</span>
+                  <span className="text-sm">
+                    {item.name}: {item.value}
+                  </span>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Ocupación por Rack */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Ocupación por Rack (%)
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Boxes className="h-5 w-5" />
+              Ocupación por Rack
             </CardTitle>
           </CardHeader>
+
           <CardContent>
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={rackOccupationData}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                  />
-                  <XAxis
-                    dataKey="name"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                  />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                  <Tooltip content={CustomTooltip} />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip content={<CustomTooltip />} />
                   <Bar
-                    dataKey="percentage"
-                    fill={COLORS.primary}
+                    dataKey="occupied"
+                    name="Ocupados"
+                    stackId="rack"
+                    fill={COLORS.occupied}
+                    radius={[0, 0, 4, 4]}
+                  />
+                  <Bar
+                    dataKey="free"
+                    name="Libres"
+                    stackId="rack"
+                    fill={COLORS.free}
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-5">
+              {rackOccupationData.map((rack) => (
+                <div
+                  key={rack.name}
+                  className="rounded-lg border bg-muted/30 p-3 text-center"
+                >
+                  <p className="text-sm font-medium">{rack.name}</p>
+                  <p className="text-lg font-bold">{rack.percentage}%</p>
+                  <p className="text-xs text-muted-foreground">
+                    {rack.occupied} ocupados
+                  </p>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
+      </div>
 
-        {/* Movimientos por Día */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
               Movimientos por Día
             </CardTitle>
-            <Select
-              value={timeFilter}
-              onValueChange={(value: any) => setTimeFilter(value)}
-            >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7days">7 días</SelectItem>
-                <SelectItem value="30days">30 días</SelectItem>
-                <SelectItem value="90days">90 días</SelectItem>
-              </SelectContent>
-            </Select>
+
+            <p className="text-sm text-muted-foreground">
+              Periodo: {getTimeFilterLabel(timeFilter)}
+            </p>
           </CardHeader>
+
           <CardContent>
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={movementData}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                  />
-                  <XAxis
-                    dataKey="date"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                  />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                  <Tooltip content={CustomTooltip} />
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip content={<CustomTooltip />} />
                   <Line
                     type="monotone"
                     dataKey="ingresos"
+                    name="Piezas ingresadas"
                     stroke={COLORS.ingresos}
-                    strokeWidth={2}
-                    dot={{
-                      fill: COLORS.ingresos,
-                      strokeWidth: 2,
-                      r: 4,
-                    }}
-                    name="Ingresos"
+                    strokeWidth={3}
+                    dot={{ r: 3 }}
                   />
                   <Line
                     type="monotone"
                     dataKey="egresos"
+                    name="Piezas egresadas"
                     stroke={COLORS.egresos}
-                    strokeWidth={2}
-                    dot={{
-                      fill: COLORS.egresos,
-                      strokeWidth: 2,
-                      r: 4,
-                    }}
-                    name="Egresos"
+                    strokeWidth={3}
+                    dot={{ r: 3 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -341,64 +495,87 @@ export function RealTimeCharts() {
           </CardContent>
         </Card>
 
-        {/* Top 5 Productos Más Movidos */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base font-medium">
-              Top 5 Productos Más Movidos
+        <Card className="racknova-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              Top 5 Productos por Piezas Vendidas
             </CardTitle>
+
+            <p className="text-sm text-muted-foreground">
+              Solo considera salidas tipo Egreso en{" "}
+              {getTimeFilterLabel(timeFilter).toLowerCase()}.
+            </p>
           </CardHeader>
+
           <CardContent>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topProductsData} layout="horizontal">
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                  />
-                  <XAxis
-                    type="number"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
-                    width={80}
-                  />
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-                            <p className="font-medium">{data.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              SKU: {data.sku}
-                            </p>
-                            <p style={{ color: payload[0].color }}>
-                              Movimientos: {data.count}
-                            </p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Bar
-                    dataKey="count"
-                    fill={COLORS.accent}
-                    radius={[0, 4, 4, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            {topSoldProductsData.length === 0 ? (
+              <div className="flex h-80 items-center justify-center rounded-xl border bg-muted/30 text-center text-muted-foreground">
+                No hay ventas registradas en este periodo.
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Piezas vendidas
+                    </p>
+                    <p className="text-xl font-bold">{totalSoldPieces}</p>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Ingreso top 5
+                    </p>
+                    <p className="text-xl font-bold">
+                      {money(totalSoldIncome)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-muted/30 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Ganancia top 5
+                    </p>
+                    <p
+                      className={`text-xl font-bold ${
+                        totalSoldProfit >= 0 ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {money(totalSoldProfit)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={topSoldProductsData}
+                      layout="vertical"
+                      margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" />
+                      <YAxis
+                        type="category"
+                        dataKey="shortName"
+                        width={120}
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip content={<SalesTooltip />} />
+                      <Bar
+                        dataKey="quantity"
+                        name="Piezas vendidas"
+                        fill={COLORS.primary}
+                        radius={[0, 6, 6, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
     </div>
   );
 }
-//modificacion cierra
