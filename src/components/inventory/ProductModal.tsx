@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { DateInputMX } from "@/components/ui/date-input-mx";
 import {
   Dialog,
   DialogContent,
@@ -535,13 +536,12 @@ const handleBuscarFisicamente = async () => {
                 </Label>
               </div>
 
-              <Input
-                id="caducidad"
-                type="date"
-                value={caducidad}
-                onChange={(e) => setCaducidad(e.target.value)}
-                disabled={caducidadNoAplica}
-              />
+              <DateInputMX
+  value={caducidad}
+  onChange={setCaducidad}
+  disabled={caducidadNoAplica}
+  placeholder="dd/mm/aaaa"
+/>
             </div>
 
             <div className="space-y-2">
