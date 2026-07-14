@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { DateInputMX } from "@/components/ui/date-input-mx";
 import { BlockingLoader } from "@/components/ui/blocking-loader";
-import { API_URL } from "@/config";
+import { apiFetch } from "@/lib/api";
 
 import {
   Card,
@@ -264,11 +264,9 @@ export function InventoryForm() {
       try {
         setCatalogLoading(true);
 
-        const response = await fetch(
-          `${API_URL}/catalogo/productos/buscar?query=${encodeURIComponent(
-            searchTerm
-          )}`
-        );
+        const response = await apiFetch(
+  `/catalogo/productos/buscar?query=${encodeURIComponent(searchTerm)}`
+);
 
         if (!response.ok) {
           setCatalogResults([]);
@@ -303,11 +301,9 @@ export function InventoryForm() {
       try {
         setLotsLoading(true);
 
-        const response = await fetch(
-          `${API_URL}/productos/${encodeURIComponent(
-            selectedInventoryProduct.sku
-          )}/lotes`
-        );
+        const response = await apiFetch(
+  `/productos/${encodeURIComponent(selectedInventoryProduct.sku)}/lotes`
+);
 
         if (!response.ok) {
           setActiveLots([]);
@@ -347,11 +343,9 @@ export function InventoryForm() {
     }
 
     try {
-      const response = await fetch(
-        `${API_URL}/catalogo/productos/buscar?query=${encodeURIComponent(
-          cleanTerm
-        )}`
-      );
+    const response = await apiFetch(
+  `/catalogo/productos/buscar?query=${encodeURIComponent(cleanTerm)}`
+);
 
       if (!response.ok) {
         if (options?.showToast) {
