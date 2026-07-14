@@ -1,4 +1,3 @@
-import { apiFetch } from "@/lib/api";
 import React, {
   createContext,
   useCallback,
@@ -9,7 +8,6 @@ import React, {
   ReactNode,
 } from "react";
 
-import { API_URL } from "@/config";
 import {
   Product,
   Location,
@@ -18,9 +16,11 @@ import {
   Nivel,
   SlotStatus,
 } from "@/types/inventory";
+
 import { MovementRecord } from "@/types/movement";
 import { SaleData } from "@/types/finance";
 import { canModifyInventory } from "@/lib/roles";
+import { apiFetch } from "@/lib/api";
 
 /**
  * MODO PRUEBA:
@@ -35,6 +35,11 @@ interface PhysicalSearchResult {
   comando?: string;
   mensaje: string;
   mqttDisabled?: boolean;
+}
+
+interface PendingDeletion {
+  locationId: string;
+  venta?: SaleData;
 }
 
 interface InventoryContextType {
@@ -64,11 +69,6 @@ interface InventoryContextType {
   buscarFisicamente: (locationId: string) => Promise<PhysicalSearchResult>;
 }
 
-interface PendingDeletion {
-  locationId: string;
-  venta?: SaleData;
-}
-
 const InventoryContext = createContext<InventoryContextType | undefined>(
   undefined
 );
@@ -79,7 +79,7 @@ const generateLocations = (): Location[] => {
 
   racks.forEach((rack) => {
     [1, 2, 3].forEach((nivel) => {
-      Array.from({ length: 6 }, (_, i) => i + 1).forEach((slot) => {
+      Array.from({ length: 6 }, (_, index) => index + 1).forEach((slot) => {
         generatedLocations.push({
           id: `${rack}-${nivel}-${slot}`,
           rack,
@@ -94,28 +94,43 @@ const generateLocations = (): Location[] => {
   return generatedLocations;
 };
 
-const mapBackendProduct = (p: any): Product => {
-  const rack = p.rack ?? "A";
-  const nivel = p.nivel ?? "1";
-  const slot = p.slot ?? "1";
+const mapBackendProduct = (product: any): Product => {
+  const rack = product.rack ?? "A";
+  const nivel = product.nivel ?? "1";
+  const slot = product.slot ?? "1";
 
   return {
-    id: String(p.id_producto ?? p.id ?? `${p.sku}-${rack}-${nivel}-${slot}`),
+    id: String(
+      product.id_producto ?? product.id ?? `${product.sku}-${rack}-${nivel}-${slot}`
+    ),
     locationId: `${rack}-${nivel}-${slot}`,
+    sku: product.sku,
+    nombre: product.nombre,
+    descripcion: product.descripcion ?? null,
+    cantidad: Number(product.cantidad ?? 0),
+    costo_proveedor: Number(product.costo_proveedor ?? 0),
+    precio_venta_sugerido: Number(product.precio_venta_sugerido ?? 0),
+    caducidad: product.caducidad ?? null,
+    stock_minimo: Number(product.stock_minimo ?? 10),
+    stock_alto: Number(product.stock_alto ?? 30),
+  };
+};
 
-    sku: p.sku,
-    nombre: p.nombre,
-    descripcion: p.descripcion ?? null,
-
-    cantidad: Number(p.cantidad ?? 0),
-
-    costo_proveedor: Number(p.costo_proveedor ?? 0),
-    precio_venta_sugerido: Number(p.precio_venta_sugerido ?? 0),
-
-    caducidad: p.caducidad ?? null,
-
-    stock_minimo: Number(p.stock_minimo ?? 10),
-    stock_alto: Number(p.stock_alto ?? 30),
+const mapBackendMovement = (movement: any): MovementRecord => {
+  return {
+    id: String(movement.id_mov ?? movement.id ?? Date.now()),
+    action: movement.accion,
+    productSku: movement.sku,
+    productName: movement.producto,
+    quantity: Number(movement.cantidad ?? 0),
+    location: movement.ubicacion,
+    user: movement.usuario,
+    timestamp: new Date(movement.fecha),
+    costo_proveedor: Number(movement.costo_proveedor ?? 0),
+    precio_venta: Number(movement.precio_venta ?? 0),
+    ingreso_total: Number(movement.ingreso_total ?? 0),
+    costo_total: Number(movement.costo_total ?? 0),
+    ganancia: Number(movement.ganancia ?? 0),
   };
 };
 
@@ -134,13 +149,14 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<Location[]>(generateLocations());
   const [movements, setMovements] = useState<MovementRecord[]>([]);
-  const [isProductsLoading, setIsProductsLoading] = useState(true);
-const [isMovementsLoading, setIsMovementsLoading] = useState(true);
-
-const isInventoryLoading = isProductsLoading || isMovementsLoading;
   const [pendingDeletions, setPendingDeletions] = useState<PendingDeletion[]>(
     []
   );
+
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
+  const [isMovementsLoading, setIsMovementsLoading] = useState(true);
+
+  const isInventoryLoading = isProductsLoading || isMovementsLoading;
 
   const productsRef = useRef(products);
   const pendingProductsRef = useRef(pendingProducts);
@@ -169,17 +185,9 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
     const usuario = localStorage.getItem("usuario");
     const rol = localStorage.getItem("rol");
 
-    if (nombre && nombre.trim()) {
-      return nombre.trim();
-    }
-
-    if (usuario && usuario.trim()) {
-      return usuario.trim();
-    }
-
-    if (rol && rol.trim()) {
-      return rol.trim();
-    }
+    if (nombre && nombre.trim()) return nombre.trim();
+    if (usuario && usuario.trim()) return usuario.trim();
+    if (rol && rol.trim()) return rol.trim();
 
     return "Sistema";
   };
@@ -187,79 +195,69 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
   useEffect(() => {
     const loadInitialProducts = async () => {
       try {
-        const resp = await fetch(`${API_URL}/productos`);
+        setIsProductsLoading(true);
 
-        if (!resp.ok) {
-          throw new Error(`Error HTTP: ${resp.status}`);
+        const response = await apiFetch("/productos");
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP: ${response.status}`);
         }
 
-        const data = await resp.json();
-        const loaded: Product[] = data.map(mapBackendProduct);
+        const data = await response.json();
+        const loadedProducts: Product[] = data.map(mapBackendProduct);
 
-        setProducts(loaded);
-        productsRef.current = loaded;
+        setProducts(loadedProducts);
+        productsRef.current = loadedProducts;
 
         setLocations((prev) =>
-          prev.map((loc) => {
-            const hayProducto = loaded.some(
-              (prod) => prod.locationId === loc.id
+          prev.map((location) => {
+            const hasProduct = loadedProducts.some(
+              (product) => product.locationId === location.id
             );
 
-            return hayProducto
-              ? { ...loc, status: "ocupado" }
-              : { ...loc, status: "libre" };
+            return hasProduct
+              ? { ...location, status: "ocupado" }
+              : { ...location, status: "libre" };
           })
         );
 
-        console.log("Inventario inicial cargado:", loaded);
-          } catch (err) {
-      console.error("❌ Error cargando inventario inicial:", err);
-    } finally {
-      setIsProductsLoading(false);
-    }
-  };
+        console.log("Inventario inicial cargado:", loadedProducts);
+      } catch (error) {
+        console.error("❌ Error cargando inventario inicial:", error);
+      } finally {
+        setIsProductsLoading(false);
+      }
+    };
 
-  loadInitialProducts();
-}, []);
+    loadInitialProducts();
+  }, []);
 
   useEffect(() => {
     const loadMovements = async () => {
       try {
-        const resp = await fetch(`${API_URL}/movimientos`);
+        setIsMovementsLoading(true);
 
-        if (!resp.ok) {
+        const response = await apiFetch("/movimientos");
+
+        if (!response.ok) {
           throw new Error("Error cargando movimientos");
         }
 
-        const data = await resp.json();
+        const data = await response.json();
+        const mappedMovements: MovementRecord[] = data.map(mapBackendMovement);
 
-        const mapped: MovementRecord[] = data.map((m: any) => ({
-          id: String(m.id_mov ?? m.id ?? Date.now()),
-          action: m.accion,
-          productSku: m.sku,
-          productName: m.producto,
-          quantity: Number(m.cantidad ?? 0),
-          location: m.ubicacion,
-          user: m.usuario,
-          timestamp: new Date(m.fecha),
-          costo_proveedor: Number(m.costo_proveedor ?? 0),
-          precio_venta: Number(m.precio_venta ?? 0),
-          ingreso_total: Number(m.ingreso_total ?? 0),
-          costo_total: Number(m.costo_total ?? 0),
-          ganancia: Number(m.ganancia ?? 0),
-        }));
+        setMovements(mappedMovements);
 
-        setMovements(mapped);
-        console.log("Movimientos cargados desde backend:", mapped);
-          } catch (err) {
-      console.error("❌ Error al cargar movimientos:", err);
-    } finally {
-      setIsMovementsLoading(false);
-    }
-  };
+        console.log("Movimientos cargados desde backend:", mappedMovements);
+      } catch (error) {
+        console.error("❌ Error al cargar movimientos:", error);
+      } finally {
+        setIsMovementsLoading(false);
+      }
+    };
 
-  loadMovements();
-}, []);
+    loadMovements();
+  }, []);
 
   const addMovement = async (
     movement: Omit<MovementRecord, "id" | "timestamp">
@@ -276,11 +274,8 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
     setMovements((prev) => [...prev, newMovement]);
 
     try {
-      const resp = await fetch(`${API_URL}/movimientos`, {
+      const response = await apiFetch("/movimientos", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           accion: newMovement.action,
           sku: newMovement.productSku,
@@ -296,8 +291,8 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         }),
       });
 
-      if (!resp.ok) {
-        console.error("❌ Error guardando movimiento:", resp.status);
+      if (!response.ok) {
+        console.error("❌ Error guardando movimiento:", response.status);
       }
     } catch (error) {
       console.error("❌ Error enviando movimiento al backend:", error);
@@ -311,37 +306,37 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
     }
 
     try {
-      const productoExistente = products.find((p) => {
-        const skuActual = p.sku.trim().toLowerCase();
-        const nombreActual = p.nombre.trim().toLowerCase();
-        const skuNuevo = product.sku.trim().toLowerCase();
-        const nombreNuevo = product.nombre.trim().toLowerCase();
+      const existingProduct = products.find((item) => {
+        const currentSku = item.sku.trim().toLowerCase();
+        const currentName = item.nombre.trim().toLowerCase();
+        const newSku = product.sku.trim().toLowerCase();
+        const newName = product.nombre.trim().toLowerCase();
 
-        return skuActual === skuNuevo || nombreActual === nombreNuevo;
+        return currentSku === newSku || currentName === newName;
       });
 
-      const finalLocationId = productoExistente?.locationId ?? product.locationId;
+      const finalLocationId = existingProduct?.locationId ?? product.locationId;
 
-      const location = locations.find((loc) => loc.id === finalLocationId);
+      const location = locations.find((item) => item.id === finalLocationId);
 
       if (!location) {
         alert("❌ La ubicación seleccionada no existe.");
         return;
       }
 
-      const esRestock = Boolean(productoExistente);
+      const isRestock = Boolean(existingProduct);
 
-      if (!esRestock) {
+      if (!isRestock) {
         if (location.status !== "libre") {
           alert("❌ El slot no está libre.");
           return;
         }
 
-        const slotOcupado = products.some(
-          (p) => p.locationId === finalLocationId
+        const slotOccupied = products.some(
+          (item) => item.locationId === finalLocationId
         );
 
-        if (slotOcupado) {
+        if (slotOccupied) {
           alert("❌ Este slot ya tiene un producto. Primero elimínalo.");
           return;
         }
@@ -349,7 +344,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
 
       const [rack, nivelStr, slotStr] = finalLocationId.split("-");
 
-      const productoBackend = {
+      const backendProduct = {
         sku: product.sku,
         nombre: product.nombre,
         descripcion: product.descripcion ?? null,
@@ -366,7 +361,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
 
       const newProduct: Product = {
         ...product,
-        id: productoExistente?.id ?? Date.now().toString(),
+        id: existingProduct?.id ?? Date.now().toString(),
         locationId: finalLocationId,
         descripcion: product.descripcion ?? null,
         costo_proveedor: Number(product.costo_proveedor ?? 0),
@@ -377,29 +372,26 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
       };
 
       if (TEST_MODE_NO_MQTT) {
-        const resp = await fetch(`${API_URL}/productos`, {
+        const response = await apiFetch("/productos", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(productoBackend),
+          body: JSON.stringify(backendProduct),
         });
 
-        if (!resp.ok) {
-          const errorText = await resp.text();
-          console.error("❌ Error guardando producto:", resp.status, errorText);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("❌ Error guardando producto:", response.status, errorText);
           alert("No se pudo guardar el producto en backend.");
           return;
         }
 
-        const saved = await resp.json();
+        const saved = await response.json();
         const savedProduct = mapBackendProduct(saved);
 
         setProducts((prev) => {
           const updated = [
             ...prev.filter(
-              (p) =>
-                p.sku.trim().toLowerCase() !==
+              (item) =>
+                item.sku.trim().toLowerCase() !==
                 savedProduct.sku.trim().toLowerCase()
             ),
             savedProduct,
@@ -410,10 +402,10 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         });
 
         setLocations((prev) =>
-          prev.map((loc) =>
-            loc.id === savedProduct.locationId
-              ? { ...loc, status: "ocupado" }
-              : loc
+          prev.map((item) =>
+            item.id === savedProduct.locationId
+              ? { ...item, status: "ocupado" }
+              : item
           )
         );
 
@@ -436,7 +428,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         });
 
         console.log(
-          esRestock
+          isRestock
             ? "[MODO PRUEBA] Restock registrado sin MQTT:"
             : "[MODO PRUEBA] Producto registrado sin MQTT:",
           savedProduct
@@ -466,11 +458,11 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
       const topicCorrecto = nivelToTopic[nivel];
       const pin = pinMap[slot];
 
-      if (pin && topicCorrecto && !esRestock) {
+      if (pin && topicCorrecto && !isRestock) {
         const comando = `p${pin}c`;
         await sendMQTT(topicCorrecto, comando);
         console.log(`Enviado a ESP32 → ${topicCorrecto} → ${comando}`);
-      } else if (esRestock) {
+      } else if (isRestock) {
         console.log("Restock detectado. Se conserva ubicación actual:", finalLocationId);
       } else {
         console.warn("⚠️ No existe pin o topic para esta ubicación:", finalLocationId);
@@ -482,7 +474,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         return updated;
       });
 
-      if (!esRestock) {
+      if (!isRestock) {
         startProductPlacement(finalLocationId);
       }
     } catch (error) {
@@ -497,7 +489,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
       return;
     }
 
-    const originalProduct = products.find((p) => p.id === id);
+    const originalProduct = products.find((item) => item.id === id);
 
     if (!originalProduct) {
       console.warn("Producto no encontrado para actualizar:", id);
@@ -525,39 +517,46 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
 
     const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
 
-    const resp = await fetch(`${API_URL}/productos/${originalProduct.sku}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        sku: updatedProduct.sku,
-        nombre: updatedProduct.nombre,
-        descripcion: updatedProduct.descripcion ?? null,
-        cantidad: updatedProduct.cantidad,
-        rack,
-        nivel: nivelStr,
-        slot: slotStr,
-        costo_proveedor: Number(updatedProduct.costo_proveedor ?? 0),
-        precio_venta_sugerido: Number(
-          updatedProduct.precio_venta_sugerido ?? 0
-        ),
-        caducidad: updatedProduct.caducidad || null,
-        stock_minimo: Number(updatedProduct.stock_minimo ?? 10),
-        stock_alto: Number(updatedProduct.stock_alto ?? 30),
-      }),
-    });
+    const response = await apiFetch(
+      `/productos/${encodeURIComponent(originalProduct.sku)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          sku: updatedProduct.sku,
+          nombre: updatedProduct.nombre,
+          descripcion: updatedProduct.descripcion ?? null,
+          cantidad: updatedProduct.cantidad,
+          rack,
+          nivel: nivelStr,
+          slot: slotStr,
+          costo_proveedor: Number(updatedProduct.costo_proveedor ?? 0),
+          precio_venta_sugerido: Number(
+            updatedProduct.precio_venta_sugerido ?? 0
+          ),
+          caducidad: updatedProduct.caducidad || null,
+          stock_minimo: Number(updatedProduct.stock_minimo ?? 10),
+          stock_alto: Number(updatedProduct.stock_alto ?? 30),
+        }),
+      }
+    );
 
-    if (!resp.ok) {
-      const errorText = await resp.text();
-      console.error("❌ Error actualizando producto:", resp.status, errorText);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Error actualizando producto:", response.status, errorText);
       throw new Error("No se pudo actualizar el producto en backend.");
     }
 
-    const saved = await resp.json();
+    const saved = await response.json();
     const savedProduct = mapBackendProduct(saved);
 
-    setProducts((prev) => prev.map((p) => (p.id === id ? savedProduct : p)));
+    setProducts((prev) => {
+      const updated = prev.map((item) =>
+        item.id === id ? savedProduct : item
+      );
+
+      productsRef.current = updated;
+      return updated;
+    });
 
     if (updates.cantidad !== undefined) {
       await addMovement({
@@ -586,7 +585,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
     }
 
     try {
-      const product = products.find((p) => p.sku === sku);
+      const product = products.find((item) => item.sku === sku);
 
       if (!product) {
         console.warn(`⚠️ Producto con SKU ${sku} no encontrado localmente`);
@@ -612,13 +611,10 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         const costoTotal = costoProveedor * cantidadVendida;
         const ganancia = ingresoTotal - costoTotal;
 
-        const salidaResp = await fetch(
-          `${API_URL}/productos/sku/${product.sku}/salida`,
+        const response = await apiFetch(
+          `/productos/sku/${encodeURIComponent(product.sku)}/salida`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
             body: JSON.stringify({
               cantidad_vendida: cantidadVendida,
               precio_venta: precioVenta,
@@ -630,11 +626,11 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
           }
         );
 
-        if (!salidaResp.ok) {
-          const errorText = await salidaResp.text();
+        if (!response.ok) {
+          const errorText = await response.text();
           console.error(
             "❌ Error guardando salida financiera:",
-            salidaResp.status,
+            response.status,
             errorText
           );
           alert("No se pudo registrar la salida en backend.");
@@ -657,22 +653,24 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
 
         if (cantidadVendida === product.cantidad) {
           setProducts((prev) => {
-            const updated = prev.filter((p) => p.sku !== sku);
+            const updated = prev.filter((item) => item.sku !== sku);
             productsRef.current = updated;
             return updated;
           });
 
           setLocations((prev) =>
-            prev.map((loc) =>
-              loc.id === product.locationId ? { ...loc, status: "libre" } : loc
+            prev.map((item) =>
+              item.id === product.locationId
+                ? { ...item, status: "libre" }
+                : item
             )
           );
         } else {
           setProducts((prev) => {
-            const updated = prev.map((p) =>
-              p.sku === sku
-                ? { ...p, cantidad: p.cantidad - cantidadVendida }
-                : p
+            const updated = prev.map((item) =>
+              item.sku === sku
+                ? { ...item, cantidad: item.cantidad - cantidadVendida }
+                : item
             );
 
             productsRef.current = updated;
@@ -725,13 +723,11 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
       };
 
       setPendingDeletions((prev) => {
-        const yaExiste = prev.some(
+        const exists = prev.some(
           (item) => item.locationId === product.locationId
         );
 
-        if (yaExiste) {
-          return prev;
-        }
+        if (exists) return prev;
 
         const updated = [...prev, pendingDeletion];
         pendingDeletionsRef.current = updated;
@@ -739,8 +735,8 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
       });
 
       setLocations((prev) =>
-        prev.map((loc) =>
-          loc.id === product.locationId ? { ...loc, status: "quitando" } : loc
+        prev.map((item) =>
+          item.id === product.locationId ? { ...item, status: "quitando" } : item
         )
       );
 
@@ -759,8 +755,8 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
       return;
     }
 
-    const rackProducts = products.filter((p) => {
-      const location = locations.find((loc) => loc.id === p.locationId);
+    const rackProducts = products.filter((product) => {
+      const location = locations.find((item) => item.id === product.locationId);
       return location?.rack === rack;
     });
 
@@ -781,48 +777,64 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
     });
 
     const rackLocationIds = locations
-      .filter((loc) => loc.rack === rack)
-      .map((loc) => loc.id);
+      .filter((location) => location.rack === rack)
+      .map((location) => location.id);
 
     setProducts((prev) =>
-      prev.filter((p) => !rackLocationIds.includes(p.locationId))
+      prev.filter((product) => !rackLocationIds.includes(product.locationId))
     );
 
     setLocations((prev) =>
-      prev.map((loc) => (loc.rack === rack ? { ...loc, status: "libre" } : loc))
+      prev.map((location) =>
+        location.rack === rack ? { ...location, status: "libre" } : location
+      )
     );
   };
 
-  const getProductByLocation = (locationId: string) =>
-    products.find((p) => p.locationId === locationId);
+  const getProductByLocation = (locationId: string) => {
+    return products.find((product) => product.locationId === locationId);
+  };
 
-  const getProductsWithLocation = (): ProductWithLocation[] =>
-    products.map((product) => {
-      const location = locations.find((loc) => loc.id === product.locationId)!;
-      return { ...product, location };
+  const getProductsWithLocation = (): ProductWithLocation[] => {
+    return products.map((product) => {
+      const location = locations.find((item) => item.id === product.locationId)!;
+
+      return {
+        ...product,
+        location,
+      };
     });
+  };
 
   const getTotalProducts = () => products.length;
 
-  const getLowStockProducts = () =>
-    products.filter((p) => p.cantidad <= Number(p.stock_minimo ?? 10));
-
-  const getMovements = () =>
-    [...movements].sort(
-      (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
-    );
-
-  const updateSlotStatus = (locationId: string, status: SlotStatus) => {
-    setLocations((prev) =>
-      prev.map((loc) => (loc.id === locationId ? { ...loc, status } : loc))
+  const getLowStockProducts = () => {
+    return products.filter(
+      (product) => product.cantidad <= Number(product.stock_minimo ?? 10)
     );
   };
 
-  const startProductPlacement = (locationId: string) =>
-    updateSlotStatus(locationId, "en_proceso");
+  const getMovements = () => {
+    return [...movements].sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
+    );
+  };
 
-  const confirmProductPlacement = (locationId: string) =>
+  const updateSlotStatus = (locationId: string, status: SlotStatus) => {
+    setLocations((prev) =>
+      prev.map((location) =>
+        location.id === locationId ? { ...location, status } : location
+      )
+    );
+  };
+
+  const startProductPlacement = (locationId: string) => {
+    updateSlotStatus(locationId, "en_proceso");
+  };
+
+  const confirmProductPlacement = (locationId: string) => {
     updateSlotStatus(locationId, "ocupado");
+  };
 
   const buscarFisicamente = async (
     locationId: string
@@ -892,9 +904,7 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
   };
 
   const handleMQTT = useCallback((topic: string, data: any) => {
-    if (TEST_MODE_NO_MQTT) {
-      return;
-    }
+    if (TEST_MODE_NO_MQTT) return;
 
     console.log("MQTT recibido:", topic, data);
 
@@ -944,8 +954,8 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         const slotId = `A-${level}-${slotNumber}`;
 
         setLocations((prev) =>
-          prev.map((loc) => {
-            if (loc.id !== slotId) return loc;
+          prev.map((location) => {
+            if (location.id !== slotId) return location;
 
             let newStatus: SlotStatus = "libre";
 
@@ -954,12 +964,12 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
             else if (estado === "quitando") newStatus = "quitando";
             else if (estado === "libre") newStatus = "libre";
 
-            if (loc.status !== newStatus) {
-              console.log(`Slot ${slotId}: ${loc.status} → ${newStatus}`);
-              return { ...loc, status: newStatus };
+            if (location.status !== newStatus) {
+              console.log(`Slot ${slotId}: ${location.status} → ${newStatus}`);
+              return { ...location, status: newStatus };
             }
 
-            return loc;
+            return location;
           })
         );
       });
@@ -1007,9 +1017,9 @@ const isInventoryLoading = isProductsLoading || isMovementsLoading;
         locations,
         movements,
 
-    isProductsLoading,
-    isMovementsLoading,
-    isInventoryLoading,
+        isProductsLoading,
+        isMovementsLoading,
+        isInventoryLoading,
 
         addProduct,
         updateProduct,
