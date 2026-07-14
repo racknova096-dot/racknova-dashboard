@@ -41,6 +41,10 @@ interface InventoryContextType {
   locations: Location[];
   movements: MovementRecord[];
 
+  isProductsLoading: boolean;
+  isMovementsLoading: boolean;
+  isInventoryLoading: boolean;
+
   addProduct: (product: Omit<Product, "id">) => Promise<void>;
   updateProduct: (id: string, product: Partial<Product>) => Promise<void>;
   deleteProduct: (sku: string, venta?: SaleData) => Promise<void>;
@@ -129,6 +133,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [pendingProducts, setPendingProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<Location[]>(generateLocations());
   const [movements, setMovements] = useState<MovementRecord[]>([]);
+  const [isProductsLoading, setIsProductsLoading] = useState(true);
+const [isMovementsLoading, setIsMovementsLoading] = useState(true);
+
+const isInventoryLoading = isProductsLoading || isMovementsLoading;
   const [pendingDeletions, setPendingDeletions] = useState<PendingDeletion[]>(
     []
   );
@@ -203,13 +211,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         );
 
         console.log("Inventario inicial cargado:", loaded);
-      } catch (err) {
-        console.error("❌ Error cargando inventario inicial:", err);
-      }
-    };
+          } catch (err) {
+      console.error("❌ Error cargando inventario inicial:", err);
+    } finally {
+      setIsProductsLoading(false);
+    }
+  };
 
-    loadInitialProducts();
-  }, []);
+  loadInitialProducts();
+}, []);
 
   useEffect(() => {
     const loadMovements = async () => {
@@ -240,13 +250,15 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
 
         setMovements(mapped);
         console.log("Movimientos cargados desde backend:", mapped);
-      } catch (err) {
-        console.error("❌ Error al cargar movimientos:", err);
-      }
-    };
+          } catch (err) {
+      console.error("❌ Error al cargar movimientos:", err);
+    } finally {
+      setIsMovementsLoading(false);
+    }
+  };
 
-    loadMovements();
-  }, []);
+  loadMovements();
+}, []);
 
   const addMovement = async (
     movement: Omit<MovementRecord, "id" | "timestamp">
@@ -993,6 +1005,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         products,
         locations,
         movements,
+
+    isProductsLoading,
+    isMovementsLoading,
+    isInventoryLoading,
 
         addProduct,
         updateProduct,
