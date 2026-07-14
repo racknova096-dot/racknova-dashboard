@@ -2,17 +2,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
-import { InventoryProvider } from "@/context/InventoryContext";
+import { InventoryProvider, useInventory } from "@/context/InventoryContext";
 import { Navigation } from "@/components/layout/Navigation";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { RackNovaIAAssistant } from "@/components/ia/RackNovaIAAssistant";
+import { BlockingLoader } from "@/components/ui/blocking-loader";
 import { canUseIA } from "@/lib/roles";
 
 import Finanzas from "./pages/Finanzas";
@@ -34,6 +30,7 @@ const queryClient = new QueryClient();
 
 function AppContent() {
   const location = useLocation();
+  const { isInventoryLoading } = useInventory();
 
   const isLoginPage = location.pathname === "/login";
   const showIAAssistant = !isLoginPage && canUseIA();
@@ -42,6 +39,12 @@ function AppContent() {
     <div className="min-h-screen bg-background">
       {!isLoginPage && <Navigation />}
       {showIAAssistant && <RackNovaIAAssistant />}
+
+      <BlockingLoader
+        show={!isLoginPage && isInventoryLoading}
+        title="Cargando base de datos"
+        description="Estamos cargando inventario y movimientos. Las acciones estarán bloqueadas hasta terminar."
+      />
 
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -161,7 +164,6 @@ const App = () => {
           <InventoryProvider>
             <Toaster />
             <Sonner />
-
             <BrowserRouter>
               <AppContent />
             </BrowserRouter>
