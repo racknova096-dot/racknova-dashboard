@@ -20,7 +20,7 @@ import {
 import { MovementRecord } from "@/types/movement";
 import { SaleData } from "@/types/finance";
 import { canModifyInventory } from "@/lib/roles";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, getAuthToken } from "@/lib/api";
 
 /**
  * MODO PRUEBA:
@@ -192,12 +192,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return "Sistema";
   };
 
-  useEffect(() => {
-    const loadInitialProducts = async () => {
-      try {
-        setIsProductsLoading(true);
+ useEffect(() => {
+  const loadInitialProducts = async () => {
+    const token = getAuthToken();
 
-        const response = await apiFetch("/productos");
+    if (!token) {
+      setIsProductsLoading(false);
+      return;
+    }
+
+    try {
+      setIsProductsLoading(true);
+
+      const response = await apiFetch("/productos");
 
         if (!response.ok) {
           throw new Error(`Error HTTP: ${response.status}`);
@@ -232,13 +239,19 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     loadInitialProducts();
   }, []);
 
-  useEffect(() => {
-    const loadMovements = async () => {
-      try {
-        setIsMovementsLoading(true);
+ useEffect(() => {
+  const loadMovements = async () => {
+    const token = getAuthToken();
 
-        const response = await apiFetch("/movimientos");
+    if (!token) {
+      setIsMovementsLoading(false);
+      return;
+    }
 
+    try {
+      setIsMovementsLoading(true);
+
+      const response = await apiFetch("/movimientos");
         if (!response.ok) {
           throw new Error("Error cargando movimientos");
         }
