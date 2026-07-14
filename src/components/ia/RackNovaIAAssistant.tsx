@@ -1,6 +1,6 @@
 import { canUseIA } from "@/lib/roles";
 import React, { useState } from "react";
-import { API_URL } from "@/config";
+import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Bot,
@@ -59,15 +59,12 @@ export function RackNovaIAAssistant() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/ia/inventario`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          pregunta: preguntaFinal,
-        }),
-      });
+      const response = await apiFetch("/ia/inventario", {
+  method: "POST",
+  body: JSON.stringify({
+    pregunta,
+  }),
+});
 
       const data = await response.json();
 
