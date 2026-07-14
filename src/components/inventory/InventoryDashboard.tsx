@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { canModifyInventory, isAdmin } from "@/lib/roles";
-import { API_URL } from "@/config";
+import { apiFetch } from "@/lib/api";
 
 import {
   Card,
@@ -152,12 +152,12 @@ export function InventoryDashboard() {
     if (!confirmar) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/admin/clear-all?confirm=BORRAR_TODO_RACKNOVA`,
-        {
-          method: "DELETE",
-        }
-      );
+     const response = await apiFetch(
+  "/admin/clear-all?confirm=BORRAR_TODO_RACKNOVA",
+  {
+    method: "DELETE",
+  }
+);
 
       if (!response.ok) {
         const errorText = await response.text();
