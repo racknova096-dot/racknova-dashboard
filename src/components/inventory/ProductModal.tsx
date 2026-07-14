@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { DateInputMX } from "@/components/ui/date-input-mx";
+import { BlockingLoader } from "@/components/ui/blocking-loader";
+
 import {
   Dialog,
   DialogContent,
@@ -8,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +18,13 @@ import { useInventory } from "@/context/InventoryContext";
 import { Location, Product } from "@/types/inventory";
 import { useToast } from "@/hooks/use-toast";
 import { QRConfirmationModal } from "./QRConfirmationModal";
-import { AlertTriangle, Percent, LocateFixed } from "lucide-react";
+
+import {
+  AlertTriangle,
+  Percent,
+  LocateFixed,
+  Loader2,
+} from "lucide-react";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -30,8 +39,8 @@ function getDaysToExpiration(dateValue?: string | null) {
 
   const cleanDate = dateValue.slice(0, 10);
   const expirationDate = new Date(`${cleanDate}T00:00:00`);
-
   const today = new Date();
+
   const todayClean = new Date(
     today.getFullYear(),
     today.getMonth(),
@@ -39,15 +48,14 @@ function getDaysToExpiration(dateValue?: string | null) {
   );
 
   const diffMs = expirationDate.getTime() - todayClean.getTime();
+
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 }
 
 function getDiscountSuggestion(daysToExpiration: number | null) {
   if (daysToExpiration === null) return 0;
 
-  // Producto vencido: no se sugiere descuento.
   if (daysToExpiration < 0) return 0;
-
   if (daysToExpiration <= 5) return 40;
   if (daysToExpiration <= 10) return 30;
   if (daysToExpiration <= 15) return 20;
@@ -85,6 +93,11 @@ export function ProductModal({
   const [precioVenta, setPrecioVenta] = useState("");
 
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSelling, setIsSelling] = useState(false);
+  const [isSearchingPhysical, setIsSearchingPhysical] = useState(false);
+
   const [lastAddedProduct, setLastAddedProduct] = useState<{
     sku: string;
     nombre: string;
@@ -92,16 +105,21 @@ export function ProductModal({
     nivel: number;
     slot: number;
     timestamp: Date;
+    descripcion?: string | null;
+    cantidad?: number;
+    costoProveedor?: number;
+    precioVentaSugerido?: number;
+    caducidad?: string | null;
   } | null>(null);
 
- const {
-  products,
-  addProduct,
-  updateProduct,
-  deleteProduct,
-  buscarFisicamente,
-} = useInventory();
-  
+  const {
+    products,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    buscarFisicamente,
+  } = useInventory();
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -138,22 +156,19 @@ export function ProductModal({
     return getDiscountSuggestion(diasCaducidad);
   }, [diasCaducidad]);
 
- const precioBaseDescuento = Number(
-  precioVenta || product?.precio_venta_sugerido || 0
-);
+  const precioBaseDescuento = Number(
+    precioVenta || product?.precio_venta_sugerido || 0
+  );
 
-const precioConDescuento =
-  precioBaseDescuento > 0 && descuentoSugerido > 0
-    ? precioBaseDescuento * (1 - descuentoSugerido / 100)
-    : 0;
+  const precioConDescuento =
+    precioBaseDescuento > 0 && descuentoSugerido > 0
+      ? precioBaseDescuento * (1 - descuentoSugerido / 100)
+      : 0;
 
   const cantidadSalidaNum = Number(cantidadVendida || 0);
-
   const ingresoEstimado = Number(precioVenta || 0) * cantidadSalidaNum;
-
   const costoSalidaEstimado =
     Number(product?.costo_proveedor ?? 0) * cantidadSalidaNum;
-
   const gananciaEstimada = ingresoEstimado - costoSalidaEstimado;
 
   const recuperacionConDescuento =
@@ -173,10 +188,26 @@ const precioConDescuento =
   const productoVencido =
     product && diasCaducidad !== null && diasCaducidad < 0;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateBaseFields = () => {
+    if (!location) {
+      toast({
+        title: "Ubicación no disponible",
+        description: "No se encontró la ubicación del slot.",
+        variant: "destructive",
+      });
 
-    if (!location) return;
+      return false;
+    }
+
+    if (!sku.trim() || !nombre.trim()) {
+      toast({
+        title: "Error",
+        description: "El SKU y el nombre son obligatorios.",
+        variant: "destructive",
+      });
+
+      return false;
+    }
 
     const cantidadNum = parseInt(cantidad);
 
@@ -187,7 +218,7 @@ const precioConDescuento =
         variant: "destructive",
       });
 
-      return;
+      return false;
     }
 
     const costoProveedorNum = parseFloat(costoProveedor);
@@ -199,7 +230,7 @@ const precioConDescuento =
         variant: "destructive",
       });
 
-      return;
+      return false;
     }
 
     const precioVentaSugeridoNum = parseFloat(precioVentaSugerido);
@@ -211,7 +242,7 @@ const precioConDescuento =
         variant: "destructive",
       });
 
-      return;
+      return false;
     }
 
     const stockMinimoNum =
@@ -224,58 +255,87 @@ const precioConDescuento =
         variant: "destructive",
       });
 
-      return;
+      return false;
     }
 
     const stockAltoNum =
-  stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
+      stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
 
-if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
-  toast({
-    title: "Error",
-    description: "El stock alto debe ser mayor al stock crítico.",
-    variant: "destructive",
-  });
-  return;
-}
+    if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
+      toast({
+        title: "Error",
+        description: "El stock alto debe ser mayor al stock crítico.",
+        variant: "destructive",
+      });
 
-    const caducidadValue = caducidadNoAplica || !caducidad ? null : caducidad;
+      return false;
+    }
 
-    if (mode === "add") {
-      const skuDuplicado = products.some(
-        (p) => p.sku.toLowerCase() === sku.toLowerCase()
-      );
+    return true;
+  };
 
-      if (skuDuplicado) {
-        toast({
-          title: "SKU duplicado",
-          description: `El SKU "${sku}" ya existe en el inventario.`,
-          variant: "destructive",
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (isSaving) return;
+    if (!validateBaseFields()) return;
+    if (!location) return;
+
+    const cantidadNum = parseInt(cantidad);
+    const costoProveedorNum = parseFloat(costoProveedor);
+    const precioVentaSugeridoNum = parseFloat(precioVentaSugerido);
+
+    const stockMinimoNum =
+      stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
+
+    const stockAltoNum =
+      stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
+
+    const caducidadValue =
+      caducidadNoAplica || !caducidad ? null : caducidad;
+
+    try {
+      setIsSaving(true);
+
+      if (mode === "add") {
+        const skuDuplicado = products.some(
+          (item) => item.sku.toLowerCase() === sku.trim().toLowerCase()
+        );
+
+        if (skuDuplicado) {
+          toast({
+            title: "SKU duplicado",
+            description: `El SKU "${sku}" ya existe en el inventario.`,
+            variant: "destructive",
+          });
+
+          return;
+        }
+
+        await addProduct({
+          locationId: location.id,
+          sku: sku.trim(),
+          nombre: nombre.trim(),
+          cantidad: cantidadNum,
+          costo_proveedor: costoProveedorNum,
+          precio_venta_sugerido: precioVentaSugeridoNum,
+          caducidad: caducidadValue,
+          stock_minimo: stockMinimoNum,
+          stock_alto: stockAltoNum,
         });
 
-        return;
-      }
-
-      try {
-        await addProduct({
-  locationId: location.id,
-  sku,
-  nombre,
-  cantidad: cantidadNum,
-  costo_proveedor: costoProveedorNum,
-  precio_venta_sugerido: precioVentaSugeridoNum,
-  caducidad: caducidadValue,
-  stock_minimo: stockMinimoNum,
-  stock_alto: stockAltoNum,
-});
-
         setLastAddedProduct({
-          sku,
-          nombre,
+          sku: sku.trim(),
+          nombre: nombre.trim(),
           rack: location.rack,
           nivel: location.nivel,
           slot: location.slot,
           timestamp: new Date(),
+          descripcion: product?.descripcion ?? null,
+          cantidad: cantidadNum,
+          costoProveedor: costoProveedorNum,
+          precioVentaSugerido: precioVentaSugeridoNum,
+          caducidad: caducidadValue,
         });
 
         setShowQRConfirmation(true);
@@ -284,24 +344,15 @@ if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
           title: "Producto agregado",
           description: `${nombre} se guardó correctamente.`,
         });
-      } catch (error) {
-        console.error("Error guardando producto:", error);
 
-        toast({
-          title: "Error",
-          description: "No se pudo guardar el producto.",
-          variant: "destructive",
-        });
-
+        onClose();
         return;
       }
-    }
 
-    if (mode === "edit" && product) {
-      try {
+      if (mode === "edit" && product) {
         await updateProduct(product.id, {
-          sku,
-          nombre,
+          sku: sku.trim(),
+          nombre: nombre.trim(),
           cantidad: cantidadNum,
           costo_proveedor: costoProveedorNum,
           precio_venta_sugerido: precioVentaSugeridoNum,
@@ -314,24 +365,27 @@ if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
           title: "Producto actualizado",
           description: `${nombre} actualizado exitosamente.`,
         });
-      } catch (error) {
-        console.error("Error actualizando producto:", error);
 
-        toast({
-          title: "Error",
-          description: "No se pudo actualizar el producto.",
-          variant: "destructive",
-        });
-
-        return;
+        onClose();
       }
-    }
+    } catch (error) {
+      console.error("Error guardando producto:", error);
 
-    onClose();
+      toast({
+        title: "Error",
+        description:
+          mode === "add"
+            ? "No se pudo guardar el producto."
+            : "No se pudo actualizar el producto.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDelete = () => {
-    if (!product) return;
+    if (!product || isSelling) return;
 
     setCantidadVendida("1");
     setPrecioVenta(Number(product.precio_venta_sugerido ?? 0).toString());
@@ -339,7 +393,7 @@ if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
   };
 
   const confirmSale = async () => {
-    if (!product) return;
+    if (!product || isSelling) return;
 
     const cantidadNum = Number(cantidadVendida);
     const precioNum = Number(precioVenta);
@@ -375,6 +429,8 @@ if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
     }
 
     try {
+      setIsSelling(true);
+
       await deleteProduct(product.sku, {
         cantidad_vendida: cantidadNum,
         precio_venta: precioNum,
@@ -395,216 +451,302 @@ if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
         description: "No se pudo registrar la salida.",
         variant: "destructive",
       });
+    } finally {
+      setIsSelling(false);
     }
   };
-const handleBuscarFisicamente = async () => {
-  if (!location) {
-    toast({
-      title: "Ubicación no disponible",
-      description: "No se encontró la ubicación del producto.",
-      variant: "destructive",
-    });
-    return;
-  }
 
-  const result = await buscarFisicamente(location.id);
+  const handleBuscarFisicamente = async () => {
+    if (isSearchingPhysical) return;
 
-  toast({
-    title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
-    description: result.mensaje,
-    variant: result.ok ? "default" : "destructive",
-  });
-};
+    if (!location) {
+      toast({
+        title: "Ubicación no disponible",
+        description: "No se encontró la ubicación del producto.",
+        variant: "destructive",
+      });
+
+      return;
+    }
+
+    try {
+      setIsSearchingPhysical(true);
+
+      const result = await buscarFisicamente(location.id);
+
+      toast({
+        title: result.ok ? "Buscar físicamente" : "No se pudo buscar",
+        description: result.mensaje,
+        variant: result.ok ? "default" : "destructive",
+      });
+    } catch (error) {
+      console.error("Error buscando físicamente:", error);
+
+      toast({
+        title: "Error",
+        description: "No se pudo enviar el comando al rack.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearchingPhysical(false);
+    }
+  };
+
   return (
     <>
+      <BlockingLoader
+        show={isSaving}
+        title={mode === "add" ? "Guardando producto" : "Actualizando producto"}
+        description="Estamos enviando la información a la base de datos. No repitas la acción."
+      />
+
+      <BlockingLoader
+        show={isSelling}
+        title="Registrando salida"
+        description="Estamos actualizando inventario, ventas y movimientos."
+      />
+
+      <BlockingLoader
+        show={isSearchingPhysical}
+        title="Buscando físicamente"
+        description="Estamos enviando el comando al rack."
+      />
+
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {mode === "add" ? "Agregar Producto" : "Editar Producto"}
             </DialogTitle>
 
-            {location && (
-              <DialogDescription>
-                Slot: {location.rack}-{location.nivel}-{location.slot}
-              </DialogDescription>
-            )}
+            <DialogDescription>
+              {location && (
+                <>
+                  Slot: {location.rack}-{location.nivel}-{location.slot}
+                </>
+              )}
+            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="sku">SKU</Label>
-
-              <Input
-                id="sku"
-                value={sku}
-                onChange={(e) => setSku(e.target.value)}
-                placeholder="Ingrese el SKU"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre del Producto</Label>
-
-              <Input
-                id="nombre"
-                value={nombre}
-                onChange={(e) => setNombre(e.target.value)}
-                placeholder="Ingrese el nombre"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="cantidad">Cantidad</Label>
-
-              <Input
-                id="cantidad"
-                type="number"
-                value={cantidad}
-                onChange={(e) => setCantidad(e.target.value)}
-                placeholder="Ingrese la cantidad"
-                min="1"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="costoProveedor">Costo proveedor unitario</Label>
-
-              <Input
-                id="costoProveedor"
-                type="number"
-                value={costoProveedor}
-                onChange={(e) => setCostoProveedor(e.target.value)}
-                placeholder="Ej: 60.00"
-                min="0"
-                step="0.01"
-                required
-              />
-
-              <p className="text-xs text-muted-foreground">
-                Costo real de compra por unidad.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="precioVentaSugerido">
-                Precio de venta sugerido
-              </Label>
-
-              <Input
-                id="precioVentaSugerido"
-                type="number"
-                value={precioVentaSugerido}
-                onChange={(e) => setPrecioVentaSugerido(e.target.value)}
-                placeholder="Ej: 120.00"
-                min="0"
-                step="0.01"
-                required
-              />
-
-              <p className="text-xs text-muted-foreground">
-                Se cargará automáticamente al registrar salida, pero se podrá
-                modificar manualmente.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="caducidad">Caducidad</Label>
-
-              <div className="flex items-center gap-2">
-                <input
-                  id="caducidadNoAplica"
-                  type="checkbox"
-                  checked={caducidadNoAplica}
-                  onChange={(e) => {
-                    setCaducidadNoAplica(e.target.checked);
-
-                    if (e.target.checked) {
-                      setCaducidad("");
-                    }
-                  }}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="sku">SKU</Label>
+                <Input
+                  id="sku"
+                  value={sku}
+                  onChange={(event) => setSku(event.target.value)}
+                  placeholder="Ingrese el SKU"
+                  required
+                  disabled={isSaving || isSelling}
                 />
-
-                <Label
-                  htmlFor="caducidadNoAplica"
-                  className="text-sm font-normal"
-                >
-                  No aplica
-                </Label>
               </div>
 
-              <DateInputMX
-  value={caducidad}
-  onChange={setCaducidad}
-  disabled={caducidadNoAplica}
-  placeholder="dd/mm/aaaa"
-/>
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre del Producto</Label>
+                <Input
+                  id="nombre"
+                  value={nombre}
+                  onChange={(event) => setNombre(event.target.value)}
+                  placeholder="Ingrese el nombre"
+                  required
+                  disabled={isSaving || isSelling}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cantidad">Cantidad</Label>
+                <Input
+                  id="cantidad"
+                  type="number"
+                  value={cantidad}
+                  onChange={(event) => setCantidad(event.target.value)}
+                  placeholder="Ingrese la cantidad"
+                  min="1"
+                  required
+                  disabled={isSaving || isSelling}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="costoProveedor">Costo proveedor unitario</Label>
+                <Input
+                  id="costoProveedor"
+                  type="number"
+                  value={costoProveedor}
+                  onChange={(event) => setCostoProveedor(event.target.value)}
+                  placeholder="Ej: 60.00"
+                  min="0"
+                  step="0.01"
+                  required
+                  disabled={isSaving || isSelling}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Costo real de compra por unidad.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="precioVentaSugerido">
+                  Precio de venta sugerido
+                </Label>
+                <Input
+                  id="precioVentaSugerido"
+                  type="number"
+                  value={precioVentaSugerido}
+                  onChange={(event) =>
+                    setPrecioVentaSugerido(event.target.value)
+                  }
+                  placeholder="Ej: 120.00"
+                  min="0"
+                  step="0.01"
+                  required
+                  disabled={isSaving || isSelling}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Se cargará automáticamente al registrar salida, pero se podrá
+                  modificar manualmente.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Label>Caducidad</Label>
+
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={caducidadNoAplica}
+                      disabled={isSaving || isSelling}
+                      onChange={(event) => {
+                        setCaducidadNoAplica(event.target.checked);
+
+                        if (event.target.checked) {
+                          setCaducidad("");
+                        }
+                      }}
+                    />
+                    No aplica
+                  </label>
+                </div>
+
+                <DateInputMX
+                  value={caducidad}
+                  onChange={setCaducidad}
+                  disabled={caducidadNoAplica || isSaving || isSelling}
+                  placeholder="dd/mm/aaaa"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="stockMinimo">Stock crítico personalizado</Label>
+                <Input
+                  id="stockMinimo"
+                  type="number"
+                  value={stockMinimo}
+                  onChange={(event) => setStockMinimo(event.target.value)}
+                  placeholder="Opcional. Por defecto: 10"
+                  min="1"
+                  disabled={isSaving || isSelling}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Si lo dejas vacío, el sistema usará 10. El producto será
+                  crítico cuando la cantidad sea menor a este valor.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="stockAlto">Stock alto personalizado</Label>
+                <Input
+                  id="stockAlto"
+                  type="number"
+                  value={stockAlto}
+                  onChange={(event) => setStockAlto(event.target.value)}
+                  placeholder="Opcional. Por defecto: stock crítico x 3"
+                  min="1"
+                  disabled={isSaving || isSelling}
+                />
+                <p className="text-xs text-muted-foreground">
+                  El producto se marcará como stock alto cuando la cantidad sea
+                  mayor o igual a este valor.
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="stockMinimo">Stock crítico personalizado</Label>
+            <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {mode === "edit" && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleDelete}
+                    disabled={isSaving || isSelling}
+                  >
+                    {isSelling ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Procesando...
+                      </>
+                    ) : (
+                      "Eliminar / Salida"
+                    )}
+                  </Button>
+                )}
 
-              <Input
-                id="stockMinimo"
-                type="number"
-                value={stockMinimo}
-                onChange={(e) => setStockMinimo(e.target.value)}
-                placeholder="Opcional. Por defecto: 10"
-                min="1"
-              />
+                {product && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleBuscarFisicamente}
+                    disabled={isSearchingPhysical || isSaving || isSelling}
+                  >
+                    {isSearchingPhysical ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Buscando...
+                      </>
+                    ) : (
+                      <>
+                        <LocateFixed className="mr-2 h-4 w-4" />
+                        Buscar físicamente
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
 
-              <p className="text-xs text-muted-foreground">
-                Si lo dejas vacío, el sistema usará 10. El producto será crítico
-                cuando la cantidad sea menor a este valor.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-  <Label>Stock alto personalizado</Label>
-  <Input
-    type="number"
-    value={stockAlto}
-    onChange={(e) => setStockAlto(e.target.value)}
-    placeholder="Opcional. Por defecto: stock crítico x 3"
-    min="1"
-  />
-  <p className="text-xs text-muted-foreground">
-    El producto se marcará como stock alto cuando la cantidad sea mayor o igual
-    a este valor.
-  </p>
-</div>
-
-            <DialogFooter className="gap-2">
-              {mode === "edit" && (
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
-                  variant="destructive"
-                  onClick={handleDelete}
+                  variant="outline"
+                  onClick={onClose}
+                  disabled={isSaving || isSelling}
                 >
-                  Eliminar / Salida
+                  Cancelar
                 </Button>
-              )}
 
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancelar
-              </Button>
-
-              <Button type="submit">
-                {mode === "add" ? "Agregar" : "Guardar"}
-              </Button>
+                <Button type="submit" disabled={isSaving || isSelling}>
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : mode === "add" ? (
+                    "Agregar"
+                  ) : (
+                    "Guardar"
+                  )}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
       <Dialog open={saleModalOpen} onOpenChange={setSaleModalOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1.5rem)] max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Registrar salida / venta</DialogTitle>
-
             <DialogDescription>
               Indica cuántas piezas vas a eliminar y el precio de venta
               unitario.
@@ -613,166 +755,180 @@ const handleBuscarFisicamente = async () => {
 
           {product && (
             <div className="space-y-4">
-              <div className="rounded-md border bg-muted p-3 text-sm space-y-1">
+              <div className="rounded-lg border bg-muted/40 p-4">
                 <p className="font-semibold">{product.nombre}</p>
-                <p>SKU: {product.sku}</p>
-                <p>Disponible: {product.cantidad}</p>
-                <p>
+                <p className="text-sm text-muted-foreground">
+                  SKU: {product.sku}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Disponible: {product.cantidad}
+                </p>
+                <p className="text-sm text-muted-foreground">
                   Costo proveedor unitario:{" "}
                   {formatMoney(Number(product.costo_proveedor ?? 0))}
                 </p>
-                <p>
+                <p className="text-sm text-muted-foreground">
                   Precio venta sugerido:{" "}
                   {formatMoney(Number(product.precio_venta_sugerido ?? 0))}
                 </p>
               </div>
 
               {productoVencido && (
-                <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm space-y-2">
-                  <div className="flex items-center gap-2 font-semibold text-red-800">
-                    <AlertTriangle className="h-4 w-4" />
-                    Producto vencido
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 h-5 w-5" />
+                    <div>
+                      <p className="font-semibold">Producto vencido</p>
+                      <p className="text-sm">
+                        Este producto venció hace{" "}
+                        {Math.abs(diasCaducidad ?? 0)} día(s). No se recomienda
+                        aplicar descuento. La acción sugerida es
+                        retirar/eliminar del inventario y registrar merma.
+                      </p>
+                    </div>
                   </div>
-
-                  <p className="text-red-800">
-                    Este producto venció hace{" "}
-                    <strong>{Math.abs(diasCaducidad ?? 0)} día(s)</strong>.
-                    No se recomienda aplicar descuento. La acción sugerida es
-                    retirar/eliminar del inventario y registrar merma.
-                  </p>
                 </div>
               )}
 
               <div className="space-y-2">
                 <Label htmlFor="cantidadVendida">Cantidad a eliminar</Label>
-
                 <Input
                   id="cantidadVendida"
                   type="number"
                   min="1"
                   max={product.cantidad}
                   value={cantidadVendida}
-                  onChange={(e) => setCantidadVendida(e.target.value)}
+                  onChange={(event) => setCantidadVendida(event.target.value)}
+                  disabled={isSelling}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="precioVenta">Precio venta unitario</Label>
-
                 <Input
                   id="precioVenta"
                   type="number"
                   min="0"
                   step="0.01"
                   value={precioVenta}
-                  onChange={(e) => setPrecioVenta(e.target.value)}
+                  onChange={(event) => setPrecioVenta(event.target.value)}
                   placeholder="Ej: 120.00"
+                  disabled={isSelling}
                 />
-
                 <p className="text-xs text-muted-foreground">
                   Puedes dejar el precio sugerido o modificarlo manualmente.
                 </p>
               </div>
 
               {productoTieneDescuento && (
-                <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-sm space-y-2">
-                  <div className="flex items-center gap-2 font-semibold text-orange-800">
-                    <Percent className="h-4 w-4" />
-                    Sugerencia de descuento por caducidad
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                  <div className="flex items-start gap-2">
+                    <Percent className="mt-0.5 h-5 w-5" />
+
+                    <div className="space-y-2">
+                      <p className="font-semibold">
+                        Sugerencia de descuento por caducidad
+                      </p>
+
+                      <p className="text-sm">
+                        Caduca en {diasCaducidad} día(s). Descuento sugerido:{" "}
+                        {descuentoSugerido}%.
+                      </p>
+
+                      <p className="text-sm">
+                        Precio con descuento:{" "}
+                        {formatMoney(precioConDescuento)}
+                      </p>
+
+                      <p className="text-sm">
+                        Recuperación estimada:{" "}
+                        {formatMoney(recuperacionConDescuento)}
+                      </p>
+
+                      <p className="text-sm">
+                        Resultado estimado:{" "}
+                        <span
+                          className={
+                            resultadoConDescuento >= 0
+                              ? "font-semibold text-green-700"
+                              : "font-semibold text-red-700"
+                          }
+                        >
+                          {resultadoConDescuento >= 0 ? "+" : "-"}
+                          {formatMoney(Math.abs(resultadoConDescuento))}
+                        </span>
+                      </p>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isSelling}
+                        onClick={() =>
+                          setPrecioVenta(precioConDescuento.toFixed(2))
+                        }
+                      >
+                        Usar precio con descuento
+                      </Button>
+                    </div>
                   </div>
-
-                  <p className="text-orange-800">
-                    Caduca en <strong>{diasCaducidad}</strong> día(s).
-                    Descuento sugerido:{" "}
-                    <strong>{descuentoSugerido}%</strong>.
-                  </p>
-
-                  <p>
-                    Precio con descuento:{" "}
-                    <strong>{formatMoney(precioConDescuento)}</strong>
-                  </p>
-
-                  <p>
-                    Recuperación estimada:{" "}
-                    <strong>{formatMoney(recuperacionConDescuento)}</strong>
-                  </p>
-
-                  <p>
-                    Resultado estimado:{" "}
-                    <strong
-                      className={
-                        resultadoConDescuento >= 0
-                          ? "text-green-700"
-                          : "text-red-700"
-                      }
-                    >
-                      {resultadoConDescuento >= 0 ? "+" : "-"}
-                      {formatMoney(Math.abs(resultadoConDescuento))}
-                    </strong>
-                  </p>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPrecioVenta(precioConDescuento.toFixed(2))}
-                  >
-                    Usar precio con descuento
-                  </Button>
                 </div>
               )}
 
-              <div className="rounded-md border bg-muted p-3 text-sm space-y-1">
-                <p>
+              <div className="rounded-lg border bg-muted/40 p-4">
+                <p className="text-sm">
                   Ingreso estimado:{" "}
                   <strong>{formatMoney(ingresoEstimado)}</strong>
                 </p>
 
-                <p>
+                <p className="text-sm">
                   Costo estimado:{" "}
                   <strong>{formatMoney(costoSalidaEstimado)}</strong>
                 </p>
 
-                <p>
+                <p className="text-sm">
                   Ganancia estimada:{" "}
-                  <strong
+                  <span
                     className={
                       gananciaEstimada >= 0
-                        ? "text-green-700"
-                        : "text-red-700"
+                        ? "font-semibold text-green-700"
+                        : "font-semibold text-red-700"
                     }
                   >
                     {gananciaEstimada >= 0 ? "+" : "-"}
                     {formatMoney(Math.abs(gananciaEstimada))}
-                  </strong>
+                  </span>
                 </p>
               </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={() => setSaleModalOpen(false)}
+              disabled={isSelling}
             >
               Cancelar
             </Button>
 
-            <Button type="button" onClick={confirmSale}>
-              Confirmar salida
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmSale}
+              disabled={isSelling}
+            >
+              {isSelling ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Registrando...
+                </>
+              ) : (
+                "Confirmar salida"
+              )}
             </Button>
           </DialogFooter>
-          {product && (
-  <Button
-    type="button"
-    variant="outline"
-    onClick={handleBuscarFisicamente}
-  >
-    <LocateFixed className="h-4 w-4 mr-2" />
-    Buscar físicamente
-  </Button>
-)}
         </DialogContent>
       </Dialog>
 
