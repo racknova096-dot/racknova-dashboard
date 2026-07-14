@@ -61,7 +61,7 @@ export default function Login() {
       localStorage.setItem("nombre", user?.name || username);
       localStorage.setItem("rol", role);
 
-      navigate("/");
+     window.location.href = "/";
     } catch (error) {
       console.error("Error en login:", error);
       setError("No se pudo conectar con el servidor");
