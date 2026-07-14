@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { DateInputMX } from "@/components/ui/date-input-mx";
 import { API_URL } from "@/config";
 import {
   Card,
@@ -966,17 +967,18 @@ export function InventoryForm() {
                       </Label>
                     </div>
 
-                    <Input
-                      id="caducidad"
-                      type="date"
-                      value={caducidad}
-                      onChange={(e) => setCaducidad(e.target.value)}
-                      disabled={caducidadNoAplica}
-                    />
+<DateInputMX
+  value={caducidad}
+  onChange={setCaducidad}
+  disabled={caducidadNoAplica}
+  placeholder="dd/mm/aaaa"
+/>
 
                     <p className="text-xs text-muted-foreground">
-                      Esta fecha no se mezcla con otros lotes. Se guarda como un
-                      nuevo lote independiente.
+                      <p className="text-xs text-muted-foreground">
+  Captura la fecha en formato dd/mm/aaaa. Internamente se guardará de forma
+  segura para la base de datos.
+</p>
                     </p>
                   </div>
 
