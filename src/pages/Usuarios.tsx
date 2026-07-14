@@ -15,7 +15,7 @@ import {
   Mail,
 } from "lucide-react";
 
-import { API_URL } from "@/config";
+import { apiFetch } from "@/lib/api";
 import { PageHero } from "@/components/layout/PageHero";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -192,7 +192,7 @@ export default function Usuarios() {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_URL}/auth/users`);
+      const response = await apiFetch("/auth/users");
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -320,18 +320,13 @@ export default function Usuarios() {
         payload.contrasena = form.contrasena.trim();
       }
 
-      const response = await fetch(
-        editingId
-          ? `${API_URL}/auth/users/${editingId}`
-          : `${API_URL}/auth/create_user`,
-        {
-          method: editingId ? "PUT" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        }
-      );
+      const response = await apiFetch(
+  editingId ? `/auth/users/${editingId}` : "/auth/create_user",
+  {
+    method: editingId ? "PUT" : "POST",
+    body: JSON.stringify(payload),
+  }
+);
 
       const data = await response.json().catch(() => null);
 
@@ -398,9 +393,9 @@ export default function Usuarios() {
     if (!confirmar) return;
 
     try {
-      const response = await fetch(`${API_URL}/auth/users/${item.id_usuario}`, {
-        method: "DELETE",
-      });
+     const response = await apiFetch(`/auth/users/${item.id_usuario}`, {
+  method: "DELETE",
+});
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -436,15 +431,12 @@ export default function Usuarios() {
     if (!confirmar) return;
 
     try {
-      const response = await fetch(`${API_URL}/auth/users/${item.id_usuario}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          activo: true,
-        }),
-      });
+      const response = await apiFetch(`/auth/users/${item.id_usuario}`, {
+  method: "PUT",
+  body: JSON.stringify({
+    activo: true,
+  }),
+});
 
       if (!response.ok) {
         const errorText = await response.text();
