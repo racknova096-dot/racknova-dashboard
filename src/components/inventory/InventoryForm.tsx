@@ -90,14 +90,19 @@ export function InventoryForm() {
   const [fefoNotice, setFefoNotice] = useState<FefoNotice | null>(null);
 
   const [showQRConfirmation, setShowQRConfirmation] = useState(false);
-  const [lastAddedProduct, setLastAddedProduct] = useState<{
-    sku: string;
-    nombre: string;
-    rack: string;
-    nivel: number;
-    slot: number;
-    timestamp: Date;
-  } | null>(null);
+const [lastAddedProduct, setLastAddedProduct] = useState<{
+  sku: string;
+  nombre: string;
+  rack: string;
+  nivel: number;
+  slot: number;
+  timestamp: Date;
+  descripcion?: string | null;
+  cantidad?: number;
+  costoProveedor?: number;
+  precioVentaSugerido?: number;
+  caducidad?: string | null;
+} | null>(null);
 
   const { products, locations, addProduct, getProductByLocation } =
     useInventory();
@@ -541,13 +546,18 @@ export function InventoryForm() {
       });
 
       setLastAddedProduct({
-        sku: finalSku,
-        nombre: finalNombre,
-        rack: finalRack,
-        nivel: parseInt(finalNivel),
-        slot: parseInt(finalSlot),
-        timestamp: new Date(),
-      });
+  sku: finalSku,
+  nombre: finalNombre,
+  rack: finalRack,
+  nivel: parseInt(finalNivel),
+  slot: parseInt(finalSlot),
+  timestamp: new Date(),
+  descripcion: finalDescripcion || null,
+  cantidad: cantidadNum,
+  costoProveedor: costoProveedorNum,
+  precioVentaSugerido: precioVentaSugeridoNum,
+  caducidad: caducidadValue,
+});
 
       setShowQRConfirmation(true);
 
