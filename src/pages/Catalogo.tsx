@@ -1,13 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { PageHero } from "@/components/layout/PageHero";
-import { API_URL } from "@/config";
 import { ProductoCatalogo } from "@/types/inventory";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiFetch } from "@/lib/api";
+
+import { PageHero } from "@/components/layout/PageHero";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+
 import {
   BookOpen,
   Plus,
@@ -17,11 +25,15 @@ import {
   X,
   Search,
   Lock,
+  Loader2,
+  RefreshCcw,
 } from "lucide-react";
 
 export default function Catalogo() {
   const [items, setItems] = useState<ProductoCatalogo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [search, setSearch] = useState("");
 
   const [sku, setSku] = useState("");
@@ -38,7 +50,7 @@ export default function Catalogo() {
     try {
       setLoading(true);
 
-      const response = await fetch(`${API_URL}/catalogo/productos`);
+      const response = await apiFetch("/catalogo/productos");
 
       if (!response.ok) {
         throw new Error("No se pudo cargar el catálogo.");
@@ -48,7 +60,7 @@ export default function Catalogo() {
 
       setItems(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error(error);
+      console.error("Error cargando catálogo:", error);
 
       toast({
         title: "Error",
@@ -84,8 +96,10 @@ export default function Catalogo() {
     setDescripcion("");
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (saving) return;
 
     const skuClean = sku.trim();
     const nombreClean = nombre.trim();
@@ -97,15 +111,15 @@ export default function Catalogo() {
         description: "El SKU y el nombre son obligatorios.",
         variant: "destructive",
       });
+
       return;
     }
 
     try {
-      const response = await fetch(`${API_URL}/catalogo/productos`, {
+      setSaving(true);
+
+      const response = await apiFetch("/catalogo/productos", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           sku: skuClean,
           nombre: nombreClean,
@@ -113,11 +127,10 @@ export default function Catalogo() {
         }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(errorText);
+      const data = await response.json().catch(() => null);
 
-        throw new Error("No se pudo crear el registro.");
+      if (!response.ok) {
+        throw new Error(data?.detail || "No se pudo crear el registro.");
       }
 
       toast({
@@ -128,13 +141,18 @@ export default function Catalogo() {
       clearForm();
       await loadCatalog();
     } catch (error) {
-      console.error(error);
+      console.error("Error creando registro:", error);
 
       toast({
         title: "Error",
-        description: "No se pudo agregar el registro al catálogo.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo agregar el registro al catálogo.",
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -151,7 +169,7 @@ export default function Catalogo() {
   };
 
   const handleUpdate = async (item: ProductoCatalogo) => {
-    if (!editingSku) return;
+    if (!editingSku || saving) return;
 
     const nombreClean = editNombre.trim();
     const descripcionClean = editDescripcion.trim();
@@ -162,17 +180,17 @@ export default function Catalogo() {
         description: "El nombre no puede estar vacío.",
         variant: "destructive",
       });
+
       return;
     }
 
     try {
-      const response = await fetch(
-        `${API_URL}/catalogo/productos/${encodeURIComponent(item.sku)}`,
+      setSaving(true);
+
+      const response = await apiFetch(
+        `/catalogo/productos/${encodeURIComponent(item.sku)}`,
         {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             sku: item.sku,
             nombre: nombreClean,
@@ -181,11 +199,10 @@ export default function Catalogo() {
         }
       );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(errorText);
+      const data = await response.json().catch(() => null);
 
-        throw new Error("No se pudo actualizar el registro.");
+      if (!response.ok) {
+        throw new Error(data?.detail || "No se pudo actualizar el registro.");
       }
 
       toast({
@@ -196,17 +213,24 @@ export default function Catalogo() {
       cancelEdit();
       await loadCatalog();
     } catch (error) {
-      console.error(error);
+      console.error("Error actualizando registro:", error);
 
       toast({
         title: "Error",
-        description: "No se pudo actualizar el registro.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo actualizar el registro.",
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async (item: ProductoCatalogo) => {
+    if (saving) return;
+
     const confirmed = window.confirm(
       `¿Eliminar del catálogo el producto "${item.nombre}"?\n\nEsta acción no elimina movimientos históricos.`
     );
@@ -214,20 +238,22 @@ export default function Catalogo() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(
-        `${API_URL}/catalogo/productos/${encodeURIComponent(item.sku)}`,
+      setSaving(true);
+
+      const response = await apiFetch(
+        `/catalogo/productos/${encodeURIComponent(item.sku)}`,
         {
           method: "DELETE",
         }
       );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(errorText);
+      const data = await response.json().catch(() => null);
 
+      if (!response.ok) {
         toast({
           title: "No se pudo eliminar",
           description:
+            data?.detail ||
             "Si el producto existe actualmente en inventario, primero debe retirarse o venderse.",
           variant: "destructive",
         });
@@ -242,252 +268,314 @@ export default function Catalogo() {
 
       await loadCatalog();
     } catch (error) {
-      console.error(error);
+      console.error("Error eliminando registro:", error);
 
       toast({
         title: "Error",
         description: "No se pudo eliminar el registro.",
         variant: "destructive",
       });
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="p-6 space-y-6">
-       <PageHero
-  badge="Identidad histórica de productos"
-  title="Catálogo"
-  description="Administra los registros base de productos: SKU, nombre y descripción."
-  icon={BookOpen}
-  stats={[
-    {
-      label: "Registros totales",
-      value: items.length,
-      tone: "blue",
-    },
-    {
-      label: "Resultados visibles",
-      value: filteredItems.length,
-      tone: "green",
-    },
-    {
-      label: "Modo",
-      value: editingSku ? "Editando" : "Consulta",
-      tone: editingSku ? "amber" : "purple",
-    },
-    {
-      label: "Datos guardados",
-      value: "SKU / Nombre",
-      tone: "cyan",
-    },
-  ]}
->
-  El catálogo solo guarda la identidad del producto. Los costos, caducidades,
-  cantidades y ubicaciones se controlan desde inventario y lotes.
-</PageHero>
+    <div className="space-y-8">
+      <PageHero
+        badge="Identidad histórica de productos"
+        title="Catálogo"
+        description="Administra los registros base de productos: SKU, nombre y descripción."
+        icon={BookOpen}
+        stats={[
+          {
+            label: "Registros totales",
+            value: items.length,
+            tone: "blue",
+          },
+          {
+            label: "Resultados visibles",
+            value: filteredItems.length,
+            tone: "green",
+          },
+          {
+            label: "Modo",
+            value: editingSku ? "Editando" : "Consulta",
+            tone: editingSku ? "amber" : "purple",
+          },
+          {
+            label: "Datos guardados",
+            value: "SKU / Nombre",
+            tone: "cyan",
+          },
+        ]}
+      >
+        El catálogo solo guarda la identidad del producto. Los costos,
+        caducidades, cantidades y ubicaciones se controlan desde inventario y
+        lotes.
+      </PageHero>
 
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5" />
-              Agregar registro al catálogo
-            </CardTitle>
-          </CardHeader>
+      <Card className="racknova-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            Agregar registro al catálogo
+          </CardTitle>
 
-          <CardContent>
-            <form
-              onSubmit={handleCreate}
-              className="grid grid-cols-1 md:grid-cols-3 gap-4"
-            >
-              <div className="space-y-2">
-                <Label htmlFor="sku">SKU *</Label>
-                <Input
-                  id="sku"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  placeholder="Ej: COCA600"
-                  required
-                />
-              </div>
+          <p className="text-sm text-muted-foreground">
+            Usa esta sección para crear productos base que después podrás
+            reutilizar al agregar inventario.
+          </p>
+        </CardHeader>
 
-              <div className="space-y-2">
-                <Label htmlFor="nombre">Nombre *</Label>
-                <Input
-                  id="nombre"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej: Coca Cola 600 ml"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-3">
-                <Label htmlFor="descripcion">Descripción</Label>
-                <Textarea
-                  id="descripcion"
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Descripción del producto..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="md:col-span-3 flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={clearForm}>
-                  Limpiar
-                </Button>
-                <Button type="submit">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Agregar
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-4">
-              <span>Registros del catálogo</span>
-              <span className="text-sm font-normal text-muted-foreground">
-                {filteredItems.length} registro(s)
-              </span>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <CardContent>
+          <form onSubmit={handleCreate} className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label htmlFor="catalog-sku">SKU *</Label>
               <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por SKU, nombre o descripción..."
-                className="pl-9"
+                id="catalog-sku"
+                value={sku}
+                onChange={(event) => setSku(event.target.value)}
+                placeholder="Ej: COCA600"
+                required
+                disabled={saving}
               />
             </div>
 
-            {loading ? (
-              <p className="text-sm text-muted-foreground">
-                Cargando catálogo...
+            <div className="space-y-2">
+              <Label htmlFor="catalog-nombre">Nombre *</Label>
+              <Input
+                id="catalog-nombre"
+                value={nombre}
+                onChange={(event) => setNombre(event.target.value)}
+                placeholder="Ej: Coca Cola 600 ml"
+                required
+                disabled={saving}
+              />
+            </div>
+
+            <div className="space-y-2 md:row-span-2">
+              <Label htmlFor="catalog-descripcion">Descripción</Label>
+              <Textarea
+                id="catalog-descripcion"
+                value={descripcion}
+                onChange={(event) => setDescripcion(event.target.value)}
+                placeholder="Descripción del producto..."
+                rows={4}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="md:col-span-2 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearForm}
+                disabled={saving}
+              >
+                Limpiar
+              </Button>
+
+              <Button type="submit" disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="racknova-card">
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <BookOpen className="h-5 w-5" />
+                Registros del catálogo
+              </CardTitle>
+
+              <p className="text-sm text-muted-foreground mt-1">
+                Consulta, edita o elimina registros base. El SKU se mantiene
+                bloqueado para evitar duplicados históricos.
               </p>
-            ) : filteredItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No hay registros en catálogo.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="racknova-table-header">
-                    <tr>
-                      <th className="text-left p-3">SKU</th>
-                      <th className="text-left p-3">Nombre</th>
-                      <th className="text-left p-3">Descripción</th>
-                      <th className="text-right p-3">Acciones</th>
-                    </tr>
-                  </thead>
+            </div>
 
-                  <tbody>
-                    {filteredItems.map((item) => {
-                      const isEditing = editingSku === item.sku;
+            <Button
+              variant="outline"
+              onClick={loadCatalog}
+              disabled={loading || saving}
+            >
+              <RefreshCcw
+                className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`}
+              />
+              Actualizar
+            </Button>
+          </div>
 
-                      return (
-                        <tr key={item.sku} className="border-t">
-                          <td className="p-3 align-top">
-                            <div className="flex items-center gap-2 font-mono">
-                              <Lock className="h-4 w-4 text-muted-foreground" />
-                              {item.sku}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              El SKU no se puede editar.
-                            </p>
-                          </td>
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
 
-                          <td className="p-3 align-top min-w-[220px]">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por SKU, nombre o descripción..."
+              className="pl-9"
+              disabled={loading}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {loading ? (
+            <div className="rounded-xl border bg-muted/30 p-8 text-center text-muted-foreground">
+              <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin" />
+              Cargando catálogo...
+            </div>
+          ) : filteredItems.length === 0 ? (
+            <div className="rounded-xl border bg-muted/30 p-8 text-center text-muted-foreground">
+              No hay registros en catálogo.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border">
+              <table className="w-full text-sm">
+                <thead className="racknova-table-header">
+                  <tr>
+                    <th className="text-left p-3">SKU</th>
+                    <th className="text-left p-3">Nombre</th>
+                    <th className="text-left p-3">Descripción</th>
+                    <th className="text-right p-3">Acciones</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredItems.map((item) => {
+                    const isEditing = editingSku === item.sku;
+
+                    return (
+                      <tr key={item.sku} className="border-t hover:bg-muted/40">
+                        <td className="p-3 align-top">
+                          <div className="flex items-center gap-2 font-mono">
+                            <Lock className="h-4 w-4 text-muted-foreground" />
+                            <span className="break-all">{item.sku}</span>
+                          </div>
+
+                          <p className="text-xs text-muted-foreground mt-1">
+                            El SKU no se puede editar.
+                          </p>
+                        </td>
+
+                        <td className="p-3 align-top min-w-[220px]">
+                          {isEditing ? (
+                            <Input
+                              value={editNombre}
+                              onChange={(event) =>
+                                setEditNombre(event.target.value)
+                              }
+                              disabled={saving}
+                            />
+                          ) : (
+                            <span className="font-medium">{item.nombre}</span>
+                          )}
+                        </td>
+
+                        <td className="p-3 align-top min-w-[320px]">
+                          {isEditing ? (
+                            <Textarea
+                              value={editDescripcion}
+                              onChange={(event) =>
+                                setEditDescripcion(event.target.value)
+                              }
+                              rows={2}
+                              disabled={saving}
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {item.descripcion || "Sin descripción"}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="p-3 align-top">
+                          <div className="flex justify-end gap-2">
                             {isEditing ? (
-                              <Input
-                                value={editNombre}
-                                onChange={(e) =>
-                                  setEditNombre(e.target.value)
-                                }
-                              />
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleUpdate(item)}
+                                  disabled={saving}
+                                >
+                                  {saving ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                      Guardando
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Save className="h-4 w-4 mr-1" />
+                                      Guardar
+                                    </>
+                                  )}
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={cancelEdit}
+                                  disabled={saving}
+                                >
+                                  <X className="h-4 w-4 mr-1" />
+                                  Cancelar
+                                </Button>
+                              </>
                             ) : (
-                              <span className="font-medium">
-                                {item.nombre}
-                              </span>
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => startEdit(item)}
+                                  disabled={saving}
+                                >
+                                  <Pencil className="h-4 w-4 mr-1" />
+                                  Editar
+                                </Button>
+
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDelete(item)}
+                                  disabled={saving}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Eliminar
+                                </Button>
+                              </>
                             )}
-                          </td>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-                          <td className="p-3 align-top min-w-[320px]">
-                            {isEditing ? (
-                              <Textarea
-                                value={editDescripcion}
-                                onChange={(e) =>
-                                  setEditDescripcion(e.target.value)
-                                }
-                                rows={2}
-                              />
-                            ) : (
-                              <span className="text-muted-foreground">
-                                {item.descripcion || "Sin descripción"}
-                              </span>
-                            )}
-                          </td>
-
-                          <td className="p-3 align-top">
-                            <div className="flex justify-end gap-2">
-                              {isEditing ? (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleUpdate(item)}
-                                  >
-                                    <Save className="h-4 w-4 mr-1" />
-                                    Guardar
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={cancelEdit}
-                                  >
-                                    <X className="h-4 w-4 mr-1" />
-                                    Cancelar
-                                  </Button>
-                                </>
-                              ) : (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => startEdit(item)}
-                                  >
-                                    <Pencil className="h-4 w-4 mr-1" />
-                                    Editar
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => handleDelete(item)}
-                                  >
-                                    <Trash2 className="h-4 w-4 mr-1" />
-                                    Eliminar
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
+          <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">
+            Nota: el catálogo no almacena costos, cantidades ni caducidades. Esa
+            información se registra únicamente cuando el producto entra al
+            inventario.
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
