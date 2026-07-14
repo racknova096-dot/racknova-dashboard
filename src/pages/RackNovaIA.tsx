@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { API_URL } from "@/config";
+import { apiFetch } from "@/lib/api";
 import { useInventory } from "@/context/InventoryContext";
 import { Product } from "@/types/inventory";
 import {
@@ -533,15 +533,12 @@ export default function RackNovaIA() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/ia/inventario`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          pregunta: preguntaFinal,
-        }),
-      });
+      const response = await apiFetch("/ia/inventario", {
+  method: "POST",
+  body: JSON.stringify({
+    pregunta,
+  }),
+});
 
       const data = await response.json();
 
