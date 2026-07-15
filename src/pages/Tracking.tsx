@@ -72,15 +72,15 @@ export default function Tracking() {
     > = {
       Ingreso: {
         variant: "default",
-        icon: <TrendingUp className="h-3 w-3 mr-1" />,
+        icon: <TrendingUp className="mr-1 h-3 w-3" />,
       },
       Egreso: {
         variant: "destructive",
-        icon: <TrendingDown className="h-3 w-3 mr-1" />,
+        icon: <TrendingDown className="mr-1 h-3 w-3" />,
       },
       Edición: {
         variant: "secondary",
-        icon: <Edit className="h-3 w-3 mr-1" />,
+        icon: <Edit className="mr-1 h-3 w-3" />,
       },
     };
 
@@ -92,11 +92,17 @@ export default function Tracking() {
     );
   };
 
+  const periodMovements = useMemo(() => {
+    return movements.filter((movement) =>
+      isDateInPeriod(movement.timestamp, filterPeriod)
+    );
+  }, [movements, filterPeriod]);
+
   const filteredMovements = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+
     return movements
       .filter((movement) => {
-        const term = searchTerm.trim().toLowerCase();
-
         const matchesSearch =
           !term ||
           movement.productName.toLowerCase().includes(term) ||
@@ -114,46 +120,39 @@ export default function Tracking() {
 
         return matchesSearch && matchesAction && matchesPeriod;
       })
-      .sort((a, b) =>
-        sortDesc
-          ? new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          : new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
+      .sort((a, b) => {
+        const firstDate = new Date(a.timestamp).getTime();
+        const secondDate = new Date(b.timestamp).getTime();
+
+        return sortDesc
+          ? secondDate - firstDate
+          : firstDate - secondDate;
+      });
   }, [movements, searchTerm, filterAction, filterPeriod, sortDesc]);
 
-  const periodMovements = useMemo(() => {
-    return movements.filter((movement) =>
-      isDateInPeriod(movement.timestamp, filterPeriod)
-    );
-  }, [movements, filterPeriod]);
+  const totalIngresos = useMemo(() => {
+    return periodMovements.filter(
+      (movement) => movement.action === "Ingreso"
+    ).length;
+  }, [periodMovements]);
 
-  const totalIngresos = periodMovements.filter(
-    (movement) => movement.action === "Ingreso"
-  ).length;
+  const totalEgresos = useMemo(() => {
+    return periodMovements.filter(
+      (movement) => movement.action === "Egreso"
+    ).length;
+  }, [periodMovements]);
 
-  const totalEgresos = periodMovements.filter(
-    (movement) => movement.action === "Egreso"
-  ).length;
-
-  const totalEdiciones = periodMovements.filter(
-    (movement) => movement.action === "Edición"
-  ).length;
-
-  const totalIngresosVenta = periodMovements
-    .filter((movement) => movement.action === "Egreso")
-    .reduce(
-      (total, movement) => total + Number(movement.ingreso_total ?? 0),
-      0
-    );
-
-  const totalGanancia = periodMovements
-    .filter((movement) => movement.action === "Egreso")
-    .reduce((total, movement) => total + Number(movement.ganancia ?? 0), 0);
+  const totalEdiciones = useMemo(() => {
+    return periodMovements.filter(
+      (movement) => movement.action === "Edición"
+    ).length;
+  }, [periodMovements]);
 
   const resetFilters = () => {
     setSearchTerm("");
     setFilterAction("all");
     setFilterPeriod("all");
+    setSortDesc(true);
   };
 
   return (
@@ -165,8 +164,8 @@ export default function Tracking() {
         icon={Activity}
         stats={[
           {
-            label: "Movimientos visibles",
-            value: filteredMovements.length,
+            label: "Movimientos",
+            value: periodMovements.length,
             tone: "blue",
           },
           {
@@ -180,77 +179,36 @@ export default function Tracking() {
             tone: "red",
           },
           {
-            label: "Ganancia",
-            value: money(totalGanancia),
-            tone: totalGanancia >= 0 ? "green" : "red",
+            label: "Ediciones",
+            value: totalEdiciones,
+            tone: "purple",
           },
         ]}
       >
         Periodo activo:{" "}
-        <span className="font-semibold">{getPeriodLabel(filterPeriod)}</span>.
-        Esta sección funciona como bitácora para revisar qué se agregó, qué se
-        vendió o retiró y qué cambios se hicieron.
+        <span className="font-semibold">
+          {getPeriodLabel(filterPeriod)}
+        </span>
+        . Esta sección funciona como bitácora para revisar qué se agregó, qué
+        se vendió o retiró y qué cambios se hicieron.
       </PageHero>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="racknova-card">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Ingresos</p>
-            <p className="text-3xl font-bold text-emerald-600">
-              {totalIngresos}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              productos agregados en el periodo
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Egresos</p>
-            <p className="text-3xl font-bold text-red-600">{totalEgresos}</p>
-            <p className="text-xs text-muted-foreground">
-              salidas o ventas en el periodo
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Ediciones</p>
-            <p className="text-3xl font-bold text-blue-600">
-              {totalEdiciones}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              cambios registrados en el periodo
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">Ingreso por ventas</p>
-            <p className="text-3xl font-bold text-emerald-600">
-              {money(totalIngresosVenta)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              ventas registradas en el periodo
-            </p>
-          </CardContent>
-        </Card>
-      </div>
 
       <Card className="racknova-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Search className="h-5 w-5" />
-            Filtros
+            Filtros de movimientos
           </CardTitle>
+
+          <p className="text-sm text-muted-foreground">
+            Los indicadores del encabezado se actualizan según el periodo
+            seleccionado. La búsqueda y el tipo de acción filtran la tabla.
+          </p>
         </CardHeader>
 
         <CardContent>
-          <div className="grid gap-4 lg:grid-cols-[1fr_180px_180px_auto_auto]">
-            <div className="relative">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_190px_190px_auto_auto]">
+            <div className="relative min-w-0">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
 
               <Input
@@ -276,10 +234,12 @@ export default function Tracking() {
 
             <Select
               value={filterPeriod}
-              onValueChange={(value) => setFilterPeriod(value as DatePeriod)}
+              onValueChange={(value) =>
+                setFilterPeriod(value as DatePeriod)
+              }
             >
               <SelectTrigger>
-                <CalendarDays className="h-4 w-4 mr-2" />
+                <CalendarDays className="mr-2 h-4 w-4" />
                 <SelectValue placeholder="Periodo" />
               </SelectTrigger>
 
@@ -291,8 +251,11 @@ export default function Tracking() {
               </SelectContent>
             </Select>
 
-            <Button variant="outline" onClick={() => setSortDesc((prev) => !prev)}>
-              <ArrowUpDown className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              onClick={() => setSortDesc((previous) => !previous)}
+            >
+              <ArrowUpDown className="mr-2 h-4 w-4" />
               {sortDesc ? "Más recientes" : "Más antiguos"}
             </Button>
 
@@ -305,14 +268,14 @@ export default function Tracking() {
 
       <Card className="racknova-card">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-4">
-            <span>Historial de movimientos</span>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>Historial de movimientos</CardTitle>
 
             <span className="text-sm font-normal text-muted-foreground">
-              Mostrando {filteredMovements.length} de {movements.length}{" "}
-              movimientos
+              Mostrando {filteredMovements.length} de {periodMovements.length}{" "}
+              movimientos del periodo
             </span>
-          </CardTitle>
+          </div>
         </CardHeader>
 
         <CardContent>
@@ -348,23 +311,39 @@ export default function Tracking() {
                   </TableRow>
                 ) : (
                   filteredMovements.map((movement) => {
-                    const precioVenta = Number(movement.precio_venta ?? 0);
-                    const ingresoTotal = Number(movement.ingreso_total ?? 0);
+                    const precioVenta = Number(
+                      movement.precio_venta ?? 0
+                    );
+
+                    const ingresoTotal = Number(
+                      movement.ingreso_total ?? 0
+                    );
+
                     const costoProveedor = Number(
                       movement.costo_proveedor ?? 0
                     );
-                    const costoTotal = Number(movement.costo_total ?? 0);
-                    const ganancia = Number(movement.ganancia ?? 0);
+
+                    const costoTotal = Number(
+                      movement.costo_total ?? 0
+                    );
+
+                    const ganancia = Number(
+                      movement.ganancia ?? 0
+                    );
 
                     return (
                       <TableRow key={movement.id}>
-                        <TableCell>{getActionBadge(movement.action)}</TableCell>
+                        <TableCell>
+                          {getActionBadge(movement.action)}
+                        </TableCell>
 
                         <TableCell className="font-medium">
                           {movement.productName}
                         </TableCell>
 
-                        <TableCell>{movement.productSku}</TableCell>
+                        <TableCell className="font-mono">
+                          {movement.productSku}
+                        </TableCell>
 
                         <TableCell>
                           {movement.action === "Edición" &&
@@ -381,7 +360,9 @@ export default function Tracking() {
 
                         <TableCell>{movement.location}</TableCell>
 
-                        <TableCell>{money(costoProveedor)}</TableCell>
+                        <TableCell>
+                          {money(costoProveedor)}
+                        </TableCell>
 
                         <TableCell>
                           {movement.action === "Egreso"
@@ -395,15 +376,17 @@ export default function Tracking() {
                             : "-"}
                         </TableCell>
 
-                        <TableCell>{money(costoTotal)}</TableCell>
+                        <TableCell>
+                          {money(costoTotal)}
+                        </TableCell>
 
                         <TableCell>
                           {movement.action === "Egreso" ? (
                             <span
                               className={
                                 ganancia >= 0
-                                  ? "text-green-600 font-semibold"
-                                  : "text-red-600 font-semibold"
+                                  ? "font-semibold text-green-600"
+                                  : "font-semibold text-red-600"
                               }
                             >
                               {money(ganancia)}
@@ -415,8 +398,10 @@ export default function Tracking() {
 
                         <TableCell>{movement.user}</TableCell>
 
-                        <TableCell>
-                          {formatDateTimeDDMMYYYY(movement.timestamp)}
+                        <TableCell className="whitespace-nowrap">
+                          {formatDateTimeDDMMYYYY(
+                            movement.timestamp
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -427,8 +412,9 @@ export default function Tracking() {
           </div>
 
           <p className="mt-4 text-sm text-muted-foreground">
-            Nota: en ingresos se muestra el costo total del inventario agregado.
-            En egresos se muestra ingreso de venta, costo total y ganancia.
+            En los ingresos se muestra el costo del inventario agregado. En
+            los egresos se muestran el ingreso de venta, el costo total y la
+            ganancia registrada.
           </p>
         </CardContent>
       </Card>
