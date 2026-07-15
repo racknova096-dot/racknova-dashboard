@@ -62,7 +62,7 @@ export function RackNovaIAAssistant() {
       const response = await apiFetch("/ia/inventario", {
   method: "POST",
   body: JSON.stringify({
-    pregunta,
+    pregunta: preguntaFinal,
   }),
 });
 
