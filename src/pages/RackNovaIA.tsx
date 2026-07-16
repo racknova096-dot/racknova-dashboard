@@ -9,6 +9,7 @@ import { useInventory } from "@/context/InventoryContext";
 import { Product } from "@/types/inventory";
 import {
   Card,
+  
   CardContent,
   CardHeader,
   CardTitle,
