@@ -164,9 +164,7 @@ export function RackNovaIAAssistant() {
         message.role === "user"
           ? "usuario"
           : "asistente",
-      contenido: message.content
-        .trim()
-        .slice(0, 1000),
+      contenido: message.content.trim(),
     }));
 
   // Después de obtener el historial, mostramos la nueva pregunta.
