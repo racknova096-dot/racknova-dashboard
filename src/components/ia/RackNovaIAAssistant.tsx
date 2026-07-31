@@ -139,78 +139,120 @@ export function RackNovaIAAssistant() {
   if (!allowed) return null;
 
   const askIA = async (customQuestion?: string) => {
-    const preguntaFinal = (customQuestion ?? question).trim();
-    if (!preguntaFinal || loading) return;
+  const preguntaFinal = (customQuestion ?? question).trim();
+
+  if (!preguntaFinal || loading) return;
+
+  /*
+   * Toma los últimos 3 mensajes anteriores.
+   *
+   * No incluye:
+   * - El saludo inicial de RackNova IA.
+   * - Mensajes de error.
+   * - La pregunta nueva que todavía no se ha enviado.
+   */
+  const historial = messages
+    .filter(
+      (message, index) =>
+        index !== 0 &&
+        message.source !== "error" &&
+        message.content.trim() !== ""
+    )
+    .slice(-3)
+    .map((message) => ({
+      rol:
+        message.role === "user"
+          ? "usuario"
+          : "asistente",
+      contenido: message.content
+        .trim()
+        .slice(0, 1000),
+    }));
+
+  // Después de obtener el historial, mostramos la nueva pregunta.
+  setMessages((previous) => [
+    ...previous,
+    {
+      role: "user",
+      content: preguntaFinal,
+    },
+  ]);
+
+  setQuestion("");
+  setLoading(true);
+
+  try {
+    const response = await apiFetch("/ia/inventario", {
+      method: "POST",
+      body: JSON.stringify({
+        pregunta: preguntaFinal,
+        ruta_actual: location.pathname,
+        pagina_actual: currentPage,
+
+        // Nuevo campo enviado a FastAPI.
+        historial,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data?.detail ||
+          "No se pudo obtener respuesta de RackNova IA."
+      );
+    }
+
+    const assistantMessage: Message = {
+      role: "assistant",
+      content:
+        data?.respuesta ||
+        "RackNova IA no generó una respuesta.",
+      source:
+        data?.fuente ??
+        data?.modelo ??
+        "racknova",
+      warning: data?.advertencia ?? null,
+      complete:
+        typeof data?.completa === "boolean"
+          ? data.completa
+          : true,
+      finishReason: data?.finish_reason ?? null,
+      tokenUsage: data?.uso_tokens ?? null,
+      action:
+        data?.accion?.tipo === "navegar"
+          ? data.accion
+          : null,
+    };
 
     setMessages((previous) => [
       ...previous,
-      { role: "user", content: preguntaFinal },
+      assistantMessage,
     ]);
-    setQuestion("");
-    setLoading(true);
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Ocurrió un error conectando con RackNova IA.";
 
-    try {
-      const response = await apiFetch("/ia/inventario", {
-        method: "POST",
-        body: JSON.stringify({
-          pregunta: preguntaFinal,
-          ruta_actual: location.pathname,
-          pagina_actual: currentPage,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(
-          data?.detail ||
-            "No se pudo obtener respuesta de RackNova IA."
-        );
-      }
-
-      const assistantMessage: Message = {
+    setMessages((previous) => [
+      ...previous,
+      {
         role: "assistant",
-        content:
-          data?.respuesta ||
-          "RackNova IA no generó una respuesta.",
-        source: data?.fuente ?? data?.modelo ?? "racknova",
-        warning: data?.advertencia ?? null,
-        complete:
-          typeof data?.completa === "boolean"
-            ? data.completa
-            : true,
-        finishReason: data?.finish_reason ?? null,
-        tokenUsage: data?.uso_tokens ?? null,
-        action:
-          data?.accion?.tipo === "navegar"
-            ? data.accion
-            : null,
-      };
+        content: message,
+        source: "error",
+        warning:
+          "No se pudo completar la consulta.",
+        complete: false,
+        finishReason: "error",
+      },
+    ]);
+  } finally {
+    setLoading(false);
+  }
+};
 
-      setMessages((previous) => [
-        ...previous,
-        assistantMessage,
-      ]);
-    } catch (error: unknown) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Ocurrió un error conectando con RackNova IA.";
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: message,
-          source: "error",
-          warning: "No se pudo completar la consulta.",
-          complete: false,
-          finishReason: "error",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
+     
 
   const handleCopy = async (content: string, index: number) => {
     try {
