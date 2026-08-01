@@ -324,9 +324,26 @@ export default function PuntoVenta() {
       setMontoTarjetaMixto("");
       setMontoTransferenciaMixto("");
       setReferencia("");
-      toast.success(`Venta ${response.folio} completada.`);
-      await loadSales();
-      window.setTimeout(() => searchRef.current?.focus(), 100);
+     toast.success(`Venta ${response.folio} completada.`);
+
+/*
+ * Avisa al InventoryContext que el POS modificó:
+ * - cantidades de productos
+ * - lotes
+ * - movimientos de Trackeo
+ * - datos financieros
+ */
+window.dispatchEvent(
+  new CustomEvent("racknova:inventory-updated", {
+    detail: {
+      source: "pos",
+      folio: response.folio,
+    },
+  })
+);
+
+await loadSales();
+window.setTimeout(() => searchRef.current?.focus(), 100);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo registrar la venta.");
     } finally {
