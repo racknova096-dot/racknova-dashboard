@@ -192,85 +192,109 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     return "Sistema";
   };
 
- useEffect(() => {
-  const loadInitialProducts = async () => {
-    const token = getAuthToken();
+  const refreshProducts = useCallback(async () => {
+  const token = getAuthToken();
 
-    if (!token) {
-      setIsProductsLoading(false);
-      return;
+  if (!token) {
+    setIsProductsLoading(false);
+    return;
+  }
+
+  try {
+    setIsProductsLoading(true);
+
+    const response = await apiFetch("/productos");
+
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status}`);
     }
 
-    try {
-      setIsProductsLoading(true);
+    const data = await response.json();
+    const loadedProducts: Product[] = data.map(mapBackendProduct);
 
-      const response = await apiFetch("/productos");
+    setProducts(loadedProducts);
+    productsRef.current = loadedProducts;
 
-        if (!response.ok) {
-          throw new Error(`Error HTTP: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const loadedProducts: Product[] = data.map(mapBackendProduct);
-
-        setProducts(loadedProducts);
-        productsRef.current = loadedProducts;
-
-        setLocations((prev) =>
-          prev.map((location) => {
-            const hasProduct = loadedProducts.some(
-              (product) => product.locationId === location.id
-            );
-
-            return hasProduct
-              ? { ...location, status: "ocupado" }
-              : { ...location, status: "libre" };
-          })
+    setLocations((previous) =>
+      previous.map((location) => {
+        const hasProduct = loadedProducts.some(
+          (product) => product.locationId === location.id
         );
 
-        console.log("Inventario inicial cargado:", loadedProducts);
-      } catch (error) {
-        console.error("❌ Error cargando inventario inicial:", error);
-      } finally {
-        setIsProductsLoading(false);
-      }
-    };
+        return {
+          ...location,
+          status: hasProduct ? "ocupado" : "libre",
+        };
+      })
+    );
+  } catch (error) {
+    console.error("❌ Error recargando productos:", error);
+  } finally {
+    setIsProductsLoading(false);
+  }
+}, []);
 
-    loadInitialProducts();
-  }, []);
 
- useEffect(() => {
-  const loadMovements = async () => {
-    const token = getAuthToken();
+const refreshMovements = useCallback(async () => {
+  const token = getAuthToken();
 
-    if (!token) {
-      setIsMovementsLoading(false);
-      return;
+  if (!token) {
+    setIsMovementsLoading(false);
+    return;
+  }
+
+  try {
+    setIsMovementsLoading(true);
+
+    const response = await apiFetch("/movimientos");
+
+    if (!response.ok) {
+      throw new Error(
+        `Error cargando movimientos: ${response.status}`
+      );
     }
 
-    try {
-      setIsMovementsLoading(true);
+    const data = await response.json();
 
-      const response = await apiFetch("/movimientos");
-        if (!response.ok) {
-          throw new Error("Error cargando movimientos");
-        }
+    const mappedMovements: MovementRecord[] =
+      data.map(mapBackendMovement);
 
-        const data = await response.json();
-        const mappedMovements: MovementRecord[] = data.map(mapBackendMovement);
+    setMovements(mappedMovements);
+  } catch (error) {
+    console.error("❌ Error recargando movimientos:", error);
+  } finally {
+    setIsMovementsLoading(false);
+  }
+}, []);
 
-        setMovements(mappedMovements);
+useEffect(() => {
+  void refreshProducts();
+}, [refreshProducts]);
 
-        console.log("Movimientos cargados desde backend:", mappedMovements);
-      } catch (error) {
-        console.error("❌ Error al cargar movimientos:", error);
-      } finally {
-        setIsMovementsLoading(false);
-      }
-    };
+useEffect(() => {
+  void refreshMovements();
+}, [refreshMovements]);
 
-    loadMovements();
-  }, []);
+  useEffect(() => {
+  const handleInventoryUpdated = () => {
+    void Promise.all([
+      refreshProducts(),
+      refreshMovements(),
+    ]);
+  };
+
+  window.addEventListener(
+    "racknova:inventory-updated",
+    handleInventoryUpdated
+  );
+
+  return () => {
+    window.removeEventListener(
+      "racknova:inventory-updated",
+      handleInventoryUpdated
+    );
+  };
+}, [refreshProducts, refreshMovements]);
 
   const addMovement = async (
     movement: Omit<MovementRecord, "id" | "timestamp">
