@@ -3,14 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-
 import { InventoryProvider, useInventory } from "@/context/InventoryContext";
 import { Navigation } from "@/components/layout/Navigation";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { RackNovaIAAssistant } from "@/components/ia/RackNovaIAAssistant";
 import { BlockingLoader } from "@/components/ui/blocking-loader";
 import { canUseIA } from "@/lib/roles";
-
 import Finanzas from "./pages/Finanzas";
 import Reportes from "./pages/Reportes";
 import Index from "./pages/Index";
@@ -23,6 +21,7 @@ import RackView from "./pages/RackView";
 import RackNovaIA from "./pages/RackNovaIA";
 import Catalogo from "./pages/Catalogo";
 import Usuarios from "./pages/Usuarios";
+import PuntoVenta from "./pages/PuntoVenta";
 import ProtectedRoute from "./pages/ProtectedRoute";
 import ProtectedLayout from "@/components/layout/ProtectedLayout";
 
@@ -39,7 +38,6 @@ function AppContent() {
     <div className="min-h-screen bg-background">
       {!isLoginPage && <Navigation />}
       {showIAAssistant && <RackNovaIAAssistant />}
-
       <BlockingLoader
         show={!isLoginPage && isInventoryLoading}
         title="Cargando base de datos"
@@ -48,7 +46,6 @@ function AppContent() {
 
       <Routes>
         <Route path="/login" element={<Login />} />
-
         <Route element={<ProtectedLayout />}>
           <Route
             path="/"
@@ -67,7 +64,6 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/add-product"
             element={
@@ -82,6 +78,15 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={["admin", "operator", "viewer"]}>
                 <ProductList />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/pos"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "operator"]}>
+                <PuntoVenta />
               </ProtectedRoute>
             }
           />
@@ -175,3 +180,4 @@ const App = () => {
 };
 
 export default App;
+
