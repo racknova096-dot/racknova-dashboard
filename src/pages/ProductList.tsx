@@ -797,19 +797,16 @@ const precioConDescuento =
 
       {selectedProduct && selectedLocation && (
         <ProductModal
-          open={modalOpen}
-          onOpenChange={(open) => {
-            setModalOpen(open);
-
-            if (!open) {
-              setSelectedProduct(null);
-              setSelectedLocation(null);
-            }
-          }}
-          location={selectedLocation}
-          product={selectedProduct}
-          mode="edit"
-        />
+  isOpen={modalOpen}
+  onClose={() => {
+    setModalOpen(false);
+    setSelectedProduct(null);
+    setSelectedLocation(null);
+  }}
+  location={selectedLocation}
+  product={selectedProduct}
+  mode="edit"
+/>
       )}
     </div>
   );

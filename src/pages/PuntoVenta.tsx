@@ -690,7 +690,7 @@ export default function PuntoVenta() {
         motivo: returnReason.trim(),
         metodo_reembolso: refundMethod,
       });
-      toast.success(`${response.folio}: reembolso ${money(response.monto)}.`);
+      toast.success(`${response.venta.folio}: reembolso ${money(response.monto)}.`);
       setReturnSale(null);
       emitInventoryUpdated("pos-return");
       await refreshPOS();
