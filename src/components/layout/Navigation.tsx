@@ -2,84 +2,70 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  Package,
-  Table,
-  LayoutDashboard,
-  Plus,
-  Users,
   Activity,
-  DollarSign,
   BarChart3,
   BookOpen,
   Bot,
+  ChevronDown,
+  DollarSign,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Package,
+  Plus,
   ShoppingCart,
+  Table,
+  UserCircle2,
+  Users,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { obtenerEstadoPOS } from "@/lib/pos";
 import type { POSEstado } from "@/lib/pos";
 
-const baseNavItems = [
-  {
-    path: "/",
-    label: "Dashboard",
-    icon: LayoutDashboard,
-    color: "from-blue-500 to-cyan-500",
-  },
-  {
-    path: "/add",
-    label: "Agregar",
-    icon: Plus,
-    color: "from-emerald-500 to-teal-500",
-  },
-  {
-    path: "/products",
-    label: "Productos",
-    icon: Table,
-    color: "from-orange-500 to-amber-500",
-  },
-  {
-    path: "/tracking",
-    label: "Trackeo",
-    icon: Activity,
-    color: "from-purple-500 to-violet-500",
-  },
-  {
-    path: "/finanzas",
-    label: "Finanzas",
-    icon: DollarSign,
-    color: "from-green-500 to-emerald-500",
-  },
-  {
-    path: "/reportes",
-    label: "Reportes",
-    icon: BarChart3,
-    color: "from-pink-500 to-rose-500",
-  },
-  {
-    path: "/catalogo",
-    label: "Catálogo",
-    icon: BookOpen,
-    color: "from-sky-500 to-blue-500",
-  },
-  {
-    path: "/racknova-ia",
-    label: "RackNova IA",
-    icon: Bot,
-    color: "from-blue-600 to-cyan-500",
-  },
-  {
-    path: "/usuarios",
-    label: "Usuarios",
-    icon: Users,
-    color: "from-indigo-500 to-purple-500",
-  },
+type NavItem = {
+  path: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  color: string;
+};
+
+const primaryItems: NavItem[] = [
+  { path: "/", label: "Dashboard", icon: LayoutDashboard, color: "from-blue-500 to-cyan-500" },
+  { path: "/add", label: "Agregar", icon: Plus, color: "from-emerald-500 to-teal-500" },
+  { path: "/products", label: "Productos", icon: Table, color: "from-orange-500 to-amber-500" },
 ];
 
-const posNavItem = {
+const posNavItem: NavItem = {
   path: "/pos",
   label: "Punto de Venta",
   icon: ShoppingCart,
   color: "from-fuchsia-500 to-pink-500",
+};
+
+const operationItems: NavItem[] = [
+  { path: "/tracking", label: "Trackeo", icon: Activity, color: "from-purple-500 to-violet-500" },
+  { path: "/finanzas", label: "Finanzas", icon: DollarSign, color: "from-green-500 to-emerald-500" },
+  { path: "/reportes", label: "Reportes", icon: BarChart3, color: "from-pink-500 to-rose-500" },
+];
+
+const managementItems: NavItem[] = [
+  { path: "/catalogo", label: "Catálogo", icon: BookOpen, color: "from-sky-500 to-blue-500" },
+  { path: "/racknova-ia", label: "RackNova IA", icon: Bot, color: "from-blue-600 to-cyan-500" },
+  { path: "/usuarios", label: "Usuarios", icon: Users, color: "from-indigo-500 to-purple-500" },
+];
+
+const roleLabels: Record<string, string> = {
+  admin: "Administrador",
+  operator: "Operador",
+  viewer: "Consulta",
 };
 
 export function Navigation() {
@@ -87,10 +73,15 @@ export function Navigation() {
   const [posState, setPosState] = useState<POSEstado | null>(null);
   const role = (localStorage.getItem("rol") || "viewer").toLowerCase();
   const canUsePOS = role === "admin" || role === "operator";
+  const userName =
+    localStorage.getItem("nombre") ||
+    localStorage.getItem("usuario") ||
+    "Usuario RackNova";
+  const userEmail = localStorage.getItem("usuario") || "";
+  const roleLabel = roleLabels[role] || role;
 
   useEffect(() => {
     let mounted = true;
-
     const load = async () => {
       try {
         const response = await obtenerEstadoPOS();
@@ -99,82 +90,183 @@ export function Navigation() {
         if (mounted) setPosState(null);
       }
     };
-
     const handleStateChanged = (event: Event) => {
       const customEvent = event as CustomEvent<POSEstado>;
       if (customEvent.detail) setPosState(customEvent.detail);
     };
-
     void load();
     window.addEventListener("racknova:pos-state-changed", handleStateChanged);
-
     return () => {
       mounted = false;
       window.removeEventListener("racknova:pos-state-changed", handleStateChanged);
     };
   }, []);
 
-  const navItems = useMemo(() => {
-    if (!canUsePOS || !posState?.habilitado) return baseNavItems;
-
-    const productIndex = baseNavItems.findIndex(
-      (item) => item.path === "/products"
-    );
-    const items = [...baseNavItems];
-    items.splice(productIndex + 1, 0, posNavItem);
-    return items;
+  const visiblePrimaryItems = useMemo(() => {
+    if (!canUsePOS || !posState?.habilitado) return primaryItems;
+    return [...primaryItems, posNavItem];
   }, [canUsePOS, posState?.habilitado]);
 
-  const isActive = (path: string) => {
-    if (path === "/") return location.pathname === "/";
-    return location.pathname.startsWith(path);
+  const allVisibleItems = useMemo(
+    () => [...visiblePrimaryItems, ...operationItems, ...managementItems],
+    [visiblePrimaryItems]
+  );
+
+  const isActive = (path: string) =>
+    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+
+  const groupIsActive = (items: NavItem[]) =>
+    items.some((item) => isActive(item.path));
+
+  const logout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("usuario");
+    localStorage.removeItem("nombre");
+    localStorage.removeItem("rol");
+    window.location.href = "/login";
   };
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border/70 bg-background/85 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto px-6 py-3">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <Link to="/" className="group flex items-center gap-3">
-            <div className="h-11 w-11 rounded-2xl bg-gradient-primary shadow-lg flex items-center justify-center transition-transform group-hover:scale-105">
+    <nav className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-xl">
+      <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6">
+        <div className="flex items-center justify-between gap-3">
+          <Link to="/" className="group flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-primary shadow-lg transition-transform group-hover:scale-105">
               <Package className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-black tracking-tight racknova-page-title">
-                RackNova
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Sistema inteligente de inventario
-              </p>
+            <div className="hidden min-w-0 sm:block">
+              <h1 className="truncate text-xl font-black tracking-tight racknova-page-title">RackNova</h1>
+              <p className="truncate text-xs text-muted-foreground">Sistema inteligente de inventario</p>
             </div>
           </Link>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.path);
+          <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 xl:flex">
+            {visiblePrimaryItems.map((item) => (
+              <NavButton key={item.path} item={item} active={isActive(item.path)} />
+            ))}
+            <NavGroup label="Operación" items={operationItems} active={groupIsActive(operationItems)} isActive={isActive} />
+            <NavGroup label="Gestión" items={managementItems} active={groupIsActive(managementItems)} isActive={isActive} />
+          </div>
 
-              return (
-                <Link key={item.path} to={item.path}>
-                  <Button
-                    variant={active ? "default" : "ghost"}
-                    className={
-                      active
-                        ? `bg-gradient-to-r ${item.color} text-white shadow-md hover:opacity-95`
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/80"
-                    }
-                  >
-                    <Icon className="h-4 w-4 mr-2" />
-                    {item.label}
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="xl:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <Menu className="h-4 w-4" />
+                    Menú
                   </Button>
-                </Link>
-              );
-            })}
-            <div className="ml-1">
-              <ThemeToggle />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Navegación</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {allVisibleItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <DropdownMenuItem key={item.path} asChild>
+                        <Link to={item.path} className={isActive(item.path) ? "bg-accent font-semibold" : undefined}>
+                          <Icon className="mr-2 h-4 w-4" />
+                          {item.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-10 max-w-[230px] gap-2 rounded-xl px-3">
+                  <UserCircle2 className="h-5 w-5 shrink-0 text-primary" />
+                  <span className="hidden min-w-0 text-left md:block">
+                    <span className="block truncate text-sm font-semibold">{userName}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">{roleLabel}</span>
+                  </span>
+                  <ChevronDown className="hidden h-4 w-4 shrink-0 md:block" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>
+                  <span className="block truncate">{userName}</span>
+                  <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">{userEmail}</span>
+                  <span className="mt-1 block text-xs font-normal text-primary">{roleLabel}</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={logout}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <ThemeToggle />
           </div>
         </div>
       </div>
     </nav>
+  );
+}
+
+function NavButton({ item, active }: { item: NavItem; active: boolean }) {
+  const Icon = item.icon;
+  return (
+    <Link to={item.path}>
+      <Button
+        variant={active ? "default" : "ghost"}
+        size="sm"
+        className={
+          active
+            ? `bg-gradient-to-r ${item.color} text-white shadow-md hover:opacity-95`
+            : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+        }
+      >
+        <Icon className="mr-2 h-4 w-4" />
+        {item.label}
+      </Button>
+    </Link>
+  );
+}
+
+function NavGroup({
+  label,
+  items,
+  active,
+  isActive,
+}: {
+  label: string;
+  items: NavItem[];
+  active: boolean;
+  isActive: (path: string) => boolean;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className={
+            active
+              ? "bg-secondary font-semibold text-foreground"
+              : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+          }
+        >
+          {label}
+          <ChevronDown className="ml-2 h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <DropdownMenuItem key={item.path} asChild>
+              <Link to={item.path} className={isActive(item.path) ? "bg-accent font-semibold" : undefined}>
+                <Icon className="mr-2 h-4 w-4" />
+                {item.label}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

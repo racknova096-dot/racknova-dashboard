@@ -58,7 +58,7 @@ export default function Login() {
 
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("usuario", user?.email || username);
-      localStorage.setItem("nombre", user?.name || username);
+      localStorage.setItem("nombre", user?.nombre || user?.name || user?.email || username);
       localStorage.setItem("rol", role);
 
      window.location.href = "/";

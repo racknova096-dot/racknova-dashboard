@@ -255,6 +255,23 @@ export type POSReporteDiario = {
     ingresos: number;
     ganancia: number;
   }>;
+  movimientos_productos: Array<{
+    id_venta: number;
+    id_detalle: number;
+    folio: string;
+    fecha: string;
+    usuario: string;
+    caja: string;
+    sku: string;
+    nombre: string;
+    ubicacion: string;
+    unidad_venta: string;
+    cantidad_vendida: number;
+    cantidad_devuelta: number;
+    cantidad_neta: number;
+    ingresos: number;
+    ganancia: number;
+  }>;
   cajeros: Array<{ usuario: string; ventas: number; total: number }>;
   cajas: Array<{ caja: string; ventas: number; total: number }>;
   ventas_por_hora: Array<{ hora: string; total: number }>;

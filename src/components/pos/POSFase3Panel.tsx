@@ -904,19 +904,171 @@ function ReportsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
   };
 
+  const movementRows = report?.movimientos_productos ?? [];
+
   return (
     <div className="space-y-5">
       <Card>
-        <CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-3"><span>Reporte diario de ventas</span><div className="flex flex-wrap gap-2"><Input className="w-auto" type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} /><Button variant="outline" onClick={() => void load()} disabled={loading}>{loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}</Button><Button variant="outline" disabled={downloading} onClick={() => void download("pdf")}><Download className="mr-2 h-4 w-4" />PDF</Button><Button variant="outline" disabled={downloading} onClick={() => void download("xlsx")}><Download className="mr-2 h-4 w-4" />Excel</Button>{isAdmin && <Button onClick={() => void close()}><FileCheck2 className="mr-2 h-4 w-4" />Cerrar día</Button>}</div></CardTitle></CardHeader>
-        <CardContent>
-          {!report ? <p className="text-sm text-muted-foreground">Sin información.</p> : <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Ventas netas" value={money(report.resumen.ventas_netas)} /><Metric label="Ganancia" value={money(report.resumen.ganancia)} /><Metric label="Ventas" value={String(report.resumen.numero_ventas)} /><Metric label="Margen" value={`${report.resumen.margen}%`} /><Metric label="Descuentos" value={money(report.resumen.descuentos)} /><Metric label="Devoluciones" value={money(report.resumen.monto_devoluciones)} /><Metric label="Costo" value={money(report.resumen.costo_mercancia)} /><Metric label="Abonos" value={money(report.resumen.abonos)} /></div>
-            <div className="grid gap-5 xl:grid-cols-2">
-              <div><h3 className="mb-2 font-semibold">Productos más vendidos</h3><div className="space-y-2">{report.productos.slice(0, 10).map((item) => <div key={item.sku} className="flex items-center justify-between rounded-lg border p-3"><div><p className="font-medium">{item.nombre}</p><p className="text-sm text-muted-foreground">{item.cantidad} {item.unidad_venta}</p></div><strong>{money(item.ingresos)}</strong></div>)}</div></div>
-              <div><h3 className="mb-2 font-semibold">Métodos de pago</h3><div className="space-y-2">{Object.entries(report.metodos_pago).map(([key, value]) => <div key={key} className="flex items-center justify-between rounded-lg border p-3"><span className="capitalize">{key.replace("_", " ")}</span><strong>{money(Number(value))}</strong></div>)}</div></div>
+        <CardHeader>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3">
+            <span>Reporte diario de ventas</span>
+            <div className="flex flex-wrap gap-2">
+              <Input className="w-auto" type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} />
+              <Button variant="outline" onClick={() => void load()} disabled={loading}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </Button>
+              <Button variant="outline" disabled={downloading} onClick={() => void download("pdf")}>
+                <Download className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
+              <Button variant="outline" disabled={downloading} onClick={() => void download("xlsx")}>
+                <Download className="mr-2 h-4 w-4" />
+                Excel
+              </Button>
+              {isAdmin && (
+                <Button onClick={() => void close()}>
+                  <FileCheck2 className="mr-2 h-4 w-4" />
+                  Cerrar día
+                </Button>
+              )}
             </div>
-            <div><h3 className="mb-2 font-semibold">Cortes de caja</h3><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-2">Caja</th><th className="p-2">Usuario</th><th className="p-2 text-right">Esperado</th><th className="p-2 text-right">Contado</th><th className="p-2 text-right">Diferencia</th><th className="p-2">Estado</th></tr></thead><tbody>{report.cortes.map((cut) => <tr key={cut.id_sesion} className="border-b"><td className="p-2">{cut.caja_nombre}</td><td className="p-2">{cut.usuario}</td><td className="p-2 text-right">{money(cut.efectivo_esperado)}</td><td className="p-2 text-right">{cut.efectivo_contado == null ? "—" : money(cut.efectivo_contado)}</td><td className="p-2 text-right">{cut.diferencia == null ? "—" : money(cut.diferencia)}</td><td className="p-2"><Badge>{cut.estado}</Badge></td></tr>)}</tbody></table></div></div>
-          </div>}
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {!report ? (
+            <p className="text-sm text-muted-foreground">Sin información.</p>
+          ) : (
+            <div className="space-y-6">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Metric label="Ventas netas" value={money(report.resumen.ventas_netas)} />
+                <Metric label="Ganancia" value={money(report.resumen.ganancia)} />
+                <Metric label="Ventas" value={String(report.resumen.numero_ventas)} />
+                <Metric label="Margen" value={`${report.resumen.margen}%`} />
+                <Metric label="Descuentos" value={money(report.resumen.descuentos)} />
+                <Metric label="Devoluciones" value={money(report.resumen.monto_devoluciones)} />
+                <Metric label="Costo" value={money(report.resumen.costo_mercancia)} />
+                <Metric label="Abonos" value={money(report.resumen.abonos)} />
+              </div>
+
+              <div className="grid gap-5 xl:grid-cols-2">
+                <div>
+                  <h3 className="mb-2 font-semibold">Productos más vendidos</h3>
+                  <div className="space-y-2">
+                    {report.productos.slice(0, 10).map((item) => (
+                      <div key={item.sku} className="flex items-center justify-between rounded-lg border p-3">
+                        <div>
+                          <p className="font-medium">{item.nombre}</p>
+                          <p className="text-sm text-muted-foreground">{item.cantidad} {item.unidad_venta}</p>
+                        </div>
+                        <strong>{money(item.ingresos)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="mb-2 font-semibold">Métodos de pago</h3>
+                  <div className="space-y-2">
+                    {Object.entries(report.metodos_pago).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between rounded-lg border p-3">
+                        <span className="capitalize">{key.replaceAll("_", " ")}</span>
+                        <strong>{money(Number(value))}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <h3 className="font-semibold">Conciliación física de salidas</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Cada renglón corresponde a un producto vendido y conserva la ubicación desde la que salió.
+                    </p>
+                  </div>
+                  <Badge variant="secondary">{movementRows.length} movimientos</Badge>
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full min-w-[1180px] text-sm">
+                    <thead className="bg-muted/60">
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="p-3">Hora</th>
+                        <th className="p-3">Folio</th>
+                        <th className="p-3">Caja</th>
+                        <th className="p-3">Cajero</th>
+                        <th className="p-3">SKU</th>
+                        <th className="p-3">Producto</th>
+                        <th className="p-3">Ubicación</th>
+                        <th className="p-3 text-right">Vendida</th>
+                        <th className="p-3 text-right">Devuelta</th>
+                        <th className="p-3 text-right">Neta</th>
+                        <th className="p-3 text-right">Ingresos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {movementRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className="p-8 text-center text-muted-foreground">
+                            No hay salidas registradas para esta fecha.
+                          </td>
+                        </tr>
+                      ) : (
+                        movementRows.map((item) => (
+                          <tr key={`${item.id_venta}-${item.id_detalle}`} className="border-b last:border-0">
+                            <td className="whitespace-nowrap p-3">
+                              {new Date(item.fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                            </td>
+                            <td className="whitespace-nowrap p-3 font-medium">{item.folio}</td>
+                            <td className="p-3">{item.caja}</td>
+                            <td className="p-3">{item.usuario}</td>
+                            <td className="whitespace-nowrap p-3 font-mono text-xs">{item.sku}</td>
+                            <td className="p-3">{item.nombre}</td>
+                            <td className="p-3"><Badge variant="outline">{item.ubicacion}</Badge></td>
+                            <td className="p-3 text-right">{item.cantidad_vendida} {item.unidad_venta}</td>
+                            <td className="p-3 text-right">{item.cantidad_devuelta}</td>
+                            <td className="p-3 text-right font-semibold">{item.cantidad_neta}</td>
+                            <td className="p-3 text-right font-semibold">{money(item.ingresos)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="mb-2 font-semibold">Cortes de caja</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="p-2">Caja</th>
+                        <th className="p-2">Usuario</th>
+                        <th className="p-2 text-right">Esperado</th>
+                        <th className="p-2 text-right">Contado</th>
+                        <th className="p-2 text-right">Diferencia</th>
+                        <th className="p-2">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.cortes.map((cut) => (
+                        <tr key={cut.id_sesion} className="border-b">
+                          <td className="p-2">{cut.caja_nombre}</td>
+                          <td className="p-2">{cut.usuario}</td>
+                          <td className="p-2 text-right">{money(cut.efectivo_esperado)}</td>
+                          <td className="p-2 text-right">{cut.efectivo_contado == null ? "—" : money(cut.efectivo_contado)}</td>
+                          <td className="p-2 text-right">{cut.diferencia == null ? "—" : money(cut.diferencia)}</td>
+                          <td className="p-2"><Badge>{cut.estado}</Badge></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
