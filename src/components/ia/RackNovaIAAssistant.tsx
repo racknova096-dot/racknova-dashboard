@@ -283,17 +283,46 @@ export function RackNovaIAAssistant() {
 
   return (
     <>
-      {!isOpen && (
-        <Button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 shadow-2xl transition-transform hover:scale-105"
-          title="Abrir RackNova IA"
-          aria-label="Abrir RackNova IA"
-        >
-          <Bot className="h-7 w-7" />
-        </Button>
-      )}
+     {!isOpen && (
+  <Button
+    type="button"
+    onClick={() => setIsOpen(true)}
+    title="Abrir RackNova IA"
+    aria-label="Abrir RackNova IA"
+    className="
+      animate-racknova-attention
+      group fixed bottom-6 right-6 z-50
+      h-auto min-h-[64px] w-auto
+      rounded-full
+      bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500
+      px-4 py-2.5
+      text-white
+      shadow-[0_14px_38px_rgba(37,99,235,0.50)]
+      transition-all duration-300
+      hover:-translate-y-1
+      hover:scale-[1.03]
+      hover:shadow-[0_18px_48px_rgba(37,99,235,0.65)]
+    "
+  >
+    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15">
+      <Bot className="h-6 w-6" />
+
+      <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-blue-600 bg-emerald-400" />
+    </span>
+
+    <span className="ml-3 min-w-0 text-left leading-tight">
+      <span className="block text-sm font-bold">
+        RackNova IA
+      </span>
+
+      <span className="block text-xs font-normal text-blue-100">
+        Pregúntame aquí
+      </span>
+    </span>
+
+    <Sparkles className="ml-3 h-5 w-5 text-yellow-200 transition-transform group-hover:rotate-12" />
+  </Button>
+)}
 
       {isOpen && (
         <div className="pointer-events-none fixed inset-0 z-50">

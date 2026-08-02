@@ -336,3 +336,32 @@
     box-shadow: 0 18px 45px hsl(222 47% 11% / 0.18) !important;
   }
 }
+@keyframes racknova-attention {
+  0%,
+  82%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  86% {
+    transform: translateY(-5px) scale(1.025);
+  }
+
+  90% {
+    transform: translateY(0) scale(1);
+  }
+
+  94% {
+    transform: translateY(-2px) scale(1.012);
+  }
+}
+
+.animate-racknova-attention {
+  animation: racknova-attention 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-racknova-attention {
+    animation: none;
+  }
+}
