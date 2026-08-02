@@ -39,6 +39,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import POSFase3Panel from "@/components/pos/POSFase3Panel";
 import {
   abrirCajaPOS,
   buscarProductosPOS,
@@ -962,6 +963,8 @@ export default function PuntoVenta() {
           </div>
         </CardContent>
       </Card>
+
+      <POSFase3Panel />
 
       <Card>
         <CardHeader><CardTitle>Movimientos de efectivo del turno</CardTitle></CardHeader>
