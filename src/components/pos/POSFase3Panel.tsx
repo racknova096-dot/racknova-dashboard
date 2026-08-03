@@ -230,6 +230,39 @@ function AdvancedSale({
   const selectedClient = clients.find((item) => String(item.id_cliente) === clientId);
   const total = quote?.total || 0;
 
+  // RACKNOVA_FIX_TDZ_ADVANCED_QUANTITY
+  const advancedQuantityError = useMemo(() => {
+    for (const item of cart) {
+      const raw = item.cantidadInput.trim();
+
+      if (raw === "") {
+        return `Captura la cantidad de ${item.nombre}.`;
+      }
+
+      const value = Number(raw);
+      const available =
+        item.cantidad_disponible_venta ?? item.cantidad;
+      const factor = Number(item.factor_inventario || 1);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        return `La cantidad de ${item.nombre} debe ser mayor a cero.`;
+      }
+
+      if (value > available + 0.000001) {
+        return `La cantidad de ${item.nombre} supera la existencia disponible.`;
+      }
+
+      if (
+        Math.abs(value * factor - Math.round(value * factor)) >
+        0.000001
+      ) {
+        return `La cantidad de ${item.nombre} tiene demasiados decimales.`;
+      }
+    }
+
+    return null;
+  }, [cart]);
+
   const quotePayload = useMemo(
     () => ({
       operacion_id: createOperationId(),
@@ -381,37 +414,7 @@ function AdvancedSale({
     );
   };
 
-  const advancedQuantityError = useMemo(() => {
-    for (const item of cart) {
-      const raw = item.cantidadInput.trim();
 
-      if (raw === "") {
-        return `Captura la cantidad de ${item.nombre}.`;
-      }
-
-      const value = Number(raw);
-      const available =
-        item.cantidad_disponible_venta ?? item.cantidad;
-      const factor = Number(item.factor_inventario || 1);
-
-      if (!Number.isFinite(value) || value <= 0) {
-        return `La cantidad de ${item.nombre} debe ser mayor a cero.`;
-      }
-
-      if (value > available + 0.000001) {
-        return `La cantidad de ${item.nombre} supera la existencia disponible.`;
-      }
-
-      if (
-        Math.abs(value * factor - Math.round(value * factor)) >
-        0.000001
-      ) {
-        return `La cantidad de ${item.nombre} tiene demasiados decimales.`;
-      }
-    }
-
-    return null;
-  }, [cart]);
 
   const checkout = async () => {
     if (advancedQuantityError) {
