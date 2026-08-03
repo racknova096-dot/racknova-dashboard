@@ -192,6 +192,9 @@ export default function PuntoVenta() {
     useState<MetodoReembolso>("efectivo");
   const [returning, setReturning] = useState(false);
 
+  // RACKNOVA_DEVOLUCIONES_VISIBLES
+  const [salesSearch, setSalesSearch] = useState("");
+  const returnsSectionRef = useRef<HTMLDivElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const role = getRole();
   const isAdmin = role === "admin";
@@ -427,6 +430,32 @@ export default function PuntoVenta() {
           : 0;
     return Math.max(received - cashDue, 0);
   }, [efectivoRecibido, metodoPago, montoEfectivoMixto, totals.total]);
+
+  const filteredSales = useMemo(() => {
+    const search = salesSearch.trim().toLowerCase();
+
+    if (!search) {
+      return ventas;
+    }
+
+    return ventas.filter((sale) =>
+      [
+        sale.folio,
+        sale.usuario,
+        sale.cliente_nombre || "",
+        sale.estado,
+      ].some((value) =>
+        String(value).toLowerCase().includes(search)
+      )
+    );
+  }, [salesSearch, ventas]);
+
+  const scrollToReturns = () => {
+    returnsSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
 
   const returnTotal = useMemo(() => {
     if (!returnSale) return 0;
@@ -925,6 +954,13 @@ export default function PuntoVenta() {
       setReturnQuantities({});
       setReturnReason("");
       setRefundMethod("efectivo");
+      window.setTimeout(() => {
+        document
+          .querySelector<HTMLElement>(
+            '[data-racknova-return-dialog="true"]'
+          )
+          ?.focus();
+      }, 50);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo abrir la venta.");
     }
@@ -1110,6 +1146,17 @@ export default function PuntoVenta() {
           <Button variant="outline" onClick={() => void refreshPOS()}>
             <RefreshCw className="mr-2 h-4 w-4" /> Actualizar
           </Button>
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={scrollToReturns}
+              className="border-amber-400/60 bg-amber-500/10 text-amber-800 hover:bg-amber-500/20 dark:text-amber-200"
+            >
+              <RotateCcw className="mr-2 h-4 w-4" />
+              Devoluciones
+            </Button>
+          )}
           {isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}
         </div>
       </section>
@@ -1459,38 +1506,334 @@ export default function PuntoVenta() {
         </div>
       )}
       {returnSale && (
-        <Card className="border-amber-500/40">
-          <CardHeader><CardTitle className="flex items-center justify-between"><span className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> Devolver artículos de {returnSale.folio}</span><Button variant="ghost" onClick={() => setReturnSale(null)}><XCircle className="h-5 w-5" /></Button></CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              {returnSale.items.map((item) => {
-                const available = maxReturn(item);
-                return <div key={item.id_detalle} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_160px]"><div><p className="font-semibold">{item.nombre}</p><p className="text-sm text-muted-foreground">Vendidas {mostrarCantidad(item.cantidad)} {unidadVenta(item)} · devueltas {mostrarCantidad(item.cantidad_devuelta)} · disponibles {mostrarCantidad(available)}</p></div><Input type="number" min="0" max={available} step={pasoVenta(item)} disabled={available <= 0} value={returnQuantities[item.id_detalle] || ""} onChange={(event) => setReturnQuantities((current) => ({ ...current, [item.id_detalle]: String(Math.min(Math.max(Number(event.target.value || 0), 0), available)) }))} placeholder={`Cantidad (${unidadVenta(item)})`} /></div>;
-              })}
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4">
+          <div
+            data-racknova-return-dialog="true"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Devolución de ${returnSale.folio}`}
+            tabIndex={-1}
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-background shadow-2xl outline-none"
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 p-5 backdrop-blur">
+              <div>
+                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                  <RotateCcw className="h-6 w-6" />
+                  <span className="font-semibold">
+                    Registrar devolución
+                  </span>
+                </div>
+                <h2 className="mt-1 text-2xl font-black">
+                  Venta {returnSale.folio}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Selecciona únicamente los artículos que el cliente devuelve.
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setReturnSale(null)}
+                aria-label="Cerrar devolución"
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
             </div>
-            <div className="grid gap-3 md:grid-cols-2"><Input placeholder="Motivo de devolución" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /><select className="h-10 rounded-md border bg-background px-3" value={refundMethod} onChange={(event) => setRefundMethod(event.target.value as MetodoReembolso)}><option value="efectivo">Reembolso en efectivo</option><option value="tarjeta">Reembolso a tarjeta</option><option value="transferencia">Reembolso por transferencia</option></select></div>
-            <div className="flex items-center justify-between rounded-lg bg-secondary p-4"><strong>Total a reembolsar</strong><strong className="text-xl">{money(returnTotal)}</strong></div>
-            <Button disabled={returning || returnTotal <= 0} onClick={submitReturn}>{returning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar devolución</Button>
-          </CardContent>
-        </Card>
+
+            <div className="space-y-5 p-5">
+              <div className="space-y-3">
+                {returnSale.items.map((item) => {
+                  const available = maxReturn(item);
+                  const factor = Number(item.factor_inventario || 1);
+                  const step = factor > 1 ? 1 / factor : 1;
+
+                  return (
+                    <div
+                      key={item.id_detalle}
+                      className="grid gap-3 rounded-xl border p-4 sm:grid-cols-[1fr_170px] sm:items-end"
+                    >
+                      <div>
+                        <p className="font-semibold">{item.nombre}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.sku} · vendidas {item.cantidad}{" "}
+                          {item.unidad_venta || "pieza"} · ya devueltas{" "}
+                          {item.cantidad_devuelta} · disponibles {available}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Cantidad a devolver
+                        </label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={available}
+                          step={step}
+                          disabled={available <= 0}
+                          value={returnQuantities[item.id_detalle] || ""}
+                          onChange={(event) => {
+                            const raw = event.target.value;
+
+                            setReturnQuantities((current) => ({
+                              ...current,
+                              [item.id_detalle]:
+                                raw === ""
+                                  ? ""
+                                  : String(
+                                      Math.min(
+                                        Math.max(Number(raw), 0),
+                                        available
+                                      )
+                                    ),
+                            }));
+                          }}
+                          placeholder={
+                            available > 0
+                              ? `Máximo ${available}`
+                              : "Sin artículos disponibles"
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label className="text-sm font-semibold">
+                    Motivo de la devolución
+                  </label>
+                  <Input
+                    className="mt-1"
+                    placeholder="Ejemplo: producto dañado"
+                    value={returnReason}
+                    onChange={(event) =>
+                      setReturnReason(event.target.value)
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-semibold">
+                    Método de reembolso
+                  </label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border bg-background px-3"
+                    value={refundMethod}
+                    onChange={(event) =>
+                      setRefundMethod(
+                        event.target.value as MetodoReembolso
+                      )
+                    }
+                  >
+                    <option value="efectivo">
+                      Reembolso en efectivo
+                    </option>
+                    <option value="tarjeta">
+                      Reembolso a tarjeta
+                    </option>
+                    <option value="transferencia">
+                      Reembolso por transferencia
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl bg-secondary p-4">
+                <div>
+                  <p className="font-semibold">Total a reembolsar</p>
+                  <p className="text-xs text-muted-foreground">
+                    El inventario se restaurará al confirmar.
+                  </p>
+                </div>
+                <strong className="text-2xl">
+                  {money(returnTotal)}
+                </strong>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setReturnSale(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  disabled={
+                    returning ||
+                    returnTotal <= 0 ||
+                    returnReason.trim().length < 3
+                  }
+                  onClick={submitReturn}
+                >
+                  {returning && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Confirmar devolución
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
-      <Card>
-        <CardHeader><CardTitle className="flex items-center justify-between gap-3"><span className="flex items-center gap-2"><History className="h-5 w-5" /> Últimas ventas</span><Button variant="outline" size="sm" onClick={() => void loadSales()} disabled={loadingSales}>{loadingSales && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Actualizar</Button></CardTitle></CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-sm">
-              <thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">Folio</th><th className="p-3">Fecha</th><th className="p-3">Cajero</th><th className="p-3">Estado</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Acciones</th></tr></thead>
-              <tbody>
-                {ventas.map((sale) => {
-                  return <tr key={sale.id_venta} className="border-b"><td className="p-3 font-semibold">{sale.folio}</td><td className="p-3">{formatDate(sale.fecha)}</td><td className="p-3">{sale.usuario}</td><td className="p-3"><Badge variant={sale.estado === "COMPLETADA" ? "default" : "destructive"}>{sale.estado}</Badge></td><td className="p-3 text-right font-bold">{money(sale.total)}</td><td className="p-3"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => void openSale(sale.id_venta)}>Ver</Button>{isAdmin && sale.estado === "COMPLETADA" && <Button size="sm" variant="outline" onClick={() => void beginReturn(sale)}><RotateCcw className="mr-1 h-4 w-4" /> Devolver</Button>}{isAdmin && sale.estado === "COMPLETADA" && <Button size="sm" variant="destructive" onClick={() => void cancelSale(sale)}><XCircle className="mr-1 h-4 w-4" /> Cancelar</Button>}</div></td></tr>;
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <div
+        ref={returnsSectionRef}
+        className="scroll-mt-6"
+      >
+        <Card className="border-amber-500/30">
+          <CardHeader className="space-y-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <RotateCcw className="h-5 w-5 text-amber-600" />
+                  Historial y devoluciones
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Busca la venta, pulsa Devolver y selecciona los artículos
+                  que regresó el cliente.
+                </p>
+              </div>
 
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadSales()}
+                disabled={loadingSales}
+              >
+                {loadingSales && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Actualizar ventas
+              </Button>
+            </div>
+
+            {isAdmin ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+                <strong>Cómo hacer una devolución:</strong>{" "}
+                localiza una venta completada y pulsa el botón{" "}
+                <strong>Devolver</strong>. Se abrirá el formulario de reembolso.
+              </div>
+            ) : (
+              <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                Las devoluciones requieren autorización de un administrador.
+              </div>
+            )}
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="relative max-w-xl">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                value={salesSearch}
+                onChange={(event) =>
+                  setSalesSearch(event.target.value)
+                }
+                placeholder="Buscar por folio, cajero, cliente o estado"
+              />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[940px] text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="p-3">Folio</th>
+                    <th className="p-3">Fecha</th>
+                    <th className="p-3">Cajero</th>
+                    <th className="p-3">Cliente</th>
+                    <th className="p-3">Estado</th>
+                    <th className="p-3 text-right">Total</th>
+                    <th className="p-3 text-right">Acciones</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredSales.map((sale) => (
+                    <tr key={sale.id_venta} className="border-b">
+                      <td className="p-3 font-semibold">{sale.folio}</td>
+                      <td className="p-3">{formatDate(sale.fecha)}</td>
+                      <td className="p-3">{sale.usuario}</td>
+                      <td className="p-3">
+                        {sale.cliente_nombre || "Público general"}
+                      </td>
+                      <td className="p-3">
+                        <Badge
+                          variant={
+                            sale.estado === "COMPLETADA"
+                              ? "default"
+                              : "destructive"
+                          }
+                        >
+                          {sale.estado}
+                        </Badge>
+                      </td>
+                      <td className="p-3 text-right font-bold">
+                        {money(sale.total)}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              void openSale(sale.id_venta)
+                            }
+                          >
+                            Ver
+                          </Button>
+
+                          {isAdmin &&
+                            sale.estado === "COMPLETADA" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-amber-400/60 text-amber-800 hover:bg-amber-500/10 dark:text-amber-200"
+                                onClick={() =>
+                                  void beginReturn(sale)
+                                }
+                              >
+                                <RotateCcw className="mr-1 h-4 w-4" />
+                                Devolver
+                              </Button>
+                            )}
+
+                          {isAdmin &&
+                            sale.estado === "COMPLETADA" && (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() =>
+                                  void cancelSale(sale)
+                                }
+                              >
+                                <XCircle className="mr-1 h-4 w-4" />
+                                Cancelar
+                              </Button>
+                            )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {filteredSales.length === 0 && (
+                <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+                  No se encontraron ventas con ese criterio.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
       <POSFase3Panel />
 
       <Card>

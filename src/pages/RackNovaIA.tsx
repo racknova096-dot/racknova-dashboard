@@ -579,6 +579,8 @@ export default function RackNovaIA() {
   const isNearBottomRef =
     useRef(true);
 
+  // RACKNOVA_IA_INICIO_SUPERIOR
+  const chatMountedRef = useRef(false);
   useEffect(() => {
     return () => {
       if (
@@ -593,7 +595,34 @@ export default function RackNovaIA() {
   }, []);
 
   useEffect(() => {
+    // La vista completa siempre inicia en la parte superior.
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: "auto",
+      });
+
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = 0;
+      }
+
+      isNearBottomRef.current = false;
+      chatMountedRef.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
     if (
+      !chatMountedRef.current ||
       !isNearBottomRef.current
     ) {
       return;
@@ -601,12 +630,14 @@ export default function RackNovaIA() {
 
     const timer =
       window.setTimeout(() => {
-        chatEndRef.current?.scrollIntoView(
-          {
+        const container = chatContainerRef.current;
+
+        if (container) {
+          container.scrollTo({
+            top: container.scrollHeight,
             behavior: "smooth",
-            block: "end",
-          }
-        );
+          });
+        }
       }, 50);
 
     return () =>
