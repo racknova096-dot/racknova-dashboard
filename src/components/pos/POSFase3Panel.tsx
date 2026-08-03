@@ -57,7 +57,9 @@ type SaleType = "CONTADO" | "CREDITO" | "PARCIAL";
 
 type AdvancedCartItem = POSProducto & {
   cantidadVenta: number;
+  cantidadInput: string;
   descuentoPorcentaje: number;
+  descuentoInput: string;
 };
 
 const money = (value: number) =>
@@ -75,6 +77,7 @@ const createOperationId = () => {
   return `rn-v3-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+// RACKNOVA_INPUTS_LIBRES_FASE3
 const emptyClient: POSClientePayload = {
   nombre: "",
   telefono: "",
@@ -93,7 +96,7 @@ const emptyPromotion: POSPromocionPayload = {
   sku: "",
   porcentaje: 0,
   precio_fijo: 0,
-  cantidad_minima: 0,
+  cantidad_minima: 1,
   compra_cantidad: 0,
   paga_cantidad: 0,
   fecha_inicio: null,
@@ -244,7 +247,7 @@ function AdvancedSale({
   );
 
   useEffect(() => {
-    if (cart.length === 0) {
+    if (cart.length === 0 || advancedQuantityError) {
       setQuote(null);
       return;
     }
@@ -260,14 +263,14 @@ function AdvancedSale({
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [cart, quotePayload]);
+  }, [advancedQuantityError, cart, quotePayload]);
 
   useEffect(() => {
     if (saleType === "CONTADO" && total > 0) {
       setPaymentAmount(String(total));
     }
     if (saleType === "CREDITO") {
-      setPaymentAmount("0");
+      setPaymentAmount("");
     }
   }, [saleType, total]);
 
@@ -298,16 +301,29 @@ function AdvancedSale({
       if (found) {
         return current.map((item) =>
           item.sku === product.sku
-            ? { ...item, cantidadVenta: Math.min(item.cantidadVenta + step, available) }
+            ? {
+                ...item,
+                cantidadVenta: Math.min(
+                  item.cantidadVenta + step,
+                  available
+                ),
+                cantidadInput: String(
+                  Math.min(item.cantidadVenta + step, available)
+                ),
+              }
             : item
         );
       }
+      const initialQuantity = Math.min(1, available);
+
       return [
         ...current,
         {
           ...product,
-          cantidadVenta: Math.min(step, available),
+          cantidadVenta: initialQuantity,
+          cantidadInput: String(initialQuantity),
           descuentoPorcentaje: 0,
+          descuentoInput: "",
         },
       ];
     });
@@ -316,19 +332,93 @@ function AdvancedSale({
   };
 
   const updateQuantity = (sku: string, raw: string) => {
-    const parsed = Number(raw);
     setCart((current) =>
       current.map((item) => {
         if (item.sku !== sku) return item;
-        const available = item.cantidad_disponible_venta ?? item.cantidad;
-        const step = item.permite_fraccion ? 1 / Number(item.factor_inventario || 1) : 1;
-        const next = Math.min(Math.max(parsed || step, step), available);
-        return { ...item, cantidadVenta: Number(next.toFixed(6)) };
+
+        if (raw === "") {
+          return {
+            ...item,
+            cantidadInput: "",
+            cantidadVenta: 0,
+          };
+        }
+
+        const parsed = Number(raw);
+        return {
+          ...item,
+          cantidadInput: raw,
+          cantidadVenta: Number.isFinite(parsed) ? parsed : 0,
+        };
       })
     );
   };
 
+  const updateAdvancedDiscount = (sku: string, raw: string) => {
+    setCart((current) =>
+      current.map((item) => {
+        if (item.sku !== sku) return item;
+
+        if (raw === "") {
+          return {
+            ...item,
+            descuentoInput: "",
+            descuentoPorcentaje: 0,
+          };
+        }
+
+        const parsed = Number(raw);
+        const safe = Number.isFinite(parsed)
+          ? Math.min(Math.max(parsed, 0), 100)
+          : 0;
+
+        return {
+          ...item,
+          descuentoInput: parsed > 100 ? "100" : raw,
+          descuentoPorcentaje: safe,
+        };
+      })
+    );
+  };
+
+  const advancedQuantityError = useMemo(() => {
+    for (const item of cart) {
+      const raw = item.cantidadInput.trim();
+
+      if (raw === "") {
+        return `Captura la cantidad de ${item.nombre}.`;
+      }
+
+      const value = Number(raw);
+      const available =
+        item.cantidad_disponible_venta ?? item.cantidad;
+      const factor = Number(item.factor_inventario || 1);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        return `La cantidad de ${item.nombre} debe ser mayor a cero.`;
+      }
+
+      if (value > available + 0.000001) {
+        return `La cantidad de ${item.nombre} supera la existencia disponible.`;
+      }
+
+      if (
+        Math.abs(value * factor - Math.round(value * factor)) >
+        0.000001
+      ) {
+        return `La cantidad de ${item.nombre} tiene demasiados decimales.`;
+      }
+    }
+
+    return null;
+  }, [cart]);
+
   const checkout = async () => {
+    if (advancedQuantityError) {
+      toast.error(advancedQuantityError);
+      return;
+    }
+
     if (cart.length === 0 || !quote) return;
     if (saleType !== "CONTADO" && !clientId) {
       toast.error("Selecciona el cliente para vender a crédito.");
@@ -454,11 +544,43 @@ function AdvancedSale({
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Cantidad</label>
-                    <Input type="number" min={step} step={step} max={item.cantidad_disponible_venta ?? item.cantidad} value={item.cantidadVenta} onChange={(event) => updateQuantity(item.sku, event.target.value)} />
+                    <Input
+                      type="number"
+                      min={step}
+                      step={step}
+                      max={
+                        item.cantidad_disponible_venta ??
+                        item.cantidad
+                      }
+                      placeholder="Cantidad"
+                      value={item.cantidadInput}
+                      aria-invalid={
+                        item.cantidadInput.trim() === ""
+                      }
+                      onChange={(event) =>
+                        updateQuantity(
+                          item.sku,
+                          event.target.value
+                        )
+                      }
+                    />
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Descuento manual %</label>
-                    <Input type="number" min="0" max="100" step="0.01" value={item.descuentoPorcentaje} onChange={(event) => setCart((current) => current.map((row) => row.sku === item.sku ? { ...row, descuentoPorcentaje: Number(event.target.value || 0) } : row))} />
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      placeholder="Ejemplo: 10"
+                      value={item.descuentoInput}
+                      onChange={(event) =>
+                        updateAdvancedDiscount(
+                          item.sku,
+                          event.target.value
+                        )
+                      }
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <strong>{quoteItem ? money(quoteItem.final_total) : "—"}</strong>
@@ -499,7 +621,7 @@ function AdvancedSale({
           {paymentMethod !== "efectivo" && (
             <Input placeholder="Referencia" value={reference} onChange={(event) => setReference(event.target.value)} />
           )}
-          <Button className="w-full" disabled={selling || !quote || cart.length === 0} onClick={checkout}>
+          <Button className="w-full" disabled={selling || !quote || Boolean(advancedQuantityError) || cart.length === 0} onClick={checkout}>
             {selling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Registrar venta {money(total)}
           </Button>
@@ -599,8 +721,8 @@ function ClientsAndCredit({
             <Input placeholder="Teléfono" value={form.telefono || ""} onChange={(event) => setForm({ ...form, telefono: event.target.value })} />
             <Input placeholder="Correo" value={form.email || ""} onChange={(event) => setForm({ ...form, email: event.target.value })} />
             <Input placeholder="RFC opcional" value={form.rfc || ""} onChange={(event) => setForm({ ...form, rfc: event.target.value })} />
-            <Input type="number" min="0" step="0.01" placeholder="Límite de crédito" value={form.limite_credito} onChange={(event) => setForm({ ...form, limite_credito: Number(event.target.value || 0) })} />
-            <Input type="number" min="0" placeholder="Días de crédito" value={form.dias_credito} onChange={(event) => setForm({ ...form, dias_credito: Number(event.target.value || 0) })} />
+            <Input type="number" min="0" step="0.01" placeholder="Límite de crédito" value={form.limite_credito || ""} onChange={(event) => setForm({ ...form, limite_credito: Number(event.target.value || 0) })} />
+            <Input type="number" min="0" placeholder="Días de crédito" value={form.dias_credito || ""} onChange={(event) => setForm({ ...form, dias_credito: Number(event.target.value || 0) })} />
           </div>
           <Input placeholder="Dirección" value={form.direccion || ""} onChange={(event) => setForm({ ...form, direccion: event.target.value })} />
           <textarea className="min-h-20 w-full rounded-md border bg-background p-3 text-sm" placeholder="Notas" value={form.notas || ""} onChange={(event) => setForm({ ...form, notas: event.target.value })} />
@@ -698,25 +820,157 @@ function ClientsAndCredit({
   );
 }
 
-function PromotionsPanel({ promotions, isAdmin, onChanged }: { promotions: POSPromocion[]; isAdmin: boolean; onChanged: () => Promise<void> }) {
-  const [form, setForm] = useState<POSPromocionPayload>(emptyPromotion);
+function PromotionsPanel({
+  promotions,
+  isAdmin,
+  onChanged,
+}: {
+  promotions: POSPromocion[];
+  isAdmin: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  // RACKNOVA_PROMOCIONES_FORM_V2
+  const initialPromotion = (): POSPromocionPayload => ({
+    ...emptyPromotion,
+    nombre: "",
+    sku: "",
+    cantidad_minima: 1,
+    fecha_inicio: null,
+    fecha_fin: null,
+    activa: true,
+  });
+
+  const [form, setForm] = useState<POSPromocionPayload>(
+    initialPromotion
+  );
   const [saving, setSaving] = useState(false);
+  const [productQuery, setProductQuery] = useState("");
+  const [productResults, setProductResults] = useState<POSProducto[]>([]);
+  const [searchingProduct, setSearchingProduct] = useState(false);
+
+  const targetLabel = form.sku?.trim()
+    ? `Solo el producto con SKU ${form.sku.trim()}`
+    : "Todos los productos";
+
+  const searchProduct = async () => {
+    const value = productQuery.trim();
+    if (!value) return;
+
+    setSearchingProduct(true);
+    try {
+      setProductResults(await buscarProductosPOS(value));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo buscar el producto."
+      );
+    } finally {
+      setSearchingProduct(false);
+    }
+  };
+
+  const selectProduct = (product: POSProducto) => {
+    setForm((current) => ({ ...current, sku: product.sku }));
+    setProductQuery(`${product.nombre} · ${product.sku}`);
+    setProductResults([]);
+  };
+
+  const promotionDescription = () => {
+    const minimum = Math.max(Number(form.cantidad_minima || 1), 1);
+
+    if (form.tipo === "PORCENTAJE") {
+      return `${Number(form.porcentaje || 0)}% de descuento desde ${minimum} unidad(es).`;
+    }
+
+    if (form.tipo === "PRECIO_FIJO") {
+      return `Precio promocional de ${money(
+        Number(form.precio_fijo || 0)
+      )} desde ${minimum} unidad(es).`;
+    }
+
+    return `Compra ${Number(form.compra_cantidad || 0)} y paga ${Number(
+      form.paga_cantidad || 0
+    )}.`;
+  };
 
   const save = async () => {
     if (!isAdmin) return;
+
+    if (form.nombre.trim().length < 2) {
+      toast.error("Escribe un nombre para identificar la promoción.");
+      return;
+    }
+
+    if (
+      form.tipo === "PORCENTAJE" &&
+      Number(form.porcentaje || 0) <= 0
+    ) {
+      toast.error("Indica un porcentaje mayor a cero.");
+      return;
+    }
+
+    if (
+      form.tipo === "PRECIO_FIJO" &&
+      Number(form.precio_fijo || 0) <= 0
+    ) {
+      toast.error("Indica el precio promocional.");
+      return;
+    }
+
+    if (
+      form.tipo === "NXM" &&
+      !(
+        Number(form.compra_cantidad || 0) > 0 &&
+        Number(form.paga_cantidad || 0) >= 0 &&
+        Number(form.paga_cantidad || 0) <
+          Number(form.compra_cantidad || 0)
+      )
+    ) {
+      toast.error(
+        "En N por M, la cantidad pagada debe ser menor a la comprada."
+      );
+      return;
+    }
+
+    if (
+      form.fecha_inicio &&
+      form.fecha_fin &&
+      new Date(form.fecha_fin) <= new Date(form.fecha_inicio)
+    ) {
+      toast.error(
+        "La fecha de finalización debe ser posterior al inicio."
+      );
+      return;
+    }
+
     setSaving(true);
     try {
       await crearPromocionPOS({
         ...form,
         sku: form.sku?.trim() || null,
+        cantidad_minima: Math.max(
+          Number(form.cantidad_minima || 1),
+          1
+        ),
         fecha_inicio: form.fecha_inicio || null,
         fecha_fin: form.fecha_fin || null,
+        prioridad: Number(form.prioridad || 0),
       });
-      toast.success("Promoción creada.");
-      setForm(emptyPromotion);
+
+      toast.success(
+        `Promoción creada. Se aplicará a: ${targetLabel}.`
+      );
+      setForm(initialPromotion());
+      setProductQuery("");
+      setProductResults([]);
       await onChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se guardó la promoción.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se guardó la promoción."
+      );
     } finally {
       setSaving(false);
     }
@@ -740,38 +994,444 @@ function PromotionsPanel({ promotions, isAdmin, onChanged }: { promotions: POSPr
       });
       await onChanged();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se actualizó la promoción.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se actualizó la promoción."
+      );
     }
   };
 
+  const configuredDescription = (promotion: POSPromocion) => {
+    if (promotion.tipo === "PORCENTAJE") {
+      return `${promotion.porcentaje}% de descuento`;
+    }
+
+    if (promotion.tipo === "PRECIO_FIJO") {
+      return `Precio fijo ${money(promotion.precio_fijo)}`;
+    }
+
+    return `${promotion.compra_cantidad} × ${promotion.paga_cantidad}`;
+  };
+
   return (
-    <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+    <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       <Card>
-        <CardHeader><CardTitle>Nueva promoción</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {!isAdmin && <p className="rounded-lg bg-secondary p-3 text-sm">Solo el administrador puede crear promociones.</p>}
-          <Input placeholder="Nombre" value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} />
-          <select className="h-10 w-full rounded-md border bg-background px-3" value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value as POSPromocionPayload["tipo"] })}><option value="PORCENTAJE">Descuento porcentual</option><option value="PRECIO_FIJO">Precio fijo</option><option value="NXM">N por M / 3x2</option></select>
-          <Input placeholder="SKU opcional; vacío aplica a todos" value={form.sku || ""} onChange={(event) => setForm({ ...form, sku: event.target.value })} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {form.tipo === "PORCENTAJE" && <Input type="number" min="0" max="100" step="0.01" placeholder="Porcentaje" value={form.porcentaje} onChange={(event) => setForm({ ...form, porcentaje: Number(event.target.value || 0) })} />}
-            {form.tipo === "PRECIO_FIJO" && <Input type="number" min="0" step="0.01" placeholder="Precio fijo" value={form.precio_fijo} onChange={(event) => setForm({ ...form, precio_fijo: Number(event.target.value || 0) })} />}
-            {form.tipo === "NXM" && <><Input type="number" min="1" step="1" placeholder="Compra N" value={form.compra_cantidad} onChange={(event) => setForm({ ...form, compra_cantidad: Number(event.target.value || 0) })} /><Input type="number" min="0" step="1" placeholder="Paga M" value={form.paga_cantidad} onChange={(event) => setForm({ ...form, paga_cantidad: Number(event.target.value || 0) })} /></>}
-            <Input type="number" min="0" step="0.01" placeholder="Cantidad mínima" value={form.cantidad_minima} onChange={(event) => setForm({ ...form, cantidad_minima: Number(event.target.value || 0) })} />
-            <Input type="number" step="1" placeholder="Prioridad" value={form.prioridad} onChange={(event) => setForm({ ...form, prioridad: Number(event.target.value || 0) })} />
-            <Input type="datetime-local" value={form.fecha_inicio?.slice(0, 16) || ""} onChange={(event) => setForm({ ...form, fecha_inicio: event.target.value || null })} />
-            <Input type="datetime-local" value={form.fecha_fin?.slice(0, 16) || ""} onChange={(event) => setForm({ ...form, fecha_fin: event.target.value || null })} />
+        <CardHeader>
+          <CardTitle>Nueva promoción</CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-5">
+          {!isAdmin && (
+            <p className="rounded-lg bg-secondary p-3 text-sm">
+              Solo el administrador puede crear promociones.
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">
+              Nombre de la promoción
+            </label>
+            <Input
+              placeholder="Ejemplo: 15% aceite de agosto"
+              value={form.nombre}
+              onChange={(event) =>
+                setForm({ ...form, nombre: event.target.value })
+              }
+            />
           </div>
-          <Button className="w-full" disabled={!isAdmin || saving} onClick={save}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Crear promoción</Button>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">
+              Tipo de promoción
+            </label>
+            <select
+              className="h-10 w-full rounded-md border bg-background px-3"
+              value={form.tipo}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  tipo: event.target
+                    .value as POSPromocionPayload["tipo"],
+                  porcentaje: 0,
+                  precio_fijo: 0,
+                  compra_cantidad: 0,
+                  paga_cantidad: 0,
+                })
+              }
+            >
+              <option value="PORCENTAJE">
+                Descuento porcentual
+              </option>
+              <option value="PRECIO_FIJO">
+                Precio fijo por unidad
+              </option>
+              <option value="NXM">N por M / 3 × 2</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">
+              Producto al que se aplicará
+            </label>
+
+            <div className="flex gap-2">
+              <Input
+                placeholder="Buscar por nombre o SKU"
+                value={productQuery}
+                onChange={(event) => {
+                  setProductQuery(event.target.value);
+                  if (!event.target.value.trim()) {
+                    setForm((current) => ({
+                      ...current,
+                      sku: "",
+                    }));
+                    setProductResults([]);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void searchProduct();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void searchProduct()}
+                disabled={searchingProduct}
+              >
+                {searchingProduct ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {productResults.length > 0 && (
+              <div className="divide-y rounded-lg border">
+                {productResults.map((product) => (
+                  <button
+                    key={product.id_producto}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted"
+                    onClick={() => selectProduct(product)}
+                  >
+                    <span>
+                      <span className="block font-semibold">
+                        {product.nombre}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {product.sku} · {product.ubicacion}
+                      </span>
+                    </span>
+                    <span className="text-xs text-primary">
+                      Seleccionar
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+              <p className="font-semibold">Aplicará a:</p>
+              <p>{targetLabel}</p>
+              {form.sku?.trim() && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 h-8 px-2"
+                  onClick={() => {
+                    setForm((current) => ({
+                      ...current,
+                      sku: "",
+                    }));
+                    setProductQuery("");
+                  }}
+                >
+                  Cambiar a todos los productos
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {form.tipo === "PORCENTAJE" && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">
+                Porcentaje de descuento
+              </label>
+              <Input
+                type="number"
+                min="0.01"
+                max="100"
+                step="0.01"
+                placeholder="Ejemplo: 15"
+                value={form.porcentaje || ""}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    porcentaje: Number(event.target.value || 0),
+                  })
+                }
+              />
+            </div>
+          )}
+
+          {form.tipo === "PRECIO_FIJO" && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">
+                Precio promocional por unidad
+              </label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Ejemplo: 99.90"
+                value={form.precio_fijo || ""}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    precio_fijo: Number(event.target.value || 0),
+                  })
+                }
+              />
+            </div>
+          )}
+
+          {form.tipo === "NXM" && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">
+                  Cantidad que compra
+                </label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Ejemplo: 3"
+                  value={form.compra_cantidad || ""}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      compra_cantidad: Number(
+                        event.target.value || 0
+                      ),
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold">
+                  Cantidad que paga
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Ejemplo: 2"
+                  value={form.paga_cantidad || ""}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      paga_cantidad: Number(
+                        event.target.value || 0
+                      ),
+                    })
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          {form.tipo !== "NXM" && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">
+                Cantidad mínima para activar
+              </label>
+              <Input
+                type="number"
+                min="0.001"
+                step="0.001"
+                placeholder="Ejemplo: 1"
+                value={form.cantidad_minima || ""}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    cantidad_minima: Number(
+                      event.target.value || 1
+                    ),
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                En productos a granel se interpreta en kg o litros;
+                en productos normales, en piezas.
+              </p>
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">
+                Fecha y hora de inicio
+              </label>
+              <Input
+                type="datetime-local"
+                value={form.fecha_inicio?.slice(0, 16) || ""}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    fecha_inicio: event.target.value || null,
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Vacío: comienza inmediatamente.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-semibold">
+                Fecha y hora de finalización
+              </label>
+              <Input
+                type="datetime-local"
+                value={form.fecha_fin?.slice(0, 16) || ""}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    fecha_fin: event.target.value || null,
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Vacío: no tiene vencimiento.
+              </p>
+            </div>
+          </div>
+
+          <details className="rounded-lg border p-3">
+            <summary className="cursor-pointer text-sm font-semibold">
+              Opciones avanzadas
+            </summary>
+
+            <div className="mt-3 space-y-2">
+              <label className="text-sm font-semibold">
+                Prioridad
+              </label>
+              <Input
+                type="number"
+                step="1"
+                placeholder="Opcional; por defecto 0"
+                value={form.prioridad || ""}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    prioridad: Number(event.target.value || 0),
+                  })
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Solo sirve para ordenar promociones con condiciones
+                similares. RackNova aplica automáticamente la opción
+                más conveniente.
+              </p>
+            </div>
+          </details>
+
+          <div className="rounded-xl bg-secondary p-4 text-sm">
+            <p className="font-semibold">Resumen antes de guardar</p>
+            <p className="mt-1">{promotionDescription()}</p>
+            <p className="mt-1">{targetLabel}.</p>
+          </div>
+
+          <Button
+            className="w-full"
+            disabled={!isAdmin || saving}
+            onClick={save}
+          >
+            {saving && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Crear promoción
+          </Button>
         </CardContent>
       </Card>
+
       <Card>
-        <CardHeader><CardTitle>Promociones configuradas</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
+        <CardHeader>
+          <CardTitle>Promociones configuradas</CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          {promotions.length === 0 && (
+            <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+              No hay promociones configuradas.
+            </p>
+          )}
+
           {promotions.map((promotion) => (
-            <div key={promotion.id_promocion} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-              <div><p className="font-semibold">{promotion.nombre}</p><p className="text-sm text-muted-foreground">{promotion.tipo} · {promotion.sku || "Todos los productos"} · prioridad {promotion.prioridad}</p></div>
-              <div className="flex items-center gap-2"><Badge variant={promotion.activa ? "default" : "secondary"}>{promotion.activa ? "Activa" : "Inactiva"}</Badge>{isAdmin && <Button size="sm" variant="outline" onClick={() => void toggle(promotion)}>{promotion.activa ? "Desactivar" : "Activar"}</Button>}</div>
+            <div
+              key={promotion.id_promocion}
+              className="rounded-xl border p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{promotion.nombre}</p>
+                  <p className="mt-1 text-sm">
+                    {configuredDescription(promotion)}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Aplica a:{" "}
+                    <strong>
+                      {promotion.sku
+                        ? `SKU ${promotion.sku}`
+                        : "Todos los productos"}
+                    </strong>
+                    {promotion.tipo !== "NXM" &&
+                      ` · mínimo ${promotion.cantidad_minima || 1}`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {promotion.fecha_inicio
+                      ? `Inicia: ${new Date(
+                          promotion.fecha_inicio
+                        ).toLocaleString("es-MX")}`
+                      : "Inicio inmediato"}
+                    {" · "}
+                    {promotion.fecha_fin
+                      ? `Termina: ${new Date(
+                          promotion.fecha_fin
+                        ).toLocaleString("es-MX")}`
+                      : "Sin vencimiento"}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      promotion.activa ? "default" : "secondary"
+                    }
+                  >
+                    {promotion.activa ? "Activa" : "Inactiva"}
+                  </Badge>
+
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void toggle(promotion)}
+                    >
+                      {promotion.activa
+                        ? "Desactivar"
+                        : "Activar"}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           ))}
         </CardContent>
@@ -850,7 +1510,7 @@ function ProductsConfigPanel({ isAdmin }: { isAdmin: boolean }) {
               <Input type="number" min="0" step="0.01" placeholder="Precio normal" value={config.precio_normal ?? ""} onChange={(event) => setConfig({ ...config, precio_normal: event.target.value ? Number(event.target.value) : null })} />
               <Input type="number" min="0" step="0.01" placeholder="Precio mínimo" value={config.precio_minimo ?? ""} onChange={(event) => setConfig({ ...config, precio_minimo: event.target.value ? Number(event.target.value) : null })} />
               <Input type="number" min="0" step="0.01" placeholder="Precio mayoreo" value={config.precio_mayoreo ?? ""} onChange={(event) => setConfig({ ...config, precio_mayoreo: event.target.value ? Number(event.target.value) : null })} />
-              <Input type="number" min="0" step="0.001" placeholder="Cantidad mayoreo" value={config.cantidad_mayoreo} onChange={(event) => setConfig({ ...config, cantidad_mayoreo: Number(event.target.value || 0) })} />
+              <Input type="number" min="0" step="0.001" placeholder="Cantidad mayoreo" value={config.cantidad_mayoreo || ""} onChange={(event) => setConfig({ ...config, cantidad_mayoreo: Number(event.target.value || 0) })} />
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={config.permite_fraccion} onChange={(event) => setConfig({ ...config, permite_fraccion: event.target.checked })} /> Permitir cantidades fraccionadas</label>
             <p className="rounded-lg bg-muted p-3 text-sm">Ejemplo: inventario en gramos y venta en kg. Configura unidad <strong>kg</strong> y factor <strong>1000</strong>. Una venta de 0.350 kg descontará 350 unidades base.</p>

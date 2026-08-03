@@ -48,6 +48,7 @@ import {
   cerrarCajaPOS,
   crearCajaPOS,
   crearVentaPOS,
+  cotizarVentaPOS,
   devolverVentaPOS,
   listarCajasPOS,
   listarSesionesCajaPOS,
@@ -59,6 +60,7 @@ import {
 } from "@/lib/pos";
 import type {
   POSCaja,
+  POSCotizacion,
   POSEstado,
   POSProducto,
   POSSesionCaja,
@@ -69,7 +71,9 @@ import type {
 
 type CartItem = POSProducto & {
   cantidadVenta: number;
+  cantidadInput: string;
   descuentoPorcentaje: number;
+  descuentoInput: string;
 };
 
 type MetodoPago = "efectivo" | "tarjeta" | "transferencia" | "mixto";
@@ -147,7 +151,8 @@ export default function PuntoVenta() {
   const [loadingCash, setLoadingCash] = useState(false);
 
   const [selectedCaja, setSelectedCaja] = useState("");
-  const [fondoInicial, setFondoInicial] = useState("0");
+  // RACKNOVA_INPUTS_LIBRES_POS
+  const [fondoInicial, setFondoInicial] = useState("");
   const [newCajaName, setNewCajaName] = useState("Caja principal");
 
   const [cashType, setCashType] = useState("RETIRO");
@@ -163,6 +168,10 @@ export default function PuntoVenta() {
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<POSProducto[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  // RACKNOVA_PROMOCIONES_COTIZACION
+  const [quote, setQuote] = useState<POSCotizacion | null>(null);
+  const [quoting, setQuoting] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
   const [efectivoRecibido, setEfectivoRecibido] = useState("");
   const [montoEfectivoMixto, setMontoEfectivoMixto] = useState("");
@@ -262,7 +271,7 @@ export default function PuntoVenta() {
     }
   }, [sesion?.estado]);
 
-  const totals = useMemo(
+  const localTotals = useMemo(
     () =>
       cart.reduce(
         (acc, item) => {
@@ -273,6 +282,7 @@ export default function PuntoVenta() {
           const finalUnit = round2(priceList - discountUnit);
           const list = round2(priceList * item.cantidadVenta);
           const lineTotal = round2(finalUnit * item.cantidadVenta);
+
           acc.subtotal = round2(acc.subtotal + list);
           acc.discount = round2(acc.discount + (list - lineTotal));
           acc.total = round2(acc.total + lineTotal);
@@ -282,6 +292,130 @@ export default function PuntoVenta() {
       ),
     [cart]
   );
+
+  const cartQuantityError = useMemo(() => {
+    for (const item of cart) {
+      const raw = item.cantidadInput.trim();
+
+      if (raw === "") {
+        return `Captura la cantidad de ${item.nombre}.`;
+      }
+
+      const value = Number(raw);
+      const step = pasoVenta(item);
+      const available = cantidadDisponibleVenta(item);
+
+      if (!Number.isFinite(value) || value <= 0) {
+        return `La cantidad de ${item.nombre} debe ser mayor a cero.`;
+      }
+
+      if (value > available + 0.000001) {
+        return `Stock disponible de ${item.nombre}: ${mostrarCantidad(
+          available
+        )} ${unidadVenta(item)}.`;
+      }
+
+      if (
+        Math.abs(
+          value * factorVenta(item) - Math.round(value * factorVenta(item))
+        ) > 0.000001
+      ) {
+        return `Usa incrementos de ${mostrarCantidad(step)} ${unidadVenta(
+          item
+        )} para ${item.nombre}.`;
+      }
+    }
+
+    return null;
+  }, [cart]);
+
+  const quotePayload = useMemo(
+    () => ({
+      operacion_id: createOperationId(),
+      items: cart.map((item) => ({
+        sku: item.sku,
+        cantidad: item.cantidadVenta,
+        descuento_porcentaje: item.descuentoPorcentaje,
+      })),
+      pagos: [],
+      efectivo_recibido: null,
+      id_cliente: null,
+      tipo_venta: "CONTADO" as const,
+      fecha_vencimiento: null,
+    }),
+    [cart]
+  );
+
+  useEffect(() => {
+    if (cart.length === 0 || cartQuantityError) {
+      setQuote(null);
+      setQuoteError(null);
+      setQuoting(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const timer = window.setTimeout(async () => {
+      setQuoting(true);
+      setQuoteError(null);
+
+      try {
+        const response = await cotizarVentaPOS(quotePayload);
+        if (!cancelled) setQuote(response);
+      } catch (error) {
+        if (!cancelled) {
+          setQuote(null);
+          setQuoteError(
+            error instanceof Error
+              ? error.message
+              : "No se pudo calcular promociones y precios."
+          );
+        }
+      } finally {
+        if (!cancelled) setQuoting(false);
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [cart.length, cartQuantityError, quotePayload]);
+
+  const totals = useMemo(() => {
+    if (!quote || quote.items.length !== cart.length) {
+      return {
+        ...localTotals,
+        automaticDiscount: 0,
+        manualDiscount: localTotals.discount,
+      };
+    }
+
+    const subtotal = round2(
+      quote.items.reduce((sum, item) => sum + item.line_list, 0)
+    );
+    const automaticDiscount = round2(
+      quote.items.reduce(
+        (sum, item) => sum + item.automatic_discount,
+        0
+      )
+    );
+    const manualDiscount = round2(
+      quote.items.reduce(
+        (sum, item) => sum + item.manual_discount_amount,
+        0
+      )
+    );
+
+    return {
+      subtotal,
+      automaticDiscount,
+      manualDiscount,
+      discount: round2(automaticDiscount + manualDiscount),
+      total: round2(quote.total),
+    };
+  }, [cart.length, localTotals, quote]);
 
   const change = useMemo(() => {
     const received = Number(efectivoRecibido || 0);
@@ -442,7 +576,11 @@ export default function PuntoVenta() {
         }
         return current.map((row) =>
           row.sku === product.sku
-            ? { ...row, cantidadVenta: next }
+            ? {
+                ...row,
+                cantidadVenta: next,
+                cantidadInput: String(next),
+              }
             : row
         );
       }
@@ -453,7 +591,9 @@ export default function PuntoVenta() {
         {
           ...product,
           cantidadVenta: Math.max(initial, step),
+          cantidadInput: String(Math.max(initial, step)),
           descuentoPorcentaje: 0,
+          descuentoInput: "",
         },
       ];
     });
@@ -500,39 +640,19 @@ export default function PuntoVenta() {
 
   const updateQuantity = (sku: string, direction: -1 | 1) => {
     setCart((current) =>
-      current
-        .map((item) => {
-          if (item.sku !== sku) return item;
-
-          const step = pasoVenta(item);
-          const available = cantidadDisponibleVenta(item);
-          const next = roundQuantity(
-            item.cantidadVenta + direction * step
-          );
-
-          if (next > available + 0.000001) {
-            toast.error(
-              `Stock disponible: ${mostrarCantidad(available)} ${unidadVenta(item)}.`
-            );
-            return item;
-          }
-
-          return { ...item, cantidadVenta: next };
-        })
-        .filter((item) => item.cantidadVenta > 0)
-    );
-  };
-
-  const setProductQuantity = (sku: string, value: number) => {
-    if (!Number.isFinite(value)) return;
-
-    setCart((current) =>
       current.map((item) => {
         if (item.sku !== sku) return item;
 
         const step = pasoVenta(item);
         const available = cantidadDisponibleVenta(item);
-        const next = roundQuantity(Math.max(value, step));
+        const typed = item.cantidadInput.trim();
+        const parsed = typed === "" ? 0 : Number(typed);
+        const base = Number.isFinite(parsed) ? parsed : item.cantidadVenta;
+        const next = roundQuantity(base + direction * step);
+
+        if (direction < 0 && next < step) {
+          return item;
+        }
 
         if (next > available + 0.000001) {
           toast.error(
@@ -541,26 +661,69 @@ export default function PuntoVenta() {
           return item;
         }
 
-        const exactInventory = next * factorVenta(item);
-        if (Math.abs(exactInventory - Math.round(exactInventory)) > 0.000001) {
-          toast.error(
-            `Usa incrementos de ${mostrarCantidad(step)} ${unidadVenta(item)}.`
-          );
-          return item;
-        }
-
-        return { ...item, cantidadVenta: next };
+        return {
+          ...item,
+          cantidadVenta: next,
+          cantidadInput: String(next),
+        };
       })
     );
   };
 
-  const setDiscount = (sku: string, value: number) => {
-    const max = isAdmin ? 100 : 10;
-    const safe = Math.min(Math.max(Number(value || 0), 0), max);
+  const setProductQuantityInput = (sku: string, raw: string) => {
     setCart((current) =>
-      current.map((item) =>
-        item.sku === sku ? { ...item, descuentoPorcentaje: safe } : item
-      )
+      current.map((item) => {
+        if (item.sku !== sku) return item;
+
+        if (raw === "") {
+          return {
+            ...item,
+            cantidadInput: "",
+            cantidadVenta: 0,
+          };
+        }
+
+        const parsed = Number(raw);
+        return {
+          ...item,
+          cantidadInput: raw,
+          cantidadVenta: Number.isFinite(parsed) ? parsed : 0,
+        };
+      })
+    );
+  };
+
+  const setDiscountInput = (sku: string, raw: string) => {
+    const max = isAdmin ? 100 : 10;
+
+    setCart((current) =>
+      current.map((item) => {
+        if (item.sku !== sku) return item;
+
+        if (raw === "") {
+          return {
+            ...item,
+            descuentoInput: "",
+            descuentoPorcentaje: 0,
+          };
+        }
+
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed)) {
+          return {
+            ...item,
+            descuentoInput: raw,
+            descuentoPorcentaje: 0,
+          };
+        }
+
+        const safe = Math.min(Math.max(parsed, 0), max);
+        return {
+          ...item,
+          descuentoInput: parsed > max ? String(max) : raw,
+          descuentoPorcentaje: safe,
+        };
+      })
     );
   };
 
@@ -621,6 +784,24 @@ export default function PuntoVenta() {
       toast.error("Agrega al menos un producto.");
       return;
     }
+    if (cartQuantityError) {
+      toast.error(cartQuantityError);
+      return;
+    }
+
+    if (quoting) {
+      toast.error("Espera a que termine el cálculo de promociones.");
+      return;
+    }
+
+    if (!quote) {
+      toast.error(
+        quoteError ||
+          "No se pudo confirmar el total con promociones. Actualiza el carrito."
+      );
+      return;
+    }
+
     const payments = buildPayments();
     const paid = payments.reduce((sum, payment) => sum + payment.monto, 0);
     if (Math.abs(paid - totals.total) > 0.01) {
@@ -860,7 +1041,16 @@ export default function PuntoVenta() {
                   </div>
                   <div>
                     <label className="text-sm font-semibold">Fondo inicial</label>
-                    <Input type="number" min="0" step="0.01" value={fondoInicial} onChange={(event) => setFondoInicial(event.target.value)} />
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="Ejemplo: 500"
+                      value={fondoInicial}
+                      onChange={(event) =>
+                        setFondoInicial(event.target.value)
+                      }
+                    />
                   </div>
                   <Button className="w-full" onClick={openCash} disabled={loadingCash}>
                     {loadingCash && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -961,10 +1151,22 @@ export default function PuntoVenta() {
               ) : (
                 <div className="space-y-3">
                   {cart.map((item) => {
-                    const finalUnit = item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100);
+                    const quoteItem = quote?.items.find((row) => row.sku === item.sku);
+
+                    const finalUnit = quoteItem?.final_unit ?? item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100);
                     return (
                       <div key={item.sku} className="rounded-xl border p-4">
                         <div className="flex items-start justify-between gap-3"><div><p className="font-bold">{item.nombre}</p><p className="text-sm text-muted-foreground">{item.sku} · {item.ubicacion} · Disponible {mostrarCantidad(cantidadDisponibleVenta(item))} {unidadVenta(item)}</p></div><Button size="icon" variant="ghost" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div>
+                        {quoteItem?.promotion_name && (
+                          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                              Promoción aplicada: {quoteItem.promotion_name}
+                            </span>
+                            <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                              -{money(quoteItem.automatic_discount)}
+                            </span>
+                          </div>
+                        )}
                         <div className="mt-4 grid gap-3 sm:grid-cols-3 sm:items-end">
                           <div>
                             <label className="text-xs font-medium text-muted-foreground">Cantidad ({unidadVenta(item)})</label>
@@ -976,18 +1178,40 @@ export default function PuntoVenta() {
                                 min={pasoVenta(item)}
                                 max={cantidadDisponibleVenta(item)}
                                 step={pasoVenta(item)}
-                                value={item.cantidadVenta}
+                                placeholder="Cantidad"
+                                value={item.cantidadInput}
+                                aria-invalid={
+                                  item.cantidadInput.trim() === ""
+                                }
                                 onChange={(event) =>
-                                  setProductQuantity(
+                                  setProductQuantityInput(
                                     item.sku,
-                                    Number(event.target.value)
+                                    event.target.value
                                   )
                                 }
                               />
                               <Button size="icon" variant="outline" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-4 w-4" /></Button>
                             </div>
                           </div>
-                          <div><label className="text-xs font-medium text-muted-foreground">Descuento %</label><Input type="number" min="0" max={isAdmin ? 100 : 10} step="0.01" value={item.descuentoPorcentaje} onChange={(event) => setDiscount(item.sku, Number(event.target.value))} /></div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">
+                              Descuento manual %
+                            </label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max={isAdmin ? 100 : 10}
+                              step="0.01"
+                              placeholder="Ejemplo: 10"
+                              value={item.descuentoInput}
+                              onChange={(event) =>
+                                setDiscountInput(
+                                  item.sku,
+                                  event.target.value
+                                )
+                              }
+                            />
+                          </div>
                           <div className="text-right"><p className="text-xs text-muted-foreground">Precio por {unidadVenta(item)}</p><p className="font-black">{money(finalUnit)}</p></div>
                         </div>
                       </div>
@@ -1003,12 +1227,42 @@ export default function PuntoVenta() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><ReceiptText className="h-5 w-5" /> Cobro</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2 rounded-xl bg-secondary p-4"><div className="flex justify-between"><span>Subtotal</span><strong>{money(totals.subtotal)}</strong></div><div className="flex justify-between"><span>Descuento</span><strong>-{money(totals.discount)}</strong></div><div className="flex justify-between text-xl"><span>Total</span><strong>{money(totals.total)}</strong></div></div>
+              <div className="space-y-2 rounded-xl bg-secondary p-4">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <strong>{money(totals.subtotal)}</strong>
+                </div>
+                <div className="flex justify-between text-emerald-700 dark:text-emerald-300">
+                  <span>Promociones automáticas</span>
+                  <strong>-{money(totals.automaticDiscount)}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Descuento manual</span>
+                  <strong>-{money(totals.manualDiscount)}</strong>
+                </div>
+                <div className="flex justify-between border-t pt-2 text-xl">
+                  <span>Total</span>
+                  <strong>{money(totals.total)}</strong>
+                </div>
+                {quoting && (
+                  <p className="text-xs text-muted-foreground">
+                    Calculando promociones vigentes...
+                  </p>
+                )}
+                {quoteError && (
+                  <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+                    {quoteError}
+                  </p>
+                )}
+              </div>
               <div><label className="text-sm font-semibold">Forma de pago</label><select className="mt-1 h-10 w-full rounded-md border bg-background px-3" value={metodoPago} onChange={(event) => setMetodoPago(event.target.value as MetodoPago)}><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="transferencia">Transferencia</option><option value="mixto">Pago mixto</option></select></div>
               {metodoPago === "mixto" && <div className="grid gap-3"><Input type="number" min="0" step="0.01" placeholder="Monto en efectivo" value={montoEfectivoMixto} onChange={(e) => setMontoEfectivoMixto(e.target.value)} /><Input type="number" min="0" step="0.01" placeholder="Monto en tarjeta" value={montoTarjetaMixto} onChange={(e) => setMontoTarjetaMixto(e.target.value)} /><Input type="number" min="0" step="0.01" placeholder="Monto por transferencia" value={montoTransferenciaMixto} onChange={(e) => setMontoTransferenciaMixto(e.target.value)} /></div>}
               {(metodoPago === "tarjeta" || metodoPago === "transferencia" || metodoPago === "mixto") && <Input placeholder="Referencia opcional" value={referencia} onChange={(e) => setReferencia(e.target.value)} />}
               {(metodoPago === "efectivo" || metodoPago === "mixto") && <div><label className="text-sm font-semibold">Efectivo recibido</label><Input type="number" min="0" step="0.01" value={efectivoRecibido} onChange={(e) => setEfectivoRecibido(e.target.value)} placeholder="0.00" /><div className="mt-2 flex justify-between rounded-lg bg-secondary p-3 font-bold"><span>Cambio</span><span>{money(change)}</span></div></div>}
-              <Button className="h-12 w-full text-base" disabled={selling || cart.length === 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}Cobrar {money(totals.total)}</Button>
+              <Button className="h-12 w-full text-base" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting
+                  ? "Calculando promociones..."
+                  : `Cobrar ${money(totals.total)}`}
+              </Button>
             </CardContent>
           </Card>
 
