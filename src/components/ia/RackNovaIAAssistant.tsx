@@ -121,6 +121,11 @@ export function RackNovaIAAssistant() {
   ]);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const assistantButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [floatingPosition, setFloatingPosition] = useState({
+    bottom: 24,
+    right: 24,
+  });
   const currentPage = useMemo(
     () => pageName(location.pathname),
     [location.pathname]
@@ -137,6 +142,213 @@ export function RackNovaIAAssistant() {
 
     return () => window.clearTimeout(timer);
   }, [messages, loading, isOpen]);
+
+  // RACKNOVA_IA_FLOATING_AUTO_POSITION
+  useEffect(() => {
+    if (isOpen || !allowed) return;
+
+    let animationFrame = 0;
+
+    const schedulePositionUpdate = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const trigger = assistantButtonRef.current;
+        if (!trigger) return;
+
+        const mobile = window.innerWidth < 640;
+        const baseBottom = mobile ? 12 : 24;
+        const baseRight = mobile ? 12 : 24;
+        const viewportPadding = mobile ? 12 : 16;
+        const obstacleGap = mobile ? 8 : 12;
+        const scanStep = 10;
+
+        const width = trigger.offsetWidth;
+        const height = trigger.offsetHeight;
+
+        if (width <= 0 || height <= 0) return;
+
+        const obstacles = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            [
+              "button",
+              "input",
+              "select",
+              "textarea",
+              "a[href]",
+              '[role="button"]',
+              "[data-racknova-ia-avoid]",
+            ].join(",")
+          )
+        )
+          .filter((element) => {
+            if (element === trigger) return false;
+            if (element.contains(trigger)) return false;
+            if (trigger.contains(element)) return false;
+
+            if (
+              element.closest(
+                '[data-racknova-ia-layer="true"]'
+              )
+            ) {
+              return false;
+            }
+
+            const style = window.getComputedStyle(element);
+            if (
+              style.display === "none" ||
+              style.visibility === "hidden" ||
+              Number(style.opacity) === 0
+            ) {
+              return false;
+            }
+
+            const rect = element.getBoundingClientRect();
+
+            return (
+              rect.width > 4 &&
+              rect.height > 4 &&
+              rect.bottom > 0 &&
+              rect.right > 0 &&
+              rect.top < window.innerHeight &&
+              rect.left < window.innerWidth
+            );
+          })
+          .map((element) => element.getBoundingClientRect());
+
+        const collides = (bottom: number, right: number) => {
+          const candidateRight = window.innerWidth - right;
+          const candidateLeft = candidateRight - width;
+          const candidateBottom = window.innerHeight - bottom;
+          const candidateTop = candidateBottom - height;
+
+          return obstacles.some((obstacle) => {
+            return !(
+              candidateRight + obstacleGap <= obstacle.left ||
+              candidateLeft - obstacleGap >= obstacle.right ||
+              candidateBottom + obstacleGap <= obstacle.top ||
+              candidateTop - obstacleGap >= obstacle.bottom
+            );
+          });
+        };
+
+        const maxBottom = Math.max(
+          baseBottom,
+          window.innerHeight - height - viewportPadding
+        );
+
+        const sideCandidates = mobile
+          ? [baseRight]
+          : [
+              baseRight,
+              Math.max(
+                baseRight,
+                window.innerWidth - viewportPadding - width
+              ),
+            ];
+
+        let selected: {
+          bottom: number;
+          right: number;
+          score: number;
+        } | null = null;
+
+        for (const right of sideCandidates) {
+          const sidePenalty =
+            right === baseRight ? 0 : 120;
+
+          for (
+            let bottom = baseBottom;
+            bottom <= maxBottom;
+            bottom += scanStep
+          ) {
+            if (collides(bottom, right)) continue;
+
+            const score =
+              bottom - baseBottom + sidePenalty;
+
+            if (!selected || score < selected.score) {
+              selected = { bottom, right, score };
+            }
+
+            break;
+          }
+        }
+
+        const nextPosition = selected
+          ? {
+              bottom: selected.bottom,
+              right: selected.right,
+            }
+          : {
+              bottom: baseBottom,
+              right: baseRight,
+            };
+
+        setFloatingPosition((current) => {
+          if (
+            Math.abs(current.bottom - nextPosition.bottom) < 1 &&
+            Math.abs(current.right - nextPosition.right) < 1
+          ) {
+            return current;
+          }
+
+          return nextPosition;
+        });
+      });
+    };
+
+    const mutationObserver = new MutationObserver(
+      schedulePositionUpdate
+    );
+
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [
+        "class",
+        "style",
+        "hidden",
+        "disabled",
+        "open",
+      ],
+    });
+
+    const resizeObserver = new ResizeObserver(
+      schedulePositionUpdate
+    );
+
+    if (assistantButtonRef.current) {
+      resizeObserver.observe(assistantButtonRef.current);
+    }
+
+    window.addEventListener(
+      "resize",
+      schedulePositionUpdate
+    );
+    window.addEventListener(
+      "scroll",
+      schedulePositionUpdate,
+      true
+    );
+
+    schedulePositionUpdate();
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+      window.removeEventListener(
+        "resize",
+        schedulePositionUpdate
+      );
+      window.removeEventListener(
+        "scroll",
+        schedulePositionUpdate,
+        true
+      );
+    };
+  }, [allowed, isOpen, location.pathname]);
 
   if (!allowed) return null;
 
@@ -287,17 +499,24 @@ export function RackNovaIAAssistant() {
     <>
      {!isOpen && (
   <Button
+    ref={assistantButtonRef}
+    data-racknova-ia-layer="true"
     type="button"
     onClick={() => setIsOpen(true)}
-    title="Abrir RackNova IA"
-    aria-label="Abrir RackNova IA"
+    title="Haz una pregunta a RackNova IA"
+    aria-label="Haz una pregunta a RackNova IA"
+    style={{
+      bottom: floatingPosition.bottom,
+      right: floatingPosition.right,
+    }}
     className="
       animate-racknova-attention
-      group fixed bottom-6 right-6 z-50
-      h-auto min-h-[64px] w-auto
+      group fixed z-50
+      h-auto min-h-[60px] w-auto
+      max-w-[calc(100vw-24px)]
       rounded-full
       bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500
-      px-4 py-2.5
+      px-3 py-2.5 sm:px-4
       text-white
       shadow-[0_14px_38px_rgba(37,99,235,0.50)]
       transition-all duration-300
@@ -318,7 +537,7 @@ export function RackNovaIAAssistant() {
       </span>
 
       <span className="block text-xs font-normal text-blue-100">
-        Pregúntame aquí
+        Haz una pregunta aquí
       </span>
     </span>
 
@@ -327,7 +546,10 @@ export function RackNovaIAAssistant() {
 )}
 
       {isOpen && (
-        <div className="pointer-events-none fixed inset-0 z-50">
+        <div
+          data-racknova-ia-layer="true"
+          className="pointer-events-none fixed inset-0 z-50"
+        >
           <div
             className="pointer-events-auto absolute inset-0 bg-black/20"
             onClick={() => setIsOpen(false)}
