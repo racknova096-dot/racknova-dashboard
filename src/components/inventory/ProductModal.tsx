@@ -14,6 +14,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { apiFetch } from "@/lib/api";
 import { useInventory } from "@/context/InventoryContext";
 import { Location, Product } from "@/types/inventory";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +41,81 @@ interface ProductModalProps {
   product: Product | null;
   mode: "add" | "edit";
 }
+
+// RACKNOVA_UNIDADES_MODAL
+type UnidadManejo = "pieza" | "kg" | "litro";
+
+const UNIDADES_MANEJO: Record<
+  UnidadManejo,
+  {
+    etiqueta: string;
+    etiquetaPlural: string;
+    simbolo: string;
+    factor: number;
+    paso: number;
+    unidadInterna: string;
+  }
+> = {
+  pieza: {
+    etiqueta: "pieza",
+    etiquetaPlural: "piezas",
+    simbolo: "pza",
+    factor: 1,
+    paso: 1,
+    unidadInterna: "pieza",
+  },
+  kg: {
+    etiqueta: "kilogramo",
+    etiquetaPlural: "kilogramos",
+    simbolo: "kg",
+    factor: 1000,
+    paso: 0.001,
+    unidadInterna: "gramo",
+  },
+  litro: {
+    etiqueta: "litro",
+    etiquetaPlural: "litros",
+    simbolo: "L",
+    factor: 1000,
+    paso: 0.001,
+    unidadInterna: "mililitro",
+  },
+};
+
+const unidadNormalizada = (value: unknown): UnidadManejo => {
+  const clean = String(value || "pieza").trim().toLowerCase();
+
+  if (["kg", "kilo", "kilos", "kilogramo", "kilogramos"].includes(clean)) {
+    return "kg";
+  }
+
+  if (["l", "lt", "lts", "litro", "litros"].includes(clean)) {
+    return "litro";
+  }
+
+  return "pieza";
+};
+
+const numeroComercial = (value: number, decimals = 3) =>
+  Number(Number(value || 0).toFixed(decimals)).toString();
+
+const cantidadInterna = (
+  value: number,
+  unidad: UnidadManejo
+): number | null => {
+  const exact = value * UNIDADES_MANEJO[unidad].factor;
+  const rounded = Math.round(exact);
+
+  if (
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    Math.abs(exact - rounded) > 0.000001
+  ) {
+    return null;
+  }
+
+  return rounded;
+};
 
 function getDaysToExpiration(dateValue?: string | null) {
   if (!dateValue) return null;
@@ -87,6 +170,9 @@ export function ProductModal({
   const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
   const [stockMinimo, setStockMinimo] = useState("");
   const [stockAlto, setStockAlto] = useState("");
+  const [unidadManejo, setUnidadManejo] =
+    useState<UnidadManejo>("pieza");
+  const [unidadLoading, setUnidadLoading] = useState(false);
 
   const [saleModalOpen, setSaleModalOpen] = useState(false);
   const [cantidadVendida, setCantidadVendida] = useState("1");
@@ -122,20 +208,19 @@ export function ProductModal({
 
   const { toast } = useToast();
 
+  const unidadActual = UNIDADES_MANEJO[unidadManejo];
+  const factorInventario = unidadActual.factor;
+  const stockDisponibleComercial = product
+    ? Number(product.cantidad || 0) / factorInventario
+    : 0;
+  const costoProveedorComercial = product
+    ? Number(product.costo_proveedor || 0) * factorInventario
+    : 0;
+
   useEffect(() => {
-    if (mode === "edit" && product) {
-      setSku(product.sku);
-      setNombre(product.nombre);
-      setCantidad(product.cantidad.toString());
-      setCostoProveedor(product.costo_proveedor?.toString() ?? "0");
-      setPrecioVentaSugerido(
-        product.precio_venta_sugerido?.toString() ?? "0"
-      );
-      setCaducidad(product.caducidad ? product.caducidad.slice(0, 10) : "");
-      setCaducidadNoAplica(!product.caducidad);
-      setStockMinimo(product.stock_minimo?.toString() ?? "");
-      setStockAlto(product.stock_alto?.toString() ?? "");
-    } else {
+    if (!isOpen) return;
+
+    if (mode !== "edit" || !product) {
       setSku("");
       setNombre("");
       setCantidad("");
@@ -145,7 +230,85 @@ export function ProductModal({
       setCaducidadNoAplica(true);
       setStockMinimo("");
       setStockAlto("");
+      setUnidadManejo("pieza");
+      setUnidadLoading(false);
+      return;
     }
+
+    let cancelled = false;
+
+    const loadProductUnit = async () => {
+      try {
+        setUnidadLoading(true);
+
+        const response = await apiFetch(
+          `/pos/v3/productos/unidad/${encodeURIComponent(product.sku)}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (cancelled) return;
+
+        const nextUnit = unidadNormalizada(data?.unidad_venta);
+        const nextFactor = Number(data?.factor_inventario || 1) || 1;
+
+        setUnidadManejo(nextUnit);
+        setSku(product.sku);
+        setNombre(product.nombre);
+        setCantidad(
+          numeroComercial(Number(product.cantidad || 0) / nextFactor)
+        );
+        setCostoProveedor(
+          numeroComercial(
+            Number(product.costo_proveedor || 0) * nextFactor,
+            4
+          )
+        );
+        setPrecioVentaSugerido(
+          numeroComercial(Number(product.precio_venta_sugerido || 0), 2)
+        );
+        setCaducidad(
+          product.caducidad ? product.caducidad.slice(0, 10) : ""
+        );
+        setCaducidadNoAplica(!product.caducidad);
+        setStockMinimo(
+          numeroComercial(Number(product.stock_minimo || 0) / nextFactor)
+        );
+        setStockAlto(
+          numeroComercial(Number(product.stock_alto || 0) / nextFactor)
+        );
+      } catch (error) {
+        console.error("Error cargando unidad del producto:", error);
+
+        if (!cancelled) {
+          setUnidadManejo("pieza");
+          setSku(product.sku);
+          setNombre(product.nombre);
+          setCantidad(product.cantidad.toString());
+          setCostoProveedor(product.costo_proveedor?.toString() ?? "0");
+          setPrecioVentaSugerido(
+            product.precio_venta_sugerido?.toString() ?? "0"
+          );
+          setCaducidad(
+            product.caducidad ? product.caducidad.slice(0, 10) : ""
+          );
+          setCaducidadNoAplica(!product.caducidad);
+          setStockMinimo(product.stock_minimo?.toString() ?? "");
+          setStockAlto(product.stock_alto?.toString() ?? "");
+        }
+      } finally {
+        if (!cancelled) setUnidadLoading(false);
+      }
+    };
+
+    void loadProductUnit();
+
+    return () => {
+      cancelled = true;
+    };
   }, [mode, product, isOpen]);
 
   const diasCaducidad = useMemo(() => {
@@ -168,7 +331,7 @@ export function ProductModal({
   const cantidadSalidaNum = Number(cantidadVendida || 0);
   const ingresoEstimado = Number(precioVenta || 0) * cantidadSalidaNum;
   const costoSalidaEstimado =
-    Number(product?.costo_proveedor ?? 0) * cantidadSalidaNum;
+    costoProveedorComercial * cantidadSalidaNum;
   const gananciaEstimada = ingresoEstimado - costoSalidaEstimado;
 
   const recuperacionConDescuento =
@@ -195,7 +358,6 @@ export function ProductModal({
         description: "No se encontró la ubicación del slot.",
         variant: "destructive",
       });
-
       return false;
     }
 
@@ -205,69 +367,75 @@ export function ProductModal({
         description: "El SKU y el nombre son obligatorios.",
         variant: "destructive",
       });
-
       return false;
     }
 
-    const cantidadNum = parseInt(cantidad);
+    const cantidadComercial = Number(cantidad);
+    const cantidadConvertida = cantidadInterna(
+      cantidadComercial,
+      unidadManejo
+    );
 
-    if (isNaN(cantidadNum) || cantidadNum <= 0) {
+    if (cantidadConvertida === null) {
       toast({
-        title: "Error",
-        description: "La cantidad debe ser un número positivo.",
+        title: "Cantidad inválida",
+        description:
+          unidadManejo === "pieza"
+            ? "Las piezas deben capturarse con números enteros."
+            : `Captura máximo 3 decimales en ${unidadActual.simbolo}.`,
         variant: "destructive",
       });
-
       return false;
     }
 
-    const costoProveedorNum = parseFloat(costoProveedor);
-
-    if (isNaN(costoProveedorNum) || costoProveedorNum < 0) {
+    const costoComercial = Number(costoProveedor);
+    if (!Number.isFinite(costoComercial) || costoComercial < 0) {
       toast({
         title: "Error",
         description: "El costo proveedor debe ser un número válido.",
         variant: "destructive",
       });
-
       return false;
     }
 
-    const precioVentaSugeridoNum = parseFloat(precioVentaSugerido);
-
-    if (isNaN(precioVentaSugeridoNum) || precioVentaSugeridoNum < 0) {
+    const precioComercial = Number(precioVentaSugerido);
+    if (!Number.isFinite(precioComercial) || precioComercial < 0) {
       toast({
         title: "Error",
-        description: "El precio de venta sugerido debe ser un número válido.",
+        description: "El precio de venta sugerido debe ser válido.",
         variant: "destructive",
       });
-
       return false;
     }
 
-    const stockMinimoNum =
-      stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
+    const stockMinimoComercial =
+      stockMinimo.trim() === "" ? 10 : Number(stockMinimo);
+    const stockAltoComercial =
+      stockAlto.trim() === ""
+        ? stockMinimoComercial * 3
+        : Number(stockAlto);
 
-    if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
+    if (
+      !Number.isFinite(stockMinimoComercial) ||
+      stockMinimoComercial <= 0
+    ) {
       toast({
         title: "Error",
-        description: "El stock crítico debe ser un número mayor a 0.",
+        description: "El stock crítico debe ser mayor a 0.",
         variant: "destructive",
       });
-
       return false;
     }
 
-    const stockAltoNum =
-      stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
-
-    if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
+    if (
+      !Number.isFinite(stockAltoComercial) ||
+      stockAltoComercial <= stockMinimoComercial
+    ) {
       toast({
         title: "Error",
         description: "El stock alto debe ser mayor al stock crítico.",
         variant: "destructive",
       });
-
       return false;
     }
 
@@ -277,19 +445,34 @@ export function ProductModal({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (isSaving) return;
+    if (isSaving || unidadLoading) return;
     if (!validateBaseFields()) return;
     if (!location) return;
 
-    const cantidadNum = parseInt(cantidad);
-    const costoProveedorNum = parseFloat(costoProveedor);
-    const precioVentaSugeridoNum = parseFloat(precioVentaSugerido);
+    const finalSku = sku.trim();
+    const cantidadComercial = Number(cantidad);
+    const cantidadNum = cantidadInterna(cantidadComercial, unidadManejo);
 
-    const stockMinimoNum =
-      stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
+    if (cantidadNum === null) return;
 
-    const stockAltoNum =
-      stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
+    const costoProveedorComercialNum = Number(costoProveedor);
+    const costoProveedorNum =
+      costoProveedorComercialNum / factorInventario;
+    const precioVentaSugeridoNum = Number(precioVentaSugerido);
+
+    const stockMinimoComercial =
+      stockMinimo.trim() === "" ? 10 : Number(stockMinimo);
+    const stockAltoComercial =
+      stockAlto.trim() === ""
+        ? stockMinimoComercial * 3
+        : Number(stockAlto);
+
+    const stockMinimoNum = Math.round(
+      stockMinimoComercial * factorInventario
+    );
+    const stockAltoNum = Math.round(
+      stockAltoComercial * factorInventario
+    );
 
     const caducidadValue =
       caducidadNoAplica || !caducidad ? null : caducidad;
@@ -299,22 +482,45 @@ export function ProductModal({
 
       if (mode === "add") {
         const skuDuplicado = products.some(
-          (item) => item.sku.toLowerCase() === sku.trim().toLowerCase()
+          (item) => item.sku.toLowerCase() === finalSku.toLowerCase()
         );
 
         if (skuDuplicado) {
           toast({
             title: "SKU duplicado",
-            description: `El SKU "${sku}" ya existe en el inventario.`,
+            description: `El SKU "${finalSku}" ya existe en el inventario.`,
             variant: "destructive",
           });
-
           return;
         }
+      }
 
+      const unitResponse = await apiFetch(
+        `/pos/v3/productos/unidad/${encodeURIComponent(finalSku)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unidad_venta: unidadManejo }),
+        }
+      );
+
+      if (!unitResponse.ok) {
+        let detail = "No se pudo guardar la unidad del producto.";
+
+        try {
+          const errorData = await unitResponse.json();
+          detail = errorData?.detail || detail;
+        } catch {
+          // La respuesta no era JSON.
+        }
+
+        throw new Error(detail);
+      }
+
+      if (mode === "add") {
         await addProduct({
           locationId: location.id,
-          sku: sku.trim(),
+          sku: finalSku,
           nombre: nombre.trim(),
           cantidad: cantidadNum,
           costo_proveedor: costoProveedorNum,
@@ -325,15 +531,15 @@ export function ProductModal({
         });
 
         setLastAddedProduct({
-          sku: sku.trim(),
+          sku: finalSku,
           nombre: nombre.trim(),
           rack: location.rack,
           nivel: location.nivel,
           slot: location.slot,
           timestamp: new Date(),
           descripcion: product?.descripcion ?? null,
-          cantidad: cantidadNum,
-          costoProveedor: costoProveedorNum,
+          cantidad: cantidadComercial,
+          costoProveedor: costoProveedorComercialNum,
           precioVentaSugerido: precioVentaSugeridoNum,
           caducidad: caducidadValue,
         });
@@ -342,7 +548,9 @@ export function ProductModal({
 
         toast({
           title: "Producto agregado",
-          description: `${nombre} se guardó correctamente.`,
+          description: `${nombre} se guardó con ${numeroComercial(
+            cantidadComercial
+          )} ${unidadActual.simbolo}.`,
         });
 
         onClose();
@@ -351,7 +559,7 @@ export function ProductModal({
 
       if (mode === "edit" && product) {
         await updateProduct(product.id, {
-          sku: sku.trim(),
+          sku: finalSku,
           nombre: nombre.trim(),
           cantidad: cantidadNum,
           costo_proveedor: costoProveedorNum,
@@ -363,7 +571,7 @@ export function ProductModal({
 
         toast({
           title: "Producto actualizado",
-          description: `${nombre} actualizado exitosamente.`,
+          description: `${nombre} actualizado en ${unidadActual.simbolo}.`,
         });
 
         onClose();
@@ -374,9 +582,11 @@ export function ProductModal({
       toast({
         title: "Error",
         description:
-          mode === "add"
-            ? "No se pudo guardar el producto."
-            : "No se pudo actualizar el producto.",
+          error instanceof Error
+            ? error.message
+            : mode === "add"
+              ? "No se pudo guardar el producto."
+              : "No se pudo actualizar el producto.",
         variant: "destructive",
       });
     } finally {
@@ -385,60 +595,75 @@ export function ProductModal({
   };
 
   const handleDelete = () => {
-    if (!product || isSelling) return;
+    if (!product || isSelling || unidadLoading) return;
 
-    setCantidadVendida("1");
-    setPrecioVenta(Number(product.precio_venta_sugerido ?? 0).toString());
+    const initialQuantity = Math.min(1, stockDisponibleComercial);
+
+    setCantidadVendida(
+      numeroComercial(
+        initialQuantity > 0 ? initialQuantity : unidadActual.paso
+      )
+    );
+    setPrecioVenta(
+      Number(product.precio_venta_sugerido ?? 0).toString()
+    );
     setSaleModalOpen(true);
   };
 
   const confirmSale = async () => {
-    if (!product || isSelling) return;
+    if (!product || isSelling || unidadLoading) return;
 
-    const cantidadNum = Number(cantidadVendida);
-    const precioNum = Number(precioVenta);
+    const cantidadComercial = Number(cantidadVendida);
+    const cantidadNum = cantidadInterna(cantidadComercial, unidadManejo);
+    const precioComercial = Number(precioVenta);
 
-    if (!cantidadNum || cantidadNum <= 0) {
+    if (cantidadNum === null) {
       toast({
         title: "Cantidad inválida",
-        description: "La cantidad a eliminar debe ser mayor a 0.",
+        description:
+          unidadManejo === "pieza"
+            ? "Captura piezas completas."
+            : `Captura máximo 3 decimales en ${unidadActual.simbolo}.`,
         variant: "destructive",
       });
-
       return;
     }
 
-    if (cantidadNum > product.cantidad) {
+    if (cantidadComercial > stockDisponibleComercial + 0.000001) {
       toast({
         title: "Cantidad inválida",
-        description: "No puedes eliminar más piezas de las existentes.",
+        description: `Disponible: ${numeroComercial(
+          stockDisponibleComercial
+        )} ${unidadActual.simbolo}.`,
         variant: "destructive",
       });
-
       return;
     }
 
-    if (isNaN(precioNum) || precioNum < 0) {
+    if (!Number.isFinite(precioComercial) || precioComercial < 0) {
       toast({
         title: "Precio inválido",
         description: "El precio de venta debe ser válido.",
         variant: "destructive",
       });
-
       return;
     }
+
+    const precioInterno = precioComercial / factorInventario;
 
     try {
       setIsSelling(true);
 
       await deleteProduct(product.sku, {
         cantidad_vendida: cantidadNum,
-        precio_venta: precioNum,
+        precio_venta: precioInterno,
       });
 
       toast({
         title: "Salida registrada",
-        description: `${product.nombre}: ${cantidadNum} pieza(s) registradas como salida.`,
+        description: `${product.nombre}: ${numeroComercial(
+          cantidadComercial
+        )} ${unidadActual.simbolo} registrados como salida.`,
       });
 
       setSaleModalOpen(false);
@@ -555,21 +780,61 @@ export function ProductModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="cantidad">Cantidad</Label>
+                <Label>Unidad de manejo</Label>
+                <Select
+                  value={unidadManejo}
+                  onValueChange={(value) =>
+                    setUnidadManejo(value as UnidadManejo)
+                  }
+                  disabled={
+                    isSaving ||
+                    isSelling ||
+                    unidadLoading ||
+                    (mode === "edit" && Number(product?.cantidad || 0) > 0)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar unidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pieza">Pieza</SelectItem>
+                    <SelectItem value="kg">Kilogramo (kg)</SelectItem>
+                    <SelectItem value="litro">Litro (L)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {unidadLoading
+                    ? "Consultando unidad..."
+                    : mode === "edit" && Number(product?.cantidad || 0) > 0
+                      ? "La unidad está bloqueada mientras exista inventario."
+                      : unidadManejo === "pieza"
+                        ? "Se administrará en piezas completas."
+                        : `Se guardará internamente en ${unidadActual.unidadInterna}s.`}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cantidad">
+                  Cantidad ({unidadActual.simbolo})
+                </Label>
                 <Input
                   id="cantidad"
                   type="number"
                   value={cantidad}
                   onChange={(event) => setCantidad(event.target.value)}
-                  placeholder="Ingrese la cantidad"
-                  min="1"
+                  placeholder={
+                    unidadManejo === "pieza" ? "Ej: 100" : "Ej: 12.500"
+                  }
+                  min={unidadActual.paso}
+                  step={unidadActual.paso}
                   required
-                  disabled={isSaving || isSelling}
+                  disabled={isSaving || isSelling || unidadLoading}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="costoProveedor">Costo proveedor unitario</Label>
+                <Label htmlFor="costoProveedor">
+                  Costo proveedor por {unidadActual.simbolo}
+                </Label>
                 <Input
                   id="costoProveedor"
                   type="number"
@@ -582,13 +847,13 @@ export function ProductModal({
                   disabled={isSaving || isSelling}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Costo real de compra por unidad.
+                  Costo real de compra por {unidadActual.simbolo}.
                 </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="precioVentaSugerido">
-                  Precio de venta sugerido
+                  Precio de venta por {unidadActual.simbolo}
                 </Label>
                 <Input
                   id="precioVentaSugerido"
@@ -639,15 +904,18 @@ export function ProductModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="stockMinimo">Stock crítico personalizado</Label>
+                <Label htmlFor="stockMinimo">
+                  Stock crítico ({unidadActual.simbolo})
+                </Label>
                 <Input
                   id="stockMinimo"
                   type="number"
                   value={stockMinimo}
                   onChange={(event) => setStockMinimo(event.target.value)}
                   placeholder="Opcional. Por defecto: 10"
-                  min="1"
-                  disabled={isSaving || isSelling}
+                  min={unidadActual.paso}
+                  step={unidadActual.paso}
+                  disabled={isSaving || isSelling || unidadLoading}
                 />
                 <p className="text-xs text-muted-foreground">
                   Si lo dejas vacío, el sistema usará 10. El producto será
@@ -656,15 +924,18 @@ export function ProductModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="stockAlto">Stock alto personalizado</Label>
+                <Label htmlFor="stockAlto">
+                  Stock alto ({unidadActual.simbolo})
+                </Label>
                 <Input
                   id="stockAlto"
                   type="number"
                   value={stockAlto}
                   onChange={(event) => setStockAlto(event.target.value)}
                   placeholder="Opcional. Por defecto: stock crítico x 3"
-                  min="1"
-                  disabled={isSaving || isSelling}
+                  min={unidadActual.paso}
+                  step={unidadActual.paso}
+                  disabled={isSaving || isSelling || unidadLoading}
                 />
                 <p className="text-xs text-muted-foreground">
                   El producto se marcará como stock alto cuando la cantidad sea
@@ -748,8 +1019,8 @@ export function ProductModal({
           <DialogHeader>
             <DialogTitle>Registrar salida / venta</DialogTitle>
             <DialogDescription>
-              Indica cuántas piezas vas a eliminar y el precio de venta
-              unitario.
+              Indica cuántos {unidadActual.simbolo} vas a retirar y el
+              precio de venta por {unidadActual.simbolo}.
             </DialogDescription>
           </DialogHeader>
 
@@ -761,14 +1032,17 @@ export function ProductModal({
                   SKU: {product.sku}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Disponible: {product.cantidad}
+                  Disponible: {numeroComercial(
+                    stockDisponibleComercial
+                  )}{" "}
+                  {unidadActual.simbolo}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Costo proveedor unitario:{" "}
-                  {formatMoney(Number(product.costo_proveedor ?? 0))}
+                  Costo proveedor por {unidadActual.simbolo}:{" "}
+                  {formatMoney(costoProveedorComercial)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Precio venta sugerido:{" "}
+                  Precio por {unidadActual.simbolo}:{" "}
                   {formatMoney(Number(product.precio_venta_sugerido ?? 0))}
                 </p>
               </div>
@@ -791,12 +1065,15 @@ export function ProductModal({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="cantidadVendida">Cantidad a eliminar</Label>
+                <Label htmlFor="cantidadVendida">
+                  Cantidad a retirar ({unidadActual.simbolo})
+                </Label>
                 <Input
                   id="cantidadVendida"
                   type="number"
-                  min="1"
-                  max={product.cantidad}
+                  min={unidadActual.paso}
+                  max={stockDisponibleComercial}
+                  step={unidadActual.paso}
                   value={cantidadVendida}
                   onChange={(event) => setCantidadVendida(event.target.value)}
                   disabled={isSelling}
@@ -804,7 +1081,9 @@ export function ProductModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="precioVenta">Precio venta unitario</Label>
+                <Label htmlFor="precioVenta">
+                  Precio de venta por {unidadActual.simbolo}
+                </Label>
                 <Input
                   id="precioVenta"
                   type="number"

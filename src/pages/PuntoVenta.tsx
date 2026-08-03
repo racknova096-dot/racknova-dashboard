@@ -78,6 +78,35 @@ type MetodoReembolso = "efectivo" | "tarjeta" | "transferencia";
 const round2 = (value: number) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
+const roundQuantity = (value: number) =>
+  Math.round((Number(value || 0) + Number.EPSILON) * 1_000_000) /
+  1_000_000;
+
+const unidadVenta = (product: POSProducto | POSVentaDetalleItem) => {
+  const unit = String(product.unidad_venta || "pieza").toLowerCase();
+  if (unit === "litro") return "L";
+  if (unit === "kg") return "kg";
+  return "pza";
+};
+
+const factorVenta = (product: POSProducto | POSVentaDetalleItem) =>
+  Math.max(Number(product.factor_inventario || 1), 1);
+
+const pasoVenta = (product: POSProducto | POSVentaDetalleItem) =>
+  factorVenta(product) > 1 ? 1 / factorVenta(product) : 1;
+
+const cantidadDisponibleVenta = (product: POSProducto) =>
+  Number(
+    product.cantidad_disponible_venta ??
+      Number(product.cantidad || 0) / factorVenta(product)
+  );
+
+const mostrarCantidad = (value: number) =>
+  new Intl.NumberFormat("es-MX", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(Number(value || 0));
+
 const money = (value: number) =>
   new Intl.NumberFormat("es-MX", {
     style: "currency",
@@ -387,7 +416,11 @@ export default function PuntoVenta() {
       toast.error("Abre una caja antes de vender.");
       return;
     }
-    if (product.cantidad <= 0) {
+
+    const available = cantidadDisponibleVenta(product);
+    const step = pasoVenta(product);
+
+    if (available <= 0) {
       toast.error(`${product.nombre} no tiene existencias.`);
       return;
     }
@@ -395,24 +428,36 @@ export default function PuntoVenta() {
       toast.error(`${product.nombre} no tiene precio de venta configurado.`);
       return;
     }
+
     setCart((current) => {
       const existing = current.find((row) => row.sku === product.sku);
+
       if (existing) {
-        if (existing.cantidadVenta >= product.cantidad) {
-          toast.error(`Stock disponible: ${product.cantidad}.`);
+        const next = roundQuantity(existing.cantidadVenta + step);
+        if (next > available + 0.000001) {
+          toast.error(
+            `Stock disponible: ${mostrarCantidad(available)} ${unidadVenta(product)}.`
+          );
           return current;
         }
         return current.map((row) =>
           row.sku === product.sku
-            ? { ...row, cantidadVenta: row.cantidadVenta + 1 }
+            ? { ...row, cantidadVenta: next }
             : row
         );
       }
+
+      const initial = roundQuantity(Math.min(1, available));
       return [
         ...current,
-        { ...product, cantidadVenta: 1, descuentoPorcentaje: 0 },
+        {
+          ...product,
+          cantidadVenta: Math.max(initial, step),
+          descuentoPorcentaje: 0,
+        },
       ];
     });
+
     setQuery("");
     setResults([]);
     window.setTimeout(() => searchRef.current?.focus(), 50);
@@ -453,19 +498,59 @@ export default function PuntoVenta() {
     }
   };
 
-  const updateQuantity = (sku: string, delta: number) => {
+  const updateQuantity = (sku: string, direction: -1 | 1) => {
     setCart((current) =>
       current
         .map((item) => {
           if (item.sku !== sku) return item;
-          const next = item.cantidadVenta + delta;
-          if (next > item.cantidad) {
-            toast.error(`Stock disponible: ${item.cantidad}.`);
+
+          const step = pasoVenta(item);
+          const available = cantidadDisponibleVenta(item);
+          const next = roundQuantity(
+            item.cantidadVenta + direction * step
+          );
+
+          if (next > available + 0.000001) {
+            toast.error(
+              `Stock disponible: ${mostrarCantidad(available)} ${unidadVenta(item)}.`
+            );
             return item;
           }
+
           return { ...item, cantidadVenta: next };
         })
         .filter((item) => item.cantidadVenta > 0)
+    );
+  };
+
+  const setProductQuantity = (sku: string, value: number) => {
+    if (!Number.isFinite(value)) return;
+
+    setCart((current) =>
+      current.map((item) => {
+        if (item.sku !== sku) return item;
+
+        const step = pasoVenta(item);
+        const available = cantidadDisponibleVenta(item);
+        const next = roundQuantity(Math.max(value, step));
+
+        if (next > available + 0.000001) {
+          toast.error(
+            `Stock disponible: ${mostrarCantidad(available)} ${unidadVenta(item)}.`
+          );
+          return item;
+        }
+
+        const exactInventory = next * factorVenta(item);
+        if (Math.abs(exactInventory - Math.round(exactInventory)) > 0.000001) {
+          toast.error(
+            `Usa incrementos de ${mostrarCantidad(step)} ${unidadVenta(item)}.`
+          );
+          return item;
+        }
+
+        return { ...item, cantidadVenta: next };
+      })
     );
   };
 
@@ -608,7 +693,7 @@ export default function PuntoVenta() {
       .map(
         (item) => `
           <tr>
-            <td>${item.cantidad} × ${item.nombre}<br><small>${item.sku}</small></td>
+            <td>${mostrarCantidad(item.cantidad)} ${unidadVenta(item)} × ${item.nombre}<br><small>${item.sku}</small></td>
             <td style="text-align:right">${money(item.subtotal)}</td>
           </tr>`
       )
@@ -860,7 +945,7 @@ export default function PuntoVenta() {
                 <div className="mt-3 divide-y rounded-xl border">
                   {results.map((product) => (
                     <button key={product.id_producto} type="button" onClick={() => addProduct(product)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted/60">
-                      <div><p className="font-semibold">{product.nombre}</p><p className="text-sm text-muted-foreground">{product.sku} · {product.ubicacion} · Stock {product.cantidad}</p></div><strong>{money(product.precio_venta_sugerido)}</strong>
+                      <div><p className="font-semibold">{product.nombre}</p><p className="text-sm text-muted-foreground">{product.sku} · {product.ubicacion} · Stock {mostrarCantidad(cantidadDisponibleVenta(product))} {unidadVenta(product)}</p></div><strong>{money(product.precio_venta_sugerido)} / {unidadVenta(product)}</strong>
                     </button>
                   ))}
                 </div>
@@ -879,11 +964,31 @@ export default function PuntoVenta() {
                     const finalUnit = item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100);
                     return (
                       <div key={item.sku} className="rounded-xl border p-4">
-                        <div className="flex items-start justify-between gap-3"><div><p className="font-bold">{item.nombre}</p><p className="text-sm text-muted-foreground">{item.sku} · {item.ubicacion} · Disponible {item.cantidad}</p></div><Button size="icon" variant="ghost" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div>
+                        <div className="flex items-start justify-between gap-3"><div><p className="font-bold">{item.nombre}</p><p className="text-sm text-muted-foreground">{item.sku} · {item.ubicacion} · Disponible {mostrarCantidad(cantidadDisponibleVenta(item))} {unidadVenta(item)}</p></div><Button size="icon" variant="ghost" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div>
                         <div className="mt-4 grid gap-3 sm:grid-cols-3 sm:items-end">
-                          <div><label className="text-xs font-medium text-muted-foreground">Cantidad</label><div className="mt-1 flex items-center gap-2"><Button size="icon" variant="outline" onClick={() => updateQuantity(item.sku, -1)}><Minus className="h-4 w-4" /></Button><strong className="min-w-8 text-center">{item.cantidadVenta}</strong><Button size="icon" variant="outline" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-4 w-4" /></Button></div></div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground">Cantidad ({unidadVenta(item)})</label>
+                            <div className="mt-1 flex items-center gap-2">
+                              <Button size="icon" variant="outline" onClick={() => updateQuantity(item.sku, -1)}><Minus className="h-4 w-4" /></Button>
+                              <Input
+                                className="w-28 text-center font-bold"
+                                type="number"
+                                min={pasoVenta(item)}
+                                max={cantidadDisponibleVenta(item)}
+                                step={pasoVenta(item)}
+                                value={item.cantidadVenta}
+                                onChange={(event) =>
+                                  setProductQuantity(
+                                    item.sku,
+                                    Number(event.target.value)
+                                  )
+                                }
+                              />
+                              <Button size="icon" variant="outline" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-4 w-4" /></Button>
+                            </div>
+                          </div>
                           <div><label className="text-xs font-medium text-muted-foreground">Descuento %</label><Input type="number" min="0" max={isAdmin ? 100 : 10} step="0.01" value={item.descuentoPorcentaje} onChange={(event) => setDiscount(item.sku, Number(event.target.value))} /></div>
-                          <div className="text-right"><p className="text-xs text-muted-foreground">Precio unitario</p><p className="font-black">{money(finalUnit)}</p></div>
+                          <div className="text-right"><p className="text-xs text-muted-foreground">Precio por {unidadVenta(item)}</p><p className="font-black">{money(finalUnit)}</p></div>
                         </div>
                       </div>
                     );
@@ -938,7 +1043,7 @@ export default function PuntoVenta() {
             <div className="space-y-2">
               {returnSale.items.map((item) => {
                 const available = maxReturn(item);
-                return <div key={item.id_detalle} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_140px]"><div><p className="font-semibold">{item.nombre}</p><p className="text-sm text-muted-foreground">Vendidas {item.cantidad} · devueltas {item.cantidad_devuelta} · disponibles {available}</p></div><Input type="number" min="0" max={available} step="1" disabled={available <= 0} value={returnQuantities[item.id_detalle] || ""} onChange={(event) => setReturnQuantities((current) => ({ ...current, [item.id_detalle]: String(Math.min(Math.max(Number(event.target.value || 0), 0), available)) }))} placeholder="Cantidad" /></div>;
+                return <div key={item.id_detalle} className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[1fr_160px]"><div><p className="font-semibold">{item.nombre}</p><p className="text-sm text-muted-foreground">Vendidas {mostrarCantidad(item.cantidad)} {unidadVenta(item)} · devueltas {mostrarCantidad(item.cantidad_devuelta)} · disponibles {mostrarCantidad(available)}</p></div><Input type="number" min="0" max={available} step={pasoVenta(item)} disabled={available <= 0} value={returnQuantities[item.id_detalle] || ""} onChange={(event) => setReturnQuantities((current) => ({ ...current, [item.id_detalle]: String(Math.min(Math.max(Number(event.target.value || 0), 0), available)) }))} placeholder={`Cantidad (${unidadVenta(item)})`} /></div>;
               })}
             </div>
             <div className="grid gap-3 md:grid-cols-2"><Input placeholder="Motivo de devolución" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /><select className="h-10 rounded-md border bg-background px-3" value={refundMethod} onChange={(event) => setRefundMethod(event.target.value as MetodoReembolso)}><option value="efectivo">Reembolso en efectivo</option><option value="tarjeta">Reembolso a tarjeta</option><option value="transferencia">Reembolso por transferencia</option></select></div>

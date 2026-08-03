@@ -50,6 +50,58 @@ import {
 import { formatDateDDMMYYYY } from "@/lib/dateFormat";
 
 type SelectedSource = "inventory" | "catalog" | null;
+type UnidadManejo = "pieza" | "kg" | "litro";
+
+const UNIDADES_MANEJO: Record<
+  UnidadManejo,
+  {
+    etiqueta: string;
+    etiquetaPlural: string;
+    simbolo: string;
+    factor: number;
+    paso: number;
+    unidadInterna: string;
+  }
+> = {
+  pieza: {
+    etiqueta: "pieza",
+    etiquetaPlural: "piezas",
+    simbolo: "pza",
+    factor: 1,
+    paso: 1,
+    unidadInterna: "pieza",
+  },
+  kg: {
+    etiqueta: "kilogramo",
+    etiquetaPlural: "kilogramos",
+    simbolo: "kg",
+    factor: 1000,
+    paso: 0.001,
+    unidadInterna: "gramo",
+  },
+  litro: {
+    etiqueta: "litro",
+    etiquetaPlural: "litros",
+    simbolo: "L",
+    factor: 1000,
+    paso: 0.001,
+    unidadInterna: "mililitro",
+  },
+};
+
+const numeroParaInput = (value: number, decimals = 3) =>
+  Number(Number(value || 0).toFixed(decimals)).toString();
+
+const unidadNormalizada = (value: unknown): UnidadManejo => {
+  const clean = String(value || "pieza").trim().toLowerCase();
+  if (["kg", "kilo", "kilos", "kilogramo", "kilogramos"].includes(clean)) {
+    return "kg";
+  }
+  if (["l", "lt", "lts", "litro", "litros"].includes(clean)) {
+    return "litro";
+  }
+  return "pieza";
+};
 
 interface FefoNotice {
   nombre: string;
@@ -69,6 +121,9 @@ export function InventoryForm() {
   const [caducidadNoAplica, setCaducidadNoAplica] = useState(true);
   const [stockMinimo, setStockMinimo] = useState("");
   const [stockAlto, setStockAlto] = useState("");
+  const [unidadManejo, setUnidadManejo] =
+    useState<UnidadManejo>("pieza");
+  const [unidadLoading, setUnidadLoading] = useState(false);
 
   const [selectedRack, setSelectedRack] = useState("");
   const [selectedNivel, setSelectedNivel] = useState("");
@@ -113,6 +168,12 @@ export function InventoryForm() {
 
   const locationLocked = selectedSource === "inventory";
   const isRestock = selectedSource === "inventory";
+  const unidadActual = UNIDADES_MANEJO[unidadManejo];
+  const factorInventario = unidadActual.factor;
+  const pasoCantidad = unidadActual.paso;
+  const stockActualComercial = selectedInventoryProduct
+    ? Number(selectedInventoryProduct.cantidad || 0) / factorInventario
+    : 0;
 
   const availableSlots = locations.filter((loc) => {
     if (!selectedRack || !selectedNivel) return false;
@@ -179,6 +240,8 @@ export function InventoryForm() {
     setCaducidadNoAplica(true);
     setStockMinimo("");
     setStockAlto("");
+    setUnidadManejo("pieza");
+    setUnidadLoading(false);
     setSelectedRack("");
     setSelectedNivel("");
     setSelectedSlot("");
@@ -245,6 +308,7 @@ export function InventoryForm() {
     setPrecioVentaSugerido("");
     setStockMinimo("10");
     setStockAlto("30");
+    setUnidadManejo("pieza");
 
     setSelectedRack("");
     setSelectedNivel("");
@@ -290,6 +354,75 @@ export function InventoryForm() {
 
     return () => clearTimeout(timeout);
   }, [searchTerm, selectedSource]);
+
+  useEffect(() => {
+    const selectedSku =
+      selectedInventoryProduct?.sku ?? selectedCatalogProduct?.sku ?? "";
+
+    if (!selectedSku) return;
+
+    let cancelled = false;
+
+    const loadUnit = async () => {
+      try {
+        setUnidadLoading(true);
+        const response = await apiFetch(
+          `/pos/v3/productos/unidad/${encodeURIComponent(selectedSku)}`
+        );
+
+        if (!response.ok) {
+          throw new Error(`Error HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (cancelled) return;
+
+        const nextUnit = unidadNormalizada(data?.unidad_venta);
+        const nextFactor = Number(data?.factor_inventario || 1) || 1;
+        setUnidadManejo(nextUnit);
+
+        if (selectedInventoryProduct) {
+          setCostoProveedor(
+            numeroParaInput(
+              Number(selectedInventoryProduct.costo_proveedor || 0) *
+                nextFactor,
+              4
+            )
+          );
+          setPrecioVentaSugerido(
+            numeroParaInput(
+              Number(selectedInventoryProduct.precio_venta_sugerido || 0),
+              2
+            )
+          );
+          setStockMinimo(
+            numeroParaInput(
+              Number(selectedInventoryProduct.stock_minimo || 0) / nextFactor
+            )
+          );
+          setStockAlto(
+            numeroParaInput(
+              Number(selectedInventoryProduct.stock_alto || 0) / nextFactor
+            )
+          );
+        }
+      } catch (error) {
+        console.error("Error cargando unidad del producto:", error);
+        if (!cancelled) setUnidadManejo("pieza");
+      } finally {
+        if (!cancelled) setUnidadLoading(false);
+      }
+    };
+
+    void loadUnit();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    selectedInventoryProduct,
+    selectedCatalogProduct?.sku,
+  ]);
 
   useEffect(() => {
     const loadLots = async () => {
@@ -444,67 +577,112 @@ export function InventoryForm() {
       return;
     }
 
-    const cantidadNum = parseInt(cantidad);
-
-    if (isNaN(cantidadNum) || cantidadNum <= 0) {
+    const cantidadComercial = Number(cantidad);
+    if (!Number.isFinite(cantidadComercial) || cantidadComercial <= 0) {
       toast({
         title: "Error",
         description: "La cantidad debe ser un número positivo.",
         variant: "destructive",
       });
-
       return;
     }
 
-    const costoProveedorNum = parseFloat(costoProveedor);
+    if (
+      unidadManejo === "pieza" &&
+      !Number.isInteger(cantidadComercial)
+    ) {
+      toast({
+        title: "Cantidad inválida",
+        description: "Los productos por pieza deben usar números enteros.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    if (isNaN(costoProveedorNum) || costoProveedorNum < 0) {
+    const cantidadInternaExacta =
+      cantidadComercial * factorInventario;
+    const cantidadNum = Math.round(cantidadInternaExacta);
+
+    if (
+      cantidadNum <= 0 ||
+      Math.abs(cantidadInternaExacta - cantidadNum) > 0.000001
+    ) {
+      toast({
+        title: "Precisión inválida",
+        description:
+          unidadManejo === "pieza"
+            ? "Captura piezas completas."
+            : `Captura máximo 3 decimales en ${unidadActual.simbolo}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const costoProveedorComercial = Number(costoProveedor);
+    if (
+      !Number.isFinite(costoProveedorComercial) ||
+      costoProveedorComercial < 0
+    ) {
       toast({
         title: "Error",
         description: "El costo proveedor debe ser un número válido.",
         variant: "destructive",
       });
-
       return;
     }
 
-    const precioVentaSugeridoNum = parseFloat(precioVentaSugerido);
+    const costoProveedorNum =
+      costoProveedorComercial / factorInventario;
 
-    if (isNaN(precioVentaSugeridoNum) || precioVentaSugeridoNum < 0) {
+    const precioVentaSugeridoNum = Number(precioVentaSugerido);
+    if (
+      !Number.isFinite(precioVentaSugeridoNum) ||
+      precioVentaSugeridoNum < 0
+    ) {
       toast({
         title: "Error",
         description: "El precio de venta sugerido debe ser un número válido.",
         variant: "destructive",
       });
-
       return;
     }
 
-    const stockMinimoNum =
-      stockMinimo.trim() === "" ? 10 : parseInt(stockMinimo);
-
-    if (isNaN(stockMinimoNum) || stockMinimoNum <= 0) {
+    const stockMinimoComercial =
+      stockMinimo.trim() === "" ? 10 : Number(stockMinimo);
+    if (
+      !Number.isFinite(stockMinimoComercial) ||
+      stockMinimoComercial <= 0
+    ) {
       toast({
         title: "Error",
         description: "El stock crítico debe ser un número mayor a 0.",
         variant: "destructive",
       });
-
       return;
     }
 
-    const stockAltoNum =
-      stockAlto.trim() === "" ? stockMinimoNum * 3 : parseInt(stockAlto);
-
-    if (isNaN(stockAltoNum) || stockAltoNum <= stockMinimoNum) {
+    const stockAltoComercial =
+      stockAlto.trim() === ""
+        ? stockMinimoComercial * 3
+        : Number(stockAlto);
+    if (
+      !Number.isFinite(stockAltoComercial) ||
+      stockAltoComercial <= stockMinimoComercial
+    ) {
       toast({
         title: "Error",
         description: "El stock alto debe ser mayor que el stock crítico.",
         variant: "destructive",
       });
-
       return;
     }
+
+    const stockMinimoNum = Math.round(
+      stockMinimoComercial * factorInventario
+    );
+    const stockAltoNum = Math.round(
+      stockAltoComercial * factorInventario
+    );
 
     let locationId = "";
 
@@ -535,6 +713,27 @@ export function InventoryForm() {
     try {
       setIsSaving(true);
 
+
+      const unitResponse = await apiFetch(
+        `/pos/v3/productos/unidad/${encodeURIComponent(finalSku)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ unidad_venta: unidadManejo }),
+        }
+      );
+
+      if (!unitResponse.ok) {
+        let detail = "No se pudo guardar la unidad del producto.";
+        try {
+          const errorData = await unitResponse.json();
+          detail = errorData?.detail || detail;
+        } catch {
+          // La respuesta no era JSON.
+        }
+        throw new Error(detail);
+      }
+
       await addProduct({
         locationId,
         sku: finalSku,
@@ -556,8 +755,8 @@ export function InventoryForm() {
         slot: parseInt(finalSlot),
         timestamp: new Date(),
         descripcion: finalDescripcion || null,
-        cantidad: cantidadNum,
-        costoProveedor: costoProveedorNum,
+        cantidad: cantidadComercial,
+        costoProveedor: costoProveedorComercial,
         precioVentaSugerido: precioVentaSugeridoNum,
         caducidad: caducidadValue,
       });
@@ -576,7 +775,7 @@ export function InventoryForm() {
       toast({
         title: isRestock ? "Restock registrado" : "Producto agregado",
         description: isRestock
-          ? `Se sumaron ${cantidadNum} pieza(s) a ${finalNombre}. Revisa la regla FEFO en pantalla.`
+          ? `Se sumaron ${numeroParaInput(cantidadComercial)} ${unidadActual.simbolo} a ${finalNombre}. Revisa la regla FEFO en pantalla.`
           : `${finalNombre} fue agregado al inventario.`,
       });
 
@@ -586,7 +785,10 @@ export function InventoryForm() {
 
       toast({
         title: "Error",
-        description: "No se pudo agregar el producto.",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo agregar el producto.",
         variant: "destructive",
       });
     } finally {
@@ -819,12 +1021,20 @@ export function InventoryForm() {
                                 </p>
 
                                 <p className="text-xs text-muted-foreground">
-                                  {lot.cantidad_actual} pza(s)
+                                  {numeroParaInput(
+                                    Number(lot.cantidad_actual || 0) /
+                                      factorInventario
+                                  )}{" "}
+                                  {unidadActual.simbolo}
                                 </p>
 
                                 <p className="text-xs text-muted-foreground">
                                   Costo: $
-                                  {Number(lot.costo_unitario ?? 0).toFixed(2)}
+                                  {(
+                                    Number(lot.costo_unitario ?? 0) *
+                                    factorInventario
+                                  ).toFixed(2)}{" "}
+                                  por {unidadActual.simbolo}
                                 </p>
                               </div>
                             ))}
@@ -890,36 +1100,67 @@ export function InventoryForm() {
                     </div>
 
                     <div className="space-y-2">
+                      <Label>Unidad de manejo *</Label>
+                      <Select
+                        value={unidadManejo}
+                        disabled={isSaving || unidadLoading || isRestock}
+                        onValueChange={(value) =>
+                          setUnidadManejo(value as UnidadManejo)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Seleccionar unidad" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pieza">Pieza</SelectItem>
+                          <SelectItem value="kg">Kilogramo (kg)</SelectItem>
+                          <SelectItem value="litro">Litro (L)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {unidadLoading
+                          ? "Consultando la unidad configurada..."
+                          : isRestock
+                            ? "La unidad queda bloqueada durante el restock."
+                            : unidadManejo === "pieza"
+                              ? "El inventario se administrará en piezas completas."
+                              : `RackNova guardará internamente ${unidadActual.unidadInterna}s y mostrará ${unidadActual.etiquetaPlural}.`}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
                       <Label htmlFor="cantidad">
                         {isRestock
-                          ? "Cantidad nueva a ingresar *"
-                          : "Cantidad *"}
+                          ? `Cantidad nueva a ingresar (${unidadActual.simbolo}) *`
+                          : `Cantidad (${unidadActual.simbolo}) *`}
                       </Label>
-
                       <Input
                         id="cantidad"
                         type="number"
                         value={cantidad}
                         onChange={(e) => setCantidad(e.target.value)}
-                        placeholder="Ej: 100"
-                        min="1"
+                        placeholder={
+                          unidadManejo === "pieza" ? "Ej: 100" : "Ej: 12.500"
+                        }
+                        min={pasoCantidad}
+                        step={pasoCantidad}
                         required
-                        disabled={isSaving}
+                        disabled={isSaving || unidadLoading}
                       />
-
                       {isRestock && selectedInventoryProduct && (
                         <p className="text-xs text-muted-foreground">
-                          Stock actual: {selectedInventoryProduct.cantidad}{" "}
-                          pieza(s). Esta cantidad se sumará al inventario.
+                          Stock actual:{" "}
+                          {numeroParaInput(stockActualComercial)}{" "}
+                          {unidadActual.simbolo}. Esta cantidad se sumará al
+                          inventario.
                         </p>
                       )}
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="costoProveedor">
-                        Costo proveedor unitario *
+                        Costo proveedor por {unidadActual.simbolo} *
                       </Label>
-
                       <Input
                         id="costoProveedor"
                         type="number"
@@ -929,9 +1170,8 @@ export function InventoryForm() {
                         min="0"
                         step="0.01"
                         required
-                        disabled={isSaving}
+                        disabled={isSaving || unidadLoading}
                       />
-
                       <p className="text-xs text-muted-foreground">
                         En restock se usa para recalcular el costo promedio.
                       </p>
@@ -939,9 +1179,8 @@ export function InventoryForm() {
 
                     <div className="space-y-2">
                       <Label htmlFor="precioVentaSugerido">
-                        Precio de venta sugerido *
+                        Precio de venta por {unidadActual.simbolo} *
                       </Label>
-
                       <Input
                         id="precioVentaSugerido"
                         type="number"
@@ -953,44 +1192,45 @@ export function InventoryForm() {
                         min="0"
                         step="0.01"
                         required
-                        disabled={isSaving}
+                        disabled={isSaving || unidadLoading}
                       />
-
                       <p className="text-xs text-muted-foreground">
-                        Se guardará como precio sugerido más reciente.
+                        El Punto de Venta cobrará este precio por{" "}
+                        {unidadActual.simbolo}.
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="stockMinimo">
-                        Stock crítico / mínimo
+                        Stock crítico ({unidadActual.simbolo})
                       </Label>
-
                       <Input
                         id="stockMinimo"
                         type="number"
                         value={stockMinimo}
                         onChange={(e) => setStockMinimo(e.target.value)}
                         placeholder="Por defecto: 10"
-                        min="1"
-                        disabled={isSaving}
+                        min={pasoCantidad}
+                        step={pasoCantidad}
+                        disabled={isSaving || unidadLoading}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="stockAlto">Stock alto</Label>
-
+                      <Label htmlFor="stockAlto">
+                        Stock alto ({unidadActual.simbolo})
+                      </Label>
                       <Input
                         id="stockAlto"
                         type="number"
                         value={stockAlto}
                         onChange={(e) => setStockAlto(e.target.value)}
                         placeholder="Por defecto: stock crítico x 3"
-                        min="1"
-                        disabled={isSaving}
+                        min={pasoCantidad}
+                        step={pasoCantidad}
+                        disabled={isSaving || unidadLoading}
                       />
                     </div>
-
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-3">
                         <Label>Caducidad del nuevo lote</Label>
