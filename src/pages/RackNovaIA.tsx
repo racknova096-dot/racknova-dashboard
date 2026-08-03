@@ -153,7 +153,7 @@ const TOOLTIP_ITEM_STYLE: React.CSSProperties = {
   fontWeight: 600,
 };
 
-const quickQuestions = [
+const quickQuestions = [ { title: "Punto de venta", prompt: "¿Cómo funciona el Punto de Venta y cuáles son los pasos para hacer una venta?", icon: ShoppingCart, },
   {
     title: "Descuentos",
     prompt:

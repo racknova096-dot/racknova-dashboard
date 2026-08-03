@@ -14,6 +14,9 @@ import {
   UserRound,
   Users,
   WalletCards,
+  Printer,
+  ReceiptText,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +52,7 @@ import type {
   POSPromocion,
   POSPromocionPayload,
   POSReporteDiario,
+  POSVentaDetalle,
 } from "@/lib/pos";
 
 type TabKey = "venta" | "clientes" | "promociones" | "productos" | "reportes";
@@ -226,6 +230,8 @@ function AdvancedSale({
   const [cashReceived, setCashReceived] = useState("");
   const [reference, setReference] = useState("");
   const [selling, setSelling] = useState(false);
+  const [completedSale, setCompletedSale] = useState<POSVentaDetalle | null>(null);
+  // RACKNOVA_TICKET_FASE3
 
   const selectedClient = clients.find((item) => String(item.id_cliente) === clientId);
   const total = quote?.total || 0;
@@ -416,6 +422,99 @@ function AdvancedSale({
 
 
 
+  const printCompletedSale = (sale: POSVentaDetalle) => {
+    const popup = window.open("", "_blank", "width=430,height=760");
+
+    if (!popup) {
+      toast.error("El navegador bloqueó la ventana de impresión.");
+      return;
+    }
+
+    const escapeHtml = (value: unknown) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    const items = sale.items
+      .map(
+        (item) => `
+          <tr>
+            <td>
+              ${escapeHtml(item.cantidad)} ${escapeHtml(
+                item.unidad_venta || "pieza"
+              )} × ${escapeHtml(item.nombre)}
+              <br><small>${escapeHtml(item.sku)}</small>
+              ${
+                item.promocion_nombre
+                  ? `<br><small>Promoción: ${escapeHtml(
+                      item.promocion_nombre
+                    )}</small>`
+                  : ""
+              }
+            </td>
+            <td style="text-align:right">${money(item.subtotal)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const payments = sale.pagos
+      .map(
+        (payment) => `
+          <div class="row">
+            <span>${escapeHtml(payment.metodo)}</span>
+            <span>${money(payment.monto)}</span>
+          </div>`
+      )
+      .join("");
+
+    popup.document.write(`
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <meta charset="utf-8" />
+          <title>${escapeHtml(sale.folio)}</title>
+          <style>
+            body{font-family:Arial,sans-serif;margin:24px;color:#111}
+            h1,p{margin:4px 0;text-align:center}
+            table{width:100%;border-collapse:collapse;margin:18px 0}
+            td{padding:7px 0;border-bottom:1px dashed #bbb;vertical-align:top}
+            .row{display:flex;justify-content:space-between;margin:7px 0}
+            .total{font-size:20px;font-weight:700;border-top:1px solid #111;padding-top:8px}
+          </style>
+        </head>
+        <body>
+          <h1>RackNova</h1>
+          <p>${escapeHtml(sale.folio)}</p>
+          <p>${new Date(sale.fecha).toLocaleString("es-MX")}</p>
+          <p>Cajero: ${escapeHtml(sale.usuario)}</p>
+          <p>Cliente: ${escapeHtml(
+            sale.cliente_nombre || "Público general"
+          )}</p>
+          <table>${items}</table>
+          <div class="row"><span>Subtotal</span><span>${money(
+            sale.subtotal
+          )}</span></div>
+          <div class="row"><span>Descuento</span><span>-${money(
+            sale.descuento_total
+          )}</span></div>
+          <div class="row total"><span>Total</span><span>${money(
+            sale.total
+          )}</span></div>
+          ${payments}
+          <div class="row"><span>Cambio</span><span>${money(
+            sale.cambio
+          )}</span></div>
+          <p style="margin-top:28px">Gracias por su compra</p>
+          <script>window.onload=()=>window.print();</script>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  };
+
   const checkout = async () => {
     if (advancedQuantityError) {
       toast.error(advancedQuantityError);
@@ -459,6 +558,7 @@ function AdvancedSale({
         tipo_venta: saleType,
         fecha_vencimiento: saleType === "CONTADO" ? null : dueDate,
       });
+      setCompletedSale(sale);
       toast.success(`Venta ${sale.folio} registrada.`);
       setCart([]);
       setQuote(null);
@@ -475,7 +575,8 @@ function AdvancedSale({
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
+    <>
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_0.8fr]">
       <div className="space-y-5">
         <Card>
           <CardHeader><CardTitle>Cliente y modalidad</CardTitle></CardHeader>
@@ -630,10 +731,187 @@ function AdvancedSale({
           </Button>
         </CardContent>
       </Card>
-    </div>
+      </div>
+
+      {completedSale && (
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/60 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Resumen de la venta ${completedSale.folio}`}
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-background shadow-2xl"
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 p-5 backdrop-blur">
+              <div>
+                <div className="flex items-center gap-2 text-emerald-600">
+                  <ReceiptText className="h-6 w-6" />
+                  <span className="font-semibold">Venta completada</span>
+                </div>
+                <h2 className="mt-1 text-2xl font-black">
+                  Ticket {completedSale.folio}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {new Date(completedSale.fecha).toLocaleString("es-MX")}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setCompletedSale(null)}
+                aria-label="Cerrar ticket"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div className="grid gap-3 rounded-xl bg-secondary p-4 sm:grid-cols-4">
+                <div>
+                  <span className="text-xs text-muted-foreground">Cajero</span>
+                  <p className="font-semibold">{completedSale.usuario}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Cliente</span>
+                  <p className="font-semibold">
+                    {completedSale.cliente_nombre || "Público general"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Modalidad</span>
+                  <p className="font-semibold">
+                    {completedSale.tipo_venta || "CONTADO"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Estado</span>
+                  <p className="font-semibold">{completedSale.estado}</p>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border">
+                <div className="border-b bg-muted/50 px-4 py-3 font-semibold">
+                  Productos
+                </div>
+                <div className="divide-y">
+                  {completedSale.items.map((item) => (
+                    <div
+                      key={item.id_detalle}
+                      className="grid gap-2 p-4 sm:grid-cols-[1fr_auto]"
+                    >
+                      <div>
+                        <p className="font-semibold">{item.nombre}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.cantidad} {item.unidad_venta || "pieza"} ×{" "}
+                          {money(item.precio_unitario_final)}
+                        </p>
+                        {item.promocion_nombre && (
+                          <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            Promoción: {item.promocion_nombre}
+                          </p>
+                        )}
+                      </div>
+                      <strong>{money(item.subtotal)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border p-4">
+                  <p className="mb-3 font-semibold">Pagos</p>
+                  <div className="space-y-2">
+                    {completedSale.pagos.map((payment) => (
+                      <div
+                        key={payment.id_pago}
+                        className="flex justify-between text-sm"
+                      >
+                        <span className="capitalize">
+                          {payment.metodo}
+                          {payment.referencia
+                            ? ` · ${payment.referencia}`
+                            : ""}
+                        </span>
+                        <strong>{money(payment.monto)}</strong>
+                      </div>
+                    ))}
+                    {completedSale.pagos.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Sin pago inicial.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-xl bg-secondary p-4">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <strong>{money(completedSale.subtotal)}</strong>
+                  </div>
+                  <div className="flex justify-between text-emerald-700 dark:text-emerald-300">
+                    <span>Promociones</span>
+                    <strong>
+                      -{money(completedSale.descuento_promociones || 0)}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Descuento total</span>
+                    <strong>
+                      -{money(completedSale.descuento_total)}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 text-xl">
+                    <span>Total</span>
+                    <strong>{money(completedSale.total)}</strong>
+                  </div>
+                  {completedSale.efectivo_recibido > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span>Efectivo recibido</span>
+                        <strong>
+                          {money(completedSale.efectivo_recibido)}
+                        </strong>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Cambio</span>
+                        <strong>{money(completedSale.cambio)}</strong>
+                      </div>
+                    </>
+                  )}
+                  {Number(completedSale.saldo_pendiente || 0) > 0 && (
+                    <div className="flex justify-between border-t pt-2 text-amber-700 dark:text-amber-300">
+                      <span>Saldo pendiente</span>
+                      <strong>
+                        {money(completedSale.saldo_pendiente || 0)}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCompletedSale(null)}
+                >
+                  Nueva venta
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => printCompletedSale(completedSale)}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Imprimir ticket
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
-
 function ClientsAndCredit({
   clients,
   credits,
@@ -1634,7 +1912,7 @@ function ReportsPanel({ isAdmin }: { isAdmin: boolean }) {
                   <div className="space-y-2">
                     {Object.entries(report.metodos_pago).map(([key, value]) => (
                       <div key={key} className="flex items-center justify-between rounded-lg border p-3">
-                        <span className="capitalize">{key.replaceAll("_", " ")}</span>
+                        <span className="capitalize">{key.replace(/_/g, " ")}</span>
                         <strong>{money(Number(value))}</strong>
                       </div>
                     ))}

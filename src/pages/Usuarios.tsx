@@ -13,6 +13,7 @@ import {
   Filter,
   Clock,
   Mail,
+  Trash2,
 } from "lucide-react";
 
 import { apiFetch } from "@/lib/api";
@@ -122,6 +123,8 @@ export default function Usuarios() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  // RACKNOVA_ELIMINAR_USUARIO_PERMANENTE
 
   const { toast } = useToast();
 
@@ -460,6 +463,90 @@ export default function Usuarios() {
     }
   };
 
+  const eliminarUsuario = async (item: Usuario) => {
+    const currentUsername = (
+      localStorage.getItem("usuario") || ""
+    ).trim().toLowerCase();
+
+    if (currentUsername === item.usuario.trim().toLowerCase()) {
+      toast({
+        title: "Acción bloqueada",
+        description:
+          "No puedes eliminar la cuenta con la que tienes iniciada la sesión.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (item.rol === "admin" && item.activo && activeAdmins <= 1) {
+      toast({
+        title: "Acción bloqueada",
+        description: "No puedes eliminar al último administrador activo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmation = window.prompt(
+      `Esta acción eliminará permanentemente la cuenta de ${
+        item.nombre || item.usuario
+      }. El nombre se conservará en ventas y movimientos anteriores.\n\nEscribe exactamente ${
+        item.usuario
+      } para confirmar:`
+    );
+
+    if (confirmation === null) return;
+
+    if (confirmation.trim() !== item.usuario) {
+      toast({
+        title: "Confirmación incorrecta",
+        description: "El usuario no fue eliminado.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setDeletingId(item.id_usuario);
+
+      const response = await apiFetch(
+        `/auth/users/${item.id_usuario}/permanente`,
+        { method: "DELETE" }
+      );
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.detail || "No se pudo eliminar el usuario."
+        );
+      }
+
+      toast({
+        title: "Usuario eliminado",
+        description:
+          "La cuenta fue eliminada y su nombre se conserva en el historial.",
+      });
+
+      if (editingId === item.id_usuario) {
+        resetForm();
+      }
+
+      await cargarUsuarios();
+    } catch (error) {
+      console.error("Error eliminando usuario:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "No se pudo eliminar el usuario.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <PageHero
@@ -693,7 +780,7 @@ export default function Usuarios() {
               </CardTitle>
 
               <p className="text-sm text-muted-foreground mt-1">
-                Consulta, filtra, edita, activa o desactiva usuarios del
+                Consulta, filtra, edita, activa, desactiva o elimina usuarios del
                 sistema.
               </p>
             </div>
@@ -855,6 +942,18 @@ export default function Usuarios() {
                               Activar
                             </Button>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={deletingId === item.id_usuario}
+                            onClick={() => void eliminarUsuario(item)}
+                            className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/40"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            {deletingId === item.id_usuario
+                              ? "Eliminando..."
+                              : "Eliminar"}
+                          </Button>
                         </div>
                       </td>
                     </tr>

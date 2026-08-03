@@ -1283,13 +1283,181 @@ export default function PuntoVenta() {
         </div>
       </section>
 
+      {/* RACKNOVA_TICKET_RESUMEN_MODAL */}
       {ticket && (
-        <Card>
-          <CardHeader><CardTitle className="flex items-center justify-between"><span>Ticket {ticket.folio}</span><Button variant="outline" onClick={() => printTicket(ticket)}><Printer className="mr-2 h-4 w-4" /> Imprimir</Button></CardTitle></CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-3"><div><span className="text-sm text-muted-foreground">Total</span><p className="font-black">{money(ticket.total)}</p></div><div><span className="text-sm text-muted-foreground">Cambio</span><p className="font-black">{money(ticket.cambio)}</p></div><div><span className="text-sm text-muted-foreground">Estado</span><p className="font-black">{ticket.estado}</p></div></CardContent>
-        </Card>
-      )}
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Resumen de la venta ${ticket.folio}`}
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border bg-background shadow-2xl"
+          >
+            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 p-5 backdrop-blur">
+              <div>
+                <div className="flex items-center gap-2 text-emerald-600">
+                  <ReceiptText className="h-6 w-6" />
+                  <span className="font-semibold">Venta completada</span>
+                </div>
+                <h2 className="mt-1 text-2xl font-black">
+                  Ticket {ticket.folio}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {formatDate(ticket.fecha)}
+                </p>
+              </div>
 
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => setTicket(null)}
+                aria-label="Cerrar resumen del ticket"
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-5 p-5">
+              <div className="grid gap-3 rounded-xl bg-secondary p-4 sm:grid-cols-4">
+                <div>
+                  <span className="text-xs text-muted-foreground">Cajero</span>
+                  <p className="font-semibold">{ticket.usuario}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Cliente</span>
+                  <p className="font-semibold">
+                    {ticket.cliente_nombre || "Público general"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Modalidad</span>
+                  <p className="font-semibold">
+                    {ticket.tipo_venta || "CONTADO"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Estado</span>
+                  <p className="font-semibold">{ticket.estado}</p>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-xl border">
+                <div className="border-b bg-muted/50 px-4 py-3 font-semibold">
+                  Productos
+                </div>
+                <div className="divide-y">
+                  {ticket.items.map((item) => (
+                    <div
+                      key={item.id_detalle}
+                      className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center"
+                    >
+                      <div>
+                        <p className="font-semibold">{item.nombre}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.sku} · {mostrarCantidad(item.cantidad)}{" "}
+                          {unidadVenta(item)} ×{" "}
+                          {money(item.precio_unitario_final)}
+                        </p>
+                        {item.promocion_nombre && (
+                          <p className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            Promoción: {item.promocion_nombre}
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-right font-bold">
+                        {money(item.subtotal)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border p-4">
+                  <p className="mb-3 font-semibold">Forma de pago</p>
+                  <div className="space-y-2">
+                    {ticket.pagos.map((payment) => (
+                      <div
+                        key={payment.id_pago}
+                        className="flex justify-between gap-4 text-sm"
+                      >
+                        <span className="capitalize">
+                          {payment.metodo}
+                          {payment.referencia
+                            ? ` · ${payment.referencia}`
+                            : ""}
+                        </span>
+                        <strong>{money(payment.monto)}</strong>
+                      </div>
+                    ))}
+                    {ticket.pagos.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        Venta a crédito sin pago inicial.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-xl bg-secondary p-4">
+                  <div className="flex justify-between">
+                    <span>Subtotal</span>
+                    <strong>{money(ticket.subtotal)}</strong>
+                  </div>
+                  <div className="flex justify-between text-emerald-700 dark:text-emerald-300">
+                    <span>Promociones</span>
+                    <strong>
+                      -{money(ticket.descuento_promociones || 0)}
+                    </strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Descuento total</span>
+                    <strong>-{money(ticket.descuento_total)}</strong>
+                  </div>
+                  <div className="flex justify-between border-t pt-2 text-xl">
+                    <span>Total</span>
+                    <strong>{money(ticket.total)}</strong>
+                  </div>
+                  {ticket.efectivo_recibido > 0 && (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span>Efectivo recibido</span>
+                        <strong>{money(ticket.efectivo_recibido)}</strong>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Cambio</span>
+                        <strong>{money(ticket.cambio)}</strong>
+                      </div>
+                    </>
+                  )}
+                  {Number(ticket.saldo_pendiente || 0) > 0 && (
+                    <div className="flex justify-between border-t pt-2 text-amber-700 dark:text-amber-300">
+                      <span>Saldo pendiente</span>
+                      <strong>{money(ticket.saldo_pendiente || 0)}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setTicket(null)}
+                >
+                  Nueva venta
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => printTicket(ticket)}
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Imprimir ticket
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {returnSale && (
         <Card className="border-amber-500/40">
           <CardHeader><CardTitle className="flex items-center justify-between"><span className="flex items-center gap-2"><RotateCcw className="h-5 w-5" /> Devolver artículos de {returnSale.folio}</span><Button variant="ghost" onClick={() => setReturnSale(null)}><XCircle className="h-5 w-5" /></Button></CardTitle></CardHeader>

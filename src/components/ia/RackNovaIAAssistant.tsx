@@ -55,11 +55,13 @@ const PAGE_NAMES: Record<string, string> = {
   "/finanzas": "Finanzas",
   "/catalogo": "Catálogo",
   "/racknova-ia": "RackNova IA",
+  "/pos": "Punto de Venta",
   "/usuarios": "Usuarios",
   "/rackview": "Vista del rack",
 };
 
 const QUICK_QUESTIONS = [
+  "¿Cómo hago una venta en el Punto de Venta?",
   "¿Cómo agrego un producto?",
   "¿Dónde registro una salida?",
   "¿Qué productos tienen stock bajo?",
@@ -70,7 +72,7 @@ const QUICK_QUESTIONS = [
 const INITIAL_MESSAGE: Message = {
   role: "assistant",
   content:
-    "Hola, soy RackNova IA. Puedo guiarte dentro de la plataforma y consultar inventario, ventas, caducidades y ubicaciones.",
+    "Hola, soy RackNova IA. Puedo guiarte dentro de la plataforma, incluido el Punto de Venta, y consultar inventario, ventas, caducidades y ubicaciones.",
   source: "racknova",
   complete: true,
 };
