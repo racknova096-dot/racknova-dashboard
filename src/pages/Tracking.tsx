@@ -7,6 +7,7 @@ import {
   TrendingDown,
   Edit,
   CalendarDays,
+  RotateCcw,
 } from "lucide-react";
 
 import {
@@ -82,6 +83,10 @@ export default function Tracking() {
         variant: "secondary",
         icon: <Edit className="mr-1 h-3 w-3" />,
       },
+      Devolución: {
+        variant: "outline",
+        icon: <RotateCcw className="mr-1 h-3 w-3" />,
+      },
     };
 
     return (
@@ -148,6 +153,12 @@ export default function Tracking() {
     ).length;
   }, [periodMovements]);
 
+  const totalDevoluciones = useMemo(() => {
+    return periodMovements.filter(
+      (movement) => movement.action === "Devolución"
+    ).length;
+  }, [periodMovements]);
+
   const resetFilters = () => {
     setSearchTerm("");
     setFilterAction("all");
@@ -182,6 +193,11 @@ export default function Tracking() {
             label: "Ediciones",
             value: totalEdiciones,
             tone: "purple",
+          },
+          {
+            label: "Devoluciones",
+            value: totalDevoluciones,
+            tone: "amber",
           },
         ]}
       >
@@ -229,6 +245,9 @@ export default function Tracking() {
                 <SelectItem value="Ingreso">Ingreso</SelectItem>
                 <SelectItem value="Egreso">Egreso</SelectItem>
                 <SelectItem value="Edición">Edición</SelectItem>
+                <SelectItem value="Devolución">
+                  Devolución
+                </SelectItem>
               </SelectContent>
             </Select>
 

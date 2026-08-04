@@ -12,6 +12,7 @@ import {
   Boxes,
   CircleDollarSign,
   CreditCard,
+  Eye,
   History,
   Loader2,
   LockKeyhole,
@@ -55,6 +56,7 @@ import {
   listarVentasPOS,
   obtenerEstadoPOS,
   obtenerSesionActualPOS,
+  obtenerResumenSesionPOS,
   obtenerVentaPOS,
   registrarMovimientoEfectivoPOS,
 } from "@/lib/pos";
@@ -64,6 +66,7 @@ import type {
   POSEstado,
   POSProducto,
   POSSesionCaja,
+  POSResumenTurno,
   POSVentaDetalle,
   POSVentaDetalleItem,
   POSVentaResumen,
@@ -163,6 +166,13 @@ export default function PuntoVenta() {
   const [cashCounted, setCashCounted] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
   const [closingCash, setClosingCash] = useState(false);
+  // RACKNOVA_CAJA_EQUIPO
+  const [cashSummary, setCashSummary] =
+    useState<POSResumenTurno | null>(null);
+  const [teamSummary, setTeamSummary] =
+    useState<POSResumenTurno | null>(null);
+  const [loadingTeamSession, setLoadingTeamSession] =
+    useState<number | null>(null);
 
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -273,6 +283,18 @@ export default function PuntoVenta() {
       window.setTimeout(() => searchRef.current?.focus(), 100);
     }
   }, [sesion?.estado]);
+
+  useEffect(() => {
+    if (!isAdmin || !estado?.habilitado) return;
+
+    const timer = window.setInterval(() => {
+      void listarSesionesCajaPOS(100)
+        .then(setSesiones)
+        .catch(() => undefined);
+    }, 10_000);
+
+    return () => window.clearInterval(timer);
+  }, [estado?.habilitado, isAdmin]);
 
   const localTotals = useMemo(
     () =>
@@ -562,6 +584,7 @@ export default function PuntoVenta() {
         observaciones: closeNotes.trim() || null,
       });
       toast.success(response.mensaje);
+      setCashSummary(response.resumen_turno);
       setCashCounted("");
       setCloseNotes("");
       setCart([]);
@@ -572,6 +595,422 @@ export default function PuntoVenta() {
     } finally {
       setClosingCash(false);
     }
+  };
+
+  const openTeamSession = async (
+    row: POSSesionCaja
+  ) => {
+    if (!isAdmin) return;
+
+    setLoadingTeamSession(row.id_sesion);
+
+    try {
+      setTeamSummary(
+        await obtenerResumenSesionPOS(row.id_sesion)
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo consultar la caja."
+      );
+    } finally {
+      setLoadingTeamSession(null);
+    }
+  };
+
+  const closeSummary = () => {
+    setCashSummary(null);
+    setTeamSummary(null);
+  };
+
+  const activeTeamSessions = sesiones.filter(
+    (row) => row.estado === "ABIERTA"
+  );
+
+  const renderTeamBoxes = () => {
+    if (!isAdmin) return null;
+
+    return (
+      <Card className="border-blue-500/30">
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5 text-blue-600" />
+                Cajas del equipo
+              </CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Supervisión de solo lectura. Se actualiza cada 10 segundos.
+              </p>
+            </div>
+            <Badge variant="outline">
+              {activeTeamSessions.length} abierta(s)
+            </Badge>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-muted-foreground">
+                  <th className="p-3">Caja</th>
+                  <th className="p-3">Operador</th>
+                  <th className="p-3">Apertura</th>
+                  <th className="p-3">Estado</th>
+                  <th className="p-3 text-right">Ventas</th>
+                  <th className="p-3 text-right">Efectivo esperado</th>
+                  <th className="p-3 text-right">Consulta</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sesiones.slice(0, 30).map((row) => (
+                  <tr key={row.id_sesion} className="border-b">
+                    <td className="p-3 font-semibold">
+                      {row.caja_nombre}
+                    </td>
+                    <td className="p-3">{row.usuario}</td>
+                    <td className="p-3">
+                      {formatDate(row.fecha_apertura)}
+                    </td>
+                    <td className="p-3">
+                      <Badge
+                        variant={
+                          row.estado === "ABIERTA"
+                            ? "default"
+                            : "secondary"
+                        }
+                      >
+                        {row.estado}
+                      </Badge>
+                    </td>
+                    <td className="p-3 text-right">
+                      {money(row.total_ventas)}
+                    </td>
+                    <td className="p-3 text-right">
+                      {money(row.efectivo_esperado)}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          loadingTeamSession === row.id_sesion
+                        }
+                        onClick={() =>
+                          void openTeamSession(row)
+                        }
+                      >
+                        {loadingTeamSession === row.id_sesion ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Eye className="mr-2 h-4 w-4" />
+                        )}
+                        Ver caja
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {sesiones.length === 0 && (
+              <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+                Todavía no existen sesiones de caja.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderCashSummary = () => {
+    const report = teamSummary || cashSummary;
+
+    if (!report) return null;
+
+    const readOnly = Boolean(teamSummary);
+
+    return (
+      <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">
+        <div className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-2xl border bg-background shadow-2xl">
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 p-5 backdrop-blur">
+            <div>
+              <div className="flex items-center gap-2 text-blue-600">
+                <ReceiptText className="h-6 w-6" />
+                <span className="font-semibold">
+                  {readOnly
+                    ? "Supervisión de caja · Solo lectura"
+                    : "Caja cerrada correctamente"}
+                </span>
+              </div>
+              <h2 className="mt-1 text-2xl font-black">
+                {report.sesion.caja_nombre}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {report.sesion.usuario} ·{" "}
+                {formatDate(report.periodo.inicio)} a{" "}
+                {formatDate(report.periodo.fin)}
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={closeSummary}
+              aria-label="Cerrar resumen"
+            >
+              <XCircle className="h-5 w-5" />
+            </Button>
+          </div>
+
+          <div className="space-y-6 p-5">
+            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Ventas
+                  </p>
+                  <p className="text-xl font-black">
+                    {money(report.totales.ventas)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Devoluciones
+                  </p>
+                  <p className="text-xl font-black text-amber-700">
+                    -{money(report.totales.devoluciones)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Venta neta
+                  </p>
+                  <p className="text-xl font-black">
+                    {money(report.totales.ventas_netas)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Efectivo esperado
+                  </p>
+                  <p className="text-xl font-black">
+                    {money(report.sesion.efectivo_esperado)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Efectivo contado
+                  </p>
+                  <p className="text-xl font-black">
+                    {report.sesion.efectivo_contado == null
+                      ? "Pendiente"
+                      : money(report.sesion.efectivo_contado)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">
+                    Diferencia
+                  </p>
+                  <p className="text-xl font-black">
+                    {report.sesion.diferencia == null
+                      ? "Pendiente"
+                      : money(report.sesion.diferencia)}
+                  </p>
+                </CardContent>
+              </Card>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl bg-secondary p-4">
+                <p className="text-sm text-muted-foreground">
+                  Efectivo de ventas
+                </p>
+                <strong>{money(report.sesion.efectivo_ventas)}</strong>
+              </div>
+              <div className="rounded-xl bg-secondary p-4">
+                <p className="text-sm text-muted-foreground">
+                  Tarjeta
+                </p>
+                <strong>{money(report.sesion.tarjeta)}</strong>
+              </div>
+              <div className="rounded-xl bg-secondary p-4">
+                <p className="text-sm text-muted-foreground">
+                  Transferencia
+                </p>
+                <strong>{money(report.sesion.transferencia)}</strong>
+              </div>
+            </section>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Productos, ubicaciones y movimientos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1050px] text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="p-3">Fecha</th>
+                        <th className="p-3">Folio</th>
+                        <th className="p-3">Ubicación</th>
+                        <th className="p-3">Producto</th>
+                        <th className="p-3">Unidad</th>
+                        <th className="p-3 text-right">Vendida</th>
+                        <th className="p-3 text-right">Devuelta</th>
+                        <th className="p-3 text-right">Neta</th>
+                        <th className="p-3 text-right">Ingreso</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.movimientos_productos.map((item) => (
+                        <tr
+                          key={`${item.id_venta}-${item.id_detalle}`}
+                          className="border-b"
+                        >
+                          <td className="p-3">
+                            {formatDate(item.fecha)}
+                          </td>
+                          <td className="p-3 font-semibold">
+                            {item.folio}
+                          </td>
+                          <td className="p-3">{item.ubicacion}</td>
+                          <td className="p-3">
+                            <p className="font-semibold">
+                              {item.nombre}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.sku}
+                            </p>
+                          </td>
+                          <td className="p-3">
+                            {item.unidad_venta}
+                          </td>
+                          <td className="p-3 text-right">
+                            {item.cantidad_vendida}
+                          </td>
+                          <td className="p-3 text-right">
+                            {item.cantidad_devuelta}
+                          </td>
+                          <td className="p-3 text-right font-semibold">
+                            {item.cantidad_neta}
+                          </td>
+                          <td className="p-3 text-right">
+                            {money(item.ingreso_neto)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-5 lg:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Devoluciones</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {report.devoluciones.map((item) => (
+                    <div
+                      key={item.id_devolucion}
+                      className="rounded-xl border p-4"
+                    >
+                      <div className="flex justify-between gap-4">
+                        <div>
+                          <p className="font-semibold">
+                            {item.folio}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Venta {item.folio_venta || item.id_venta} ·{" "}
+                            {formatDate(item.fecha)}
+                          </p>
+                          <p className="mt-1 text-sm">
+                            {item.motivo}
+                          </p>
+                        </div>
+                        <strong className="text-amber-700">
+                          -{money(item.monto)}
+                        </strong>
+                      </div>
+                    </div>
+                  ))}
+
+                  {report.devoluciones.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No hubo devoluciones en esta sesión.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Movimientos de efectivo</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {report.movimientos_efectivo.map((item) => (
+                    <div
+                      key={item.id_movimiento}
+                      className="flex justify-between gap-4 rounded-xl border p-4"
+                    >
+                      <div>
+                        <p className="font-semibold">{item.tipo}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.motivo} · {formatDate(item.fecha)}
+                        </p>
+                      </div>
+                      <strong>{money(item.monto)}</strong>
+                    </div>
+                  ))}
+
+                  {report.movimientos_efectivo.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No hubo movimientos manuales de efectivo.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeSummary}
+              >
+                Cerrar resumen
+              </Button>
+              <Button
+                type="button"
+                onClick={() => window.print()}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir resumen
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const addProduct = (product: POSProducto) => {
@@ -1111,7 +1550,7 @@ export default function PuntoVenta() {
             </Card>
           )}
         </div>
-
+        {renderTeamBoxes()}
         <Card>
           <CardHeader><CardTitle>Últimos cortes</CardTitle></CardHeader>
           <CardContent>
@@ -1127,6 +1566,7 @@ export default function PuntoVenta() {
             </div>
           </CardContent>
         </Card>
+        {renderCashSummary()}
       </main>
     );
   }
@@ -1168,7 +1608,7 @@ export default function PuntoVenta() {
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Efectivo esperado</p><p className="text-xl font-black">{money(sesion.efectivo_esperado)}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Operaciones</p><p className="text-xl font-black">{sesion.ventas_completadas}</p></CardContent></Card>
       </section>
-
+      {renderTeamBoxes()}
       <section className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-6">
           <Card>
@@ -1842,6 +2282,7 @@ export default function PuntoVenta() {
           {sesion.movimientos_efectivo.length === 0 ? <p className="text-sm text-muted-foreground">No hay movimientos manuales.</p> : <div className="space-y-2">{sesion.movimientos_efectivo.map((movement) => <div key={movement.id_movimiento} className="flex items-center justify-between rounded-lg border p-3"><div><p className="font-semibold">{movement.tipo}</p><p className="text-sm text-muted-foreground">{movement.motivo} · {formatDate(movement.fecha)}</p></div><strong>{money(movement.monto)}</strong></div>)}</div>}
         </CardContent>
       </Card>
+      {renderCashSummary()}
     </main>
   );
 }

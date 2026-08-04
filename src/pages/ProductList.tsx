@@ -501,7 +501,11 @@ const precioConDescuento =
                   <TableHead>Precio sugerido</TableHead>
                   <TableHead>Caducidad</TableHead>
                   <TableHead>Stock</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  {canModify && (
+                    <TableHead className="text-right">
+                      Acciones
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
 
@@ -509,7 +513,7 @@ const precioConDescuento =
                 {filteredProducts.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={canModify ? 9 : 8}
                       className="text-center text-muted-foreground py-8"
                     >
                       No se encontraron productos.
@@ -558,40 +562,40 @@ const precioConDescuento =
 
                       <TableCell>{getStockBadge(product)}</TableCell>
 
-                      <TableCell>
-                       <div className="flex justify-end gap-2">
-  <Button
-    variant="outline"
-    size="sm"
-    onClick={() => handleBuscarFisicamente(product)}
-  >
-    <LocateFixed className="h-4 w-4 mr-1" />
-    Buscar
-  </Button>
+                      {canModify && (
+                        <TableCell>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                handleBuscarFisicamente(product)
+                              }
+                            >
+                              <LocateFixed className="h-4 w-4 mr-1" />
+                              Buscar
+                            </Button>
 
-  {canModify && (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => handleEdit(product)}
-      >
-        <Pencil className="h-4 w-4 mr-1" />
-        Editar
-      </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(product)}
+                            >
+                              <Pencil className="h-4 w-4 mr-1" />
+                              Editar
+                            </Button>
 
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={() => handleOpenSale(product)}
-      >
-        <Trash2 className="h-4 w-4 mr-1" />
-        Salida
-      </Button>
-    </>
-  )}
-</div>
-                      </TableCell>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleOpenSale(product)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Salida
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))
                 )}

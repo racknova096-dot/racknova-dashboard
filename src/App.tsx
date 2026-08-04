@@ -94,7 +94,7 @@ function AppContent() {
           <Route
             path="/tracking"
             element={
-              <ProtectedRoute allowedRoles={["admin", "operator", "viewer"]}>
+              <ProtectedRoute allowedRoles={["admin", "operator"]}>
                 <Tracking />
               </ProtectedRoute>
             }
@@ -103,7 +103,7 @@ function AppContent() {
           <Route
             path="/reportes"
             element={
-              <ProtectedRoute allowedRoles={["admin", "operator", "viewer"]}>
+              <ProtectedRoute allowedRoles={["admin", "operator"]}>
                 <Reportes />
               </ProtectedRoute>
             }

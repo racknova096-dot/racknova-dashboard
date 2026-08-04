@@ -278,6 +278,66 @@ export type POSReporteDiario = {
   cortes: POSSesionCaja[];
 };
 
+export type POSResumenTurno = {
+  sesion: POSSesionCaja;
+  periodo: {
+    inicio: string;
+    fin: string;
+  };
+  totales: {
+    ventas: number;
+    devoluciones: number;
+    ventas_netas: number;
+    numero_ventas: number;
+    ventas_canceladas: number;
+    numero_devoluciones: number;
+    descuentos: number;
+    costo: number;
+    ganancia_antes_devoluciones: number;
+  };
+  ventas: POSVentaDetalle[];
+  devoluciones: Array<{
+    id_devolucion: number;
+    folio: string;
+    id_venta: number;
+    folio_venta?: string | null;
+    usuario: string;
+    motivo: string;
+    metodo_reembolso: string;
+    monto: number;
+    ajuste_credito: number;
+    reembolso_real: number;
+    estado: string;
+    fecha: string;
+    items: Array<{
+      id_detalle: number;
+      sku: string;
+      nombre: string;
+      cantidad: number;
+      precio_unitario: number;
+      subtotal: number;
+    }>;
+  }>;
+  movimientos_productos: Array<{
+    id_venta: number;
+    id_detalle: number;
+    folio: string;
+    fecha: string;
+    usuario: string;
+    estado_venta: string;
+    sku: string;
+    nombre: string;
+    ubicacion: string;
+    unidad_venta: string;
+    cantidad_vendida: number;
+    cantidad_devuelta: number;
+    cantidad_neta: number;
+    precio_unitario: number;
+    ingreso_neto: number;
+  }>;
+  movimientos_efectivo: POSMovimientoEfectivo[];
+};
+
 export type POSCotizacion = {
   items: Array<{
     sku: string;
@@ -349,10 +409,21 @@ export const cerrarCajaPOS = (payload: {
   efectivo_contado: number;
   observaciones?: string | null;
 }) =>
-  apiJson<{ mensaje: string; sesion: POSSesionCaja }>("/pos/v3/caja/cerrar", {
+  apiJson<{
+    mensaje: string;
+    sesion: POSSesionCaja;
+    resumen_turno: POSResumenTurno;
+  }>("/pos/v3/caja/cerrar", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+
+export const obtenerResumenSesionPOS = (
+  idSesion: number
+) =>
+  apiJson<POSResumenTurno>(
+    `/pos/v3/caja/sesiones/${idSesion}/resumen`
+  );
 
 export const listarSesionesCajaPOS = (limite = 30) =>
   apiJson<POSSesionCaja[]>(`/pos/caja/sesiones?limite=${limite}`);

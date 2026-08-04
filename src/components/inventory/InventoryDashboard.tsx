@@ -110,13 +110,7 @@ export function InventoryDashboard() {
   };
 
   const handleSlotClick = (location: Location, hasProduct: boolean) => {
-    if (!canModify && !hasProduct) {
-      toast({
-        title: "Solo lectura",
-        description: "Tu usuario no puede agregar productos.",
-        variant: "destructive",
-      });
-
+    if (!canModify) {
       return;
     }
 

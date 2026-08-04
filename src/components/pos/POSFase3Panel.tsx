@@ -166,9 +166,13 @@ export default function POSFase3Panel() {
           <div className="flex flex-wrap gap-2">
             <TabButton active={tab === "venta"} onClick={() => setTab("venta")} icon={<ShoppingCart className="h-4 w-4" />} label="Venta avanzada" />
             <TabButton active={tab === "clientes"} onClick={() => setTab("clientes")} icon={<Users className="h-4 w-4" />} label="Clientes y crédito" />
-            <TabButton active={tab === "promociones"} onClick={() => setTab("promociones")} icon={<Gift className="h-4 w-4" />} label="Promociones" />
-            <TabButton active={tab === "productos"} onClick={() => setTab("productos")} icon={<Boxes className="h-4 w-4" />} label="Precios y fracciones" />
-            <TabButton active={tab === "reportes"} onClick={() => setTab("reportes")} icon={<BarChart3 className="h-4 w-4" />} label="Reporte diario" />
+            {isAdmin && (
+              <>
+                <TabButton active={tab === "promociones"} onClick={() => setTab("promociones")} icon={<Gift className="h-4 w-4" />} label="Promociones" />
+                <TabButton active={tab === "productos"} onClick={() => setTab("productos")} icon={<Boxes className="h-4 w-4" />} label="Precios y fracciones" />
+                <TabButton active={tab === "reportes"} onClick={() => setTab("reportes")} icon={<BarChart3 className="h-4 w-4" />} label="Reporte diario" />
+              </>
+            )}
           </div>
         </CardHeader>
       </Card>
@@ -181,11 +185,15 @@ export default function POSFase3Panel() {
           onChanged={loadBase}
         />
       )}
-      {tab === "promociones" && (
+      {isAdmin && tab === "promociones" && (
         <PromotionsPanel promotions={promotions} isAdmin={isAdmin} onChanged={loadBase} />
       )}
-      {tab === "productos" && <ProductsConfigPanel isAdmin={isAdmin} />}
-      {tab === "reportes" && <ReportsPanel isAdmin={isAdmin} />}
+      {isAdmin && tab === "productos" && (
+        <ProductsConfigPanel isAdmin={isAdmin} />
+      )}
+      {isAdmin && tab === "reportes" && (
+        <ReportsPanel isAdmin={isAdmin} />
+      )}
     </section>
   );
 }

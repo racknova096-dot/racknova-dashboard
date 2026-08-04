@@ -1,6 +1,6 @@
 export interface MovementRecord {
   id: string;
-  action: 'Ingreso' | 'Egreso' | 'Edición';
+  action: 'Ingreso' | 'Egreso' | 'Edición' | 'Devolución';
   productSku: string;
   productName: string;
   quantity: number;

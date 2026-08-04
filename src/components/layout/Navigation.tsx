@@ -102,14 +102,70 @@ export function Navigation() {
     };
   }, []);
 
+  // RACKNOVA_MENU_POR_ROL
+  const allowedPaths = useMemo(() => {
+    if (role === "viewer") {
+      return new Set(["/", "/products"]);
+    }
+
+    if (role === "operator") {
+      return new Set([
+        "/",
+        "/add",
+        "/products",
+        "/tracking",
+        "/reportes",
+        "/catalogo",
+        "/racknova-ia",
+      ]);
+    }
+
+    return null;
+  }, [role]);
+
   const visiblePrimaryItems = useMemo(() => {
-    if (!canUsePOS || !posState?.habilitado) return primaryItems;
-    return [...primaryItems, posNavItem];
-  }, [canUsePOS, posState?.habilitado]);
+    const items = allowedPaths
+      ? primaryItems.filter((item) => allowedPaths.has(item.path))
+      : [...primaryItems];
+
+    if (
+      role !== "viewer" &&
+      canUsePOS &&
+      posState?.habilitado
+    ) {
+      return [...items, posNavItem];
+    }
+
+    return items;
+  }, [allowedPaths, canUsePOS, posState?.habilitado, role]);
+
+  const visibleOperationItems = useMemo(
+    () =>
+      allowedPaths
+        ? operationItems.filter((item) => allowedPaths.has(item.path))
+        : [...operationItems],
+    [allowedPaths]
+  );
+
+  const visibleManagementItems = useMemo(
+    () =>
+      allowedPaths
+        ? managementItems.filter((item) => allowedPaths.has(item.path))
+        : [...managementItems],
+    [allowedPaths]
+  );
 
   const allVisibleItems = useMemo(
-    () => [...visiblePrimaryItems, ...operationItems, ...managementItems],
-    [visiblePrimaryItems]
+    () => [
+      ...visiblePrimaryItems,
+      ...visibleOperationItems,
+      ...visibleManagementItems,
+    ],
+    [
+      visiblePrimaryItems,
+      visibleOperationItems,
+      visibleManagementItems,
+    ]
   );
 
   const isActive = (path: string) =>
@@ -144,8 +200,22 @@ export function Navigation() {
             {visiblePrimaryItems.map((item) => (
               <NavButton key={item.path} item={item} active={isActive(item.path)} />
             ))}
-            <NavGroup label="Operación" items={operationItems} active={groupIsActive(operationItems)} isActive={isActive} />
-            <NavGroup label="Gestión" items={managementItems} active={groupIsActive(managementItems)} isActive={isActive} />
+            {visibleOperationItems.length > 0 && (
+              <NavGroup
+                label="Operación"
+                items={visibleOperationItems}
+                active={groupIsActive(visibleOperationItems)}
+                isActive={isActive}
+              />
+            )}
+            {visibleManagementItems.length > 0 && (
+              <NavGroup
+                label="Gestión"
+                items={visibleManagementItems}
+                active={groupIsActive(visibleManagementItems)}
+                isActive={isActive}
+              />
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
