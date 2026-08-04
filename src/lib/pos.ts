@@ -412,7 +412,7 @@ export const cerrarCajaPOS = (payload: {
   apiJson<{
     mensaje: string;
     sesion: POSSesionCaja;
-    resumen_turno: POSResumenTurno;
+    resumen_turno?: POSResumenTurno;
   }>("/pos/v3/caja/cerrar", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -653,3 +653,103 @@ export const descargarReportePOS = async (
   anchor.remove();
   URL.revokeObjectURL(url);
 };
+
+
+// RACKNOVA_POS_V4_DASHBOARD
+export type POSCajaPermanente = {
+  numero: 1 | 2;
+  id_caja: number;
+  nombre: string;
+  estado: "ABIERTA" | "DISPONIBLE";
+  sesion: POSSesionCaja | null;
+};
+
+export type POSReglaMayoreo = {
+  id_regla: number;
+  sku: string;
+  nombre: string;
+  unidad: "kg" | "litro";
+  precio_menudeo: number;
+  cantidad_mayoreo: number;
+  precio_mayoreo: number;
+  cantidad_mayoreo_especial?: number | null;
+  precio_mayoreo_especial?: number | null;
+  fecha_inicio?: string | null;
+  fecha_fin?: string | null;
+  activo: boolean;
+};
+
+export type POSReporteDiarioV4 = {
+  fecha: string;
+  totales: {
+    ventas: number;
+    devoluciones: number;
+    ventas_netas: number;
+    numero_ventas: number;
+    numero_devoluciones: number;
+    descuentos: number;
+    costo: number;
+    ganancia: number;
+    efectivo_esperado: number;
+    diferencias: number;
+  };
+  sesiones: POSResumenTurno[];
+};
+
+export const listarCajasPermanentesPOS = () =>
+  apiJson<POSCajaPermanente[]>("/pos/v4/cajas");
+
+export const abrirCajaPermanentePOS = (
+  numero: 1 | 2,
+  payload: { fondo_inicial: number; observaciones?: string | null }
+) =>
+  apiJson<{ mensaje: string; sesion: POSSesionCaja }>(
+    `/pos/v4/cajas/${numero}/abrir`,
+    { method: "POST", body: JSON.stringify(payload) }
+  );
+
+export const obtenerResumenSesionPOSV4 = (idSesion: number) =>
+  apiJson<POSResumenTurno>(
+    `/pos/v4/caja/sesiones/${idSesion}/resumen`
+  );
+
+export const obtenerReporteDiarioPOSV4 = (fecha: string) =>
+  apiJson<POSReporteDiarioV4>(
+    `/pos/v4/reportes/diario?fecha=${encodeURIComponent(fecha)}`
+  );
+
+export const listarMayoreoMenudeoPOS = () =>
+  apiJson<POSReglaMayoreo[]>("/pos/v4/mayoreo");
+
+export const guardarMayoreoMenudeoPOS = (
+  payload: Omit<POSReglaMayoreo, "id_regla"> & { id_regla?: number }
+) =>
+  apiJson<{ mensaje: string }>("/pos/v4/mayoreo", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const eliminarMayoreoMenudeoPOS = (idRegla: number) =>
+  apiJson<{ mensaje: string }>(`/pos/v4/mayoreo/${idRegla}`, {
+    method: "DELETE",
+  });
+
+export const calcularMayoreoMenudeoPOS = (payload: {
+  sku: string;
+  unidad: string;
+  cantidad: number;
+  precio_base: number;
+}) =>
+  apiJson<{
+    precio: number;
+    nivel: "normal" | "menudeo" | "mayoreo" | "mayoreo_especial";
+    regla: POSReglaMayoreo | null;
+  }>("/pos/v4/mayoreo/calcular", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const eliminarPromocionPOSV4 = (idPromocion: number) =>
+  apiJson<{ mensaje: string }>(`/pos/v4/promociones/${idPromocion}`, {
+    method: "DELETE",
+  });

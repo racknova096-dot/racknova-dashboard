@@ -59,6 +59,10 @@ import {
   obtenerResumenSesionPOS,
   obtenerVentaPOS,
   registrarMovimientoEfectivoPOS,
+  abrirCajaPermanentePOS,
+  listarMayoreoMenudeoPOS,
+  obtenerResumenSesionPOSV4,
+  POSReglaMayoreo,
 } from "@/lib/pos";
 import type {
   POSCaja,
@@ -171,6 +175,11 @@ export default function PuntoVenta() {
     useState<POSResumenTurno | null>(null);
   const [teamSummary, setTeamSummary] =
     useState<POSResumenTurno | null>(null);
+  // RACKNOVA_POS_V4_DASHBOARD
+  const [sessionReport, setSessionReport] =
+    useState<POSResumenTurno | null>(null);
+  const [wholesaleRules, setWholesaleRules] =
+    useState<POSReglaMayoreo[]>([]);
   const [loadingTeamSession, setLoadingTeamSession] =
     useState<number | null>(null);
 
@@ -295,6 +304,27 @@ export default function PuntoVenta() {
 
     return () => window.clearInterval(timer);
   }, [estado?.habilitado, isAdmin]);
+
+
+  useEffect(() => {
+    if (!sesion?.id_sesion || sesion.estado !== "ABIERTA") {
+      setSessionReport(null);
+      return;
+    }
+
+    void refreshCurrentSessionReport(sesion.id_sesion);
+    const timer = window.setInterval(() => {
+      void refreshCurrentSessionReport(sesion.id_sesion);
+    }, 5_000);
+
+    return () => window.clearInterval(timer);
+  }, [sesion?.id_sesion, sesion?.estado]);
+
+  useEffect(() => {
+    void listarMayoreoMenudeoPOS()
+      .then(setWholesaleRules)
+      .catch(() => setWholesaleRules([]));
+  }, [sesion?.id_sesion]);
 
   const localTotals = useMemo(
     () =>
@@ -584,7 +614,16 @@ export default function PuntoVenta() {
         observaciones: closeNotes.trim() || null,
       });
       toast.success(response.mensaje);
-      setCashSummary(response.resumen_turno);
+      try {
+        setCashSummary(
+          await obtenerResumenSesionPOSV4(response.sesion.id_sesion)
+        );
+      } catch {
+        setCashSummary(null);
+        toast.error(
+          "La caja se cerró correctamente, pero el reporte no pudo cargarse. Puedes abrirlo desde Últimos cortes."
+        );
+      }
       setCashCounted("");
       setCloseNotes("");
       setCart([]);
@@ -597,6 +636,123 @@ export default function PuntoVenta() {
     }
   };
 
+  const refreshCurrentSessionReport = async (
+    sessionId: number | null | undefined = sesion?.id_sesion
+  ) => {
+    if (!sessionId) {
+      setSessionReport(null);
+      return null;
+    }
+
+    try {
+      const report = await obtenerResumenSesionPOSV4(sessionId);
+      setSessionReport(report);
+      return report;
+    } catch {
+      return null;
+    }
+  };
+
+  const getWholesalePrice = (item: any, quantity: number) => {
+    const sku = String(item?.sku ?? item?.producto?.sku ?? "");
+    const unit = String(
+      item?.unidad_venta ?? item?.unidad ?? item?.producto?.unidad_venta ?? ""
+    ).toLowerCase();
+    const base = Number(
+      item?.precio_unitario ?? item?.precio ?? item?.precio_venta ?? 0
+    );
+
+    if (!sku || !["kg", "litro", "l"].includes(unit)) return base;
+    const rule = wholesaleRules.find((row) => row.sku === sku && row.activo);
+    if (!rule) return base;
+
+    const qty = Number(quantity || 0);
+    if (
+      rule.cantidad_mayoreo_especial != null &&
+      rule.precio_mayoreo_especial != null &&
+      qty >= Number(rule.cantidad_mayoreo_especial)
+    ) {
+      return Number(rule.precio_mayoreo_especial);
+    }
+    if (qty >= Number(rule.cantidad_mayoreo)) {
+      return Number(rule.precio_mayoreo);
+    }
+    return Number(rule.precio_menudeo);
+  };
+
+  const renderCurrentSessionActivity = () => {
+    if (!sesion || sesion.estado !== "ABIERTA") return null;
+
+    const sales = sessionReport?.ventas ?? [];
+    const returns = sessionReport?.devoluciones ?? [];
+
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Historial y devoluciones de esta caja</CardTitle>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Solo muestra operaciones de {sesion.caja_nombre}, sesión #{sesion.id_sesion}.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void refreshCurrentSessionReport()}
+            >
+              Actualizar actividad
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
+            <p className="font-semibold">Ventas de la sesión ({sales.length})</p>
+            <div className="max-h-72 space-y-2 overflow-y-auto">
+              {sales.map((sale: any) => (
+                <div key={sale.id_venta} className="flex justify-between rounded-lg border p-3 text-sm">
+                  <div>
+                    <p className="font-medium">{sale.folio}</p>
+                    <p className="text-muted-foreground">{formatDate(sale.fecha)}</p>
+                  </div>
+                  <strong>{money(sale.total)}</strong>
+                </div>
+              ))}
+              {sales.length === 0 && (
+                <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                  Esta caja todavía no tiene ventas.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-semibold">Devoluciones de la sesión ({returns.length})</p>
+            <div className="max-h-72 space-y-2 overflow-y-auto">
+              {returns.map((item: any) => (
+                <div key={item.id_devolucion} className="flex justify-between rounded-lg border p-3 text-sm">
+                  <div>
+                    <p className="font-medium">{item.folio}</p>
+                    <p className="text-muted-foreground">
+                      {item.folio_venta || "Venta"} · {formatDate(item.fecha)}
+                    </p>
+                  </div>
+                  <strong className="text-amber-700">-{money(item.monto)}</strong>
+                </div>
+              ))}
+              {returns.length === 0 && (
+                <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                  No hay devoluciones en esta caja.
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
   const openTeamSession = async (
     row: POSSesionCaja
   ) => {
@@ -606,7 +762,7 @@ export default function PuntoVenta() {
 
     try {
       setTeamSummary(
-        await obtenerResumenSesionPOS(row.id_sesion)
+        await obtenerResumenSesionPOSV4(row.id_sesion)
       );
     } catch (error) {
       toast.error(
@@ -665,7 +821,7 @@ export default function PuntoVenta() {
                 </tr>
               </thead>
               <tbody>
-                {sesiones.slice(0, 30).map((row) => (
+                {activeTeamSessions.map((row) => (
                   <tr key={row.id_sesion} className="border-b">
                     <td className="p-3 font-semibold">
                       {row.caja_nombre}
@@ -716,9 +872,9 @@ export default function PuntoVenta() {
               </tbody>
             </table>
 
-            {sesiones.length === 0 && (
+            {activeTeamSessions.length === 0 && (
               <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
-                Todavía no existen sesiones de caja.
+                No hay cajas abiertas para supervisar.
               </p>
             )}
           </div>
@@ -1542,10 +1698,10 @@ export default function PuntoVenta() {
 
           {isAdmin && (
             <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Boxes className="h-5 w-5" /> Crear caja</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Boxes className="h-5 w-5" /> Abrir caja</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <Input value={newCajaName} onChange={(event) => setNewCajaName(event.target.value)} placeholder="Caja principal" />
-                <Button variant="outline" className="w-full" onClick={createBox}>Crear caja</Button>
+                <Button variant="outline" className="w-full" onClick={createBox}>Abrir caja</Button>
               </CardContent>
             </Card>
           )}
@@ -1610,6 +1766,7 @@ export default function PuntoVenta() {
       </section>
 
       {renderTeamBoxes()}
+      {renderCurrentSessionActivity()}
       <section className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
         <div className="space-y-6">
           <Card>

@@ -41,6 +41,13 @@ import {
   obtenerEstadoCuentaPOS,
   obtenerReporteDiarioPOS,
   registrarAbonoPOS,
+  eliminarMayoreoMenudeoPOS,
+  eliminarPromocionPOSV4,
+  guardarMayoreoMenudeoPOS,
+  listarMayoreoMenudeoPOS,
+  obtenerReporteDiarioPOSV4,
+  POSReglaMayoreo,
+  POSReporteDiarioV4,
 } from "@/lib/pos";
 import type {
   POSCliente,
@@ -169,7 +176,7 @@ export default function POSFase3Panel() {
             {isAdmin && (
               <>
                 <TabButton active={tab === "promociones"} onClick={() => setTab("promociones")} icon={<Gift className="h-4 w-4" />} label="Promociones" />
-                <TabButton active={tab === "productos"} onClick={() => setTab("productos")} icon={<Boxes className="h-4 w-4" />} label="Precios y fracciones" />
+                <TabButton active={tab === "productos"} onClick={() => setTab("productos")} icon={<Boxes className="h-4 w-4" />} label="Mayoreo y menudeo" />
                 <TabButton active={tab === "reportes"} onClick={() => setTab("reportes")} icon={<BarChart3 className="h-4 w-4" />} label="Reporte diario" />
               </>
             )}
@@ -189,7 +196,7 @@ export default function POSFase3Panel() {
         <PromotionsPanel promotions={promotions} isAdmin={isAdmin} onChanged={loadBase} />
       )}
       {isAdmin && tab === "productos" && (
-        <ProductsConfigPanel isAdmin={isAdmin} />
+        <WholesaleRetailPanel isAdmin={isAdmin} />
       )}
       {isAdmin && tab === "reportes" && (
         <ReportsPanel isAdmin={isAdmin} />
@@ -1118,6 +1125,13 @@ function PromotionsPanel({
   isAdmin: boolean;
   onChanged: () => Promise<void>;
 }) {
+  const deletePromotionV4 = async (promotion: any) => {
+    const id = Number(promotion?.id_promocion ?? promotion?.id);
+    if (!id || !window.confirm("¿Eliminar esta promoción? Esta acción no se puede deshacer.")) return;
+    await eliminarPromocionPOSV4(id);
+    await onChanged();
+  };
+
   // RACKNOVA_PROMOCIONES_FORM_V2
   const initialPromotion = (): POSPromocionPayload => ({
     ...emptyPromotion,
@@ -1729,6 +1743,136 @@ function PromotionsPanel({
   );
 }
 
+
+function WholesaleRetailPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [rules, setRules] = useState<POSReglaMayoreo[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    sku: "",
+    nombre: "",
+    unidad: "kg" as "kg" | "litro",
+    precio_menudeo: "",
+    cantidad_mayoreo: "",
+    precio_mayoreo: "",
+    cantidad_mayoreo_especial: "",
+    precio_mayoreo_especial: "",
+    fecha_inicio: "",
+    fecha_fin: "",
+  });
+
+  const loadRules = async () => {
+    try {
+      setRules(await listarMayoreoMenudeoPOS());
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudieron cargar las reglas.");
+    }
+  };
+
+  useEffect(() => {
+    void loadRules();
+  }, []);
+
+  const submit = async (event: any) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await guardarMayoreoMenudeoPOS({
+        sku: form.sku.trim(),
+        nombre: form.nombre.trim(),
+        unidad: form.unidad,
+        precio_menudeo: Number(form.precio_menudeo),
+        cantidad_mayoreo: Number(form.cantidad_mayoreo),
+        precio_mayoreo: Number(form.precio_mayoreo),
+        cantidad_mayoreo_especial: form.cantidad_mayoreo_especial
+          ? Number(form.cantidad_mayoreo_especial)
+          : null,
+        precio_mayoreo_especial: form.precio_mayoreo_especial
+          ? Number(form.precio_mayoreo_especial)
+          : null,
+        fecha_inicio: form.fecha_inicio || null,
+        fecha_fin: form.fecha_fin || null,
+        activo: true,
+      });
+      setForm({
+        sku: "", nombre: "", unidad: "kg", precio_menudeo: "",
+        cantidad_mayoreo: "", precio_mayoreo: "",
+        cantidad_mayoreo_especial: "", precio_mayoreo_especial: "",
+        fecha_inicio: "", fecha_fin: "",
+      });
+      await loadRules();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (rule: POSReglaMayoreo) => {
+    if (!window.confirm(`¿Eliminar la regla de ${rule.nombre}?`)) return;
+    try {
+      await eliminarMayoreoMenudeoPOS(rule.id_regla);
+      await loadRules();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo eliminar.");
+    }
+  };
+
+  if (!isAdmin) return null;
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
+      <form onSubmit={submit} className="space-y-4 rounded-xl border bg-card p-5">
+        <div>
+          <h3 className="text-lg font-bold">Configurar mayoreo y menudeo</h3>
+          <p className="text-sm text-muted-foreground">
+            Exclusivo para artículos vendidos por kg o litro.
+          </p>
+        </div>
+        {error && <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-sm"><span>SKU</span><input required className="w-full rounded-md border bg-background px-3 py-2" value={form.sku} onChange={(e) => setForm({...form, sku: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Nombre</span><input required className="w-full rounded-md border bg-background px-3 py-2" value={form.nombre} onChange={(e) => setForm({...form, nombre: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Unidad</span><select className="w-full rounded-md border bg-background px-3 py-2" value={form.unidad} onChange={(e) => setForm({...form, unidad: e.target.value as "kg" | "litro"})}><option value="kg">Kilogramo</option><option value="litro">Litro</option></select></label>
+          <label className="space-y-1 text-sm"><span>Precio menudeo</span><input required min="0.01" step="0.01" type="number" className="w-full rounded-md border bg-background px-3 py-2" value={form.precio_menudeo} onChange={(e) => setForm({...form, precio_menudeo: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Desde mayoreo</span><input required min="0.001" step="0.001" type="number" className="w-full rounded-md border bg-background px-3 py-2" value={form.cantidad_mayoreo} onChange={(e) => setForm({...form, cantidad_mayoreo: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Precio mayoreo</span><input required min="0.01" step="0.01" type="number" className="w-full rounded-md border bg-background px-3 py-2" value={form.precio_mayoreo} onChange={(e) => setForm({...form, precio_mayoreo: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Desde mayoreo especial</span><input min="0.001" step="0.001" type="number" className="w-full rounded-md border bg-background px-3 py-2" value={form.cantidad_mayoreo_especial} onChange={(e) => setForm({...form, cantidad_mayoreo_especial: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Precio especial</span><input min="0.01" step="0.01" type="number" className="w-full rounded-md border bg-background px-3 py-2" value={form.precio_mayoreo_especial} onChange={(e) => setForm({...form, precio_mayoreo_especial: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Inicio opcional</span><input type="datetime-local" className="w-full rounded-md border bg-background px-3 py-2" value={form.fecha_inicio} onChange={(e) => setForm({...form, fecha_inicio: e.target.value})} /></label>
+          <label className="space-y-1 text-sm"><span>Fin opcional</span><input type="datetime-local" className="w-full rounded-md border bg-background px-3 py-2" value={form.fecha_fin} onChange={(e) => setForm({...form, fecha_fin: e.target.value})} /></label>
+        </div>
+        <button disabled={saving} className="w-full rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground disabled:opacity-50">
+          {saving ? "Guardando..." : "Guardar regla"}
+        </button>
+      </form>
+
+      <div className="space-y-3 rounded-xl border bg-card p-5">
+        <div><h3 className="text-lg font-bold">Reglas configuradas</h3><p className="text-sm text-muted-foreground">El precio cambia automáticamente al alcanzar la cantidad.</p></div>
+        {rules.map((rule) => (
+          <div key={rule.id_regla} className="rounded-xl border p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="font-bold">{rule.nombre}</p>
+                <p className="text-sm text-muted-foreground">{rule.sku} · por {rule.unidad}</p>
+                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
+                  <div className="rounded-md bg-muted/50 p-2">Menudeo<br/><strong>${rule.precio_menudeo.toFixed(2)}</strong></div>
+                  <div className="rounded-md bg-muted/50 p-2">Desde {rule.cantidad_mayoreo}<br/><strong>${rule.precio_mayoreo.toFixed(2)}</strong></div>
+                  {rule.cantidad_mayoreo_especial != null && rule.precio_mayoreo_especial != null && <div className="rounded-md bg-muted/50 p-2">Desde {rule.cantidad_mayoreo_especial}<br/><strong>${rule.precio_mayoreo_especial.toFixed(2)}</strong></div>}
+                </div>
+              </div>
+              <button type="button" onClick={() => void remove(rule)} className="rounded-md border border-destructive/40 px-3 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10">Eliminar</button>
+            </div>
+          </div>
+        ))}
+        {rules.length === 0 && <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No hay reglas configuradas.</p>}
+      </div>
+    </div>
+  );
+}
+
 function ProductsConfigPanel({ isAdmin }: { isAdmin: boolean }) {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<POSProducto[]>([]);
@@ -1812,214 +1956,50 @@ function ProductsConfigPanel({ isAdmin }: { isAdmin: boolean }) {
 }
 
 function ReportsPanel({ isAdmin }: { isAdmin: boolean }) {
-  const [dateValue, setDateValue] = useState(today());
-  const [report, setReport] = useState<POSReporteDiario | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const [dateValue, setDateValue] = useState(today);
+  const [report, setReport] = useState<POSReporteDiarioV4 | null>(null);
   const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState("");
+  const mxn = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(value || 0));
 
-  const load = useCallback(async () => {
+  const loadReport = async () => {
     setLoading(true);
+    setError("");
     try {
-      setReport(await obtenerReporteDiarioPOS(dateValue));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se generó el reporte.");
+      setReport(await obtenerReporteDiarioPOSV4(dateValue));
+    } catch (cause) {
+      setReport(null);
+      setError(cause instanceof Error ? cause.message : "No se pudo generar el reporte.");
     } finally {
       setLoading(false);
     }
-  }, [dateValue]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const download = async (format: "pdf" | "xlsx") => {
-    setDownloading(true);
-    try {
-      await descargarReportePOS(dateValue, format);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se descargó el reporte.");
-    } finally {
-      setDownloading(false);
-    }
   };
 
-  const close = async () => {
-    try {
-      await cerrarReporteDiarioPOS(dateValue);
-      toast.success("Reporte diario cerrado y guardado.");
-      await load();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se cerró el reporte.");
-    }
-  };
-
-  const movementRows = report?.movimientos_productos ?? [];
+  useEffect(() => { void loadReport(); }, [dateValue]);
+  if (!isAdmin) return null;
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex flex-wrap items-center justify-between gap-3">
-            <span>Reporte diario de ventas</span>
-            <div className="flex flex-wrap gap-2">
-              <Input className="w-auto" type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} />
-              <Button variant="outline" onClick={() => void load()} disabled={loading}>
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              </Button>
-              <Button variant="outline" disabled={downloading} onClick={() => void download("pdf")}>
-                <Download className="mr-2 h-4 w-4" />
-                PDF
-              </Button>
-              <Button variant="outline" disabled={downloading} onClick={() => void download("xlsx")}>
-                <Download className="mr-2 h-4 w-4" />
-                Excel
-              </Button>
-              {isAdmin && (
-                <Button onClick={() => void close()}>
-                  <FileCheck2 className="mr-2 h-4 w-4" />
-                  Cerrar día
-                </Button>
-              )}
-            </div>
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          {!report ? (
-            <p className="text-sm text-muted-foreground">Sin información.</p>
-          ) : (
-            <div className="space-y-6">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Metric label="Ventas netas" value={money(report.resumen.ventas_netas)} />
-                <Metric label="Ganancia" value={money(report.resumen.ganancia)} />
-                <Metric label="Ventas" value={String(report.resumen.numero_ventas)} />
-                <Metric label="Margen" value={`${report.resumen.margen}%`} />
-                <Metric label="Descuentos" value={money(report.resumen.descuentos)} />
-                <Metric label="Devoluciones" value={money(report.resumen.monto_devoluciones)} />
-                <Metric label="Costo" value={money(report.resumen.costo_mercancia)} />
-                <Metric label="Abonos" value={money(report.resumen.abonos)} />
-              </div>
-
-              <div className="grid gap-5 xl:grid-cols-2">
-                <div>
-                  <h3 className="mb-2 font-semibold">Productos más vendidos</h3>
-                  <div className="space-y-2">
-                    {report.productos.slice(0, 10).map((item) => (
-                      <div key={item.sku} className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
-                          <p className="font-medium">{item.nombre}</p>
-                          <p className="text-sm text-muted-foreground">{item.cantidad} {item.unidad_venta}</p>
-                        </div>
-                        <strong>{money(item.ingresos)}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h3 className="mb-2 font-semibold">Métodos de pago</h3>
-                  <div className="space-y-2">
-                    {Object.entries(report.metodos_pago).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between rounded-lg border p-3">
-                        <span className="capitalize">{key.replace(/_/g, " ")}</span>
-                        <strong>{money(Number(value))}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-                  <div>
-                    <h3 className="font-semibold">Conciliación física de salidas</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Cada renglón corresponde a un producto vendido y conserva la ubicación desde la que salió.
-                    </p>
-                  </div>
-                  <Badge variant="secondary">{movementRows.length} movimientos</Badge>
-                </div>
-
-                <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full min-w-[1180px] text-sm">
-                    <thead className="bg-muted/60">
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="p-3">Hora</th>
-                        <th className="p-3">Folio</th>
-                        <th className="p-3">Caja</th>
-                        <th className="p-3">Cajero</th>
-                        <th className="p-3">SKU</th>
-                        <th className="p-3">Producto</th>
-                        <th className="p-3">Ubicación</th>
-                        <th className="p-3 text-right">Vendida</th>
-                        <th className="p-3 text-right">Devuelta</th>
-                        <th className="p-3 text-right">Neta</th>
-                        <th className="p-3 text-right">Ingresos</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {movementRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={11} className="p-8 text-center text-muted-foreground">
-                            No hay salidas registradas para esta fecha.
-                          </td>
-                        </tr>
-                      ) : (
-                        movementRows.map((item) => (
-                          <tr key={`${item.id_venta}-${item.id_detalle}`} className="border-b last:border-0">
-                            <td className="whitespace-nowrap p-3">
-                              {new Date(item.fecha).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
-                            </td>
-                            <td className="whitespace-nowrap p-3 font-medium">{item.folio}</td>
-                            <td className="p-3">{item.caja}</td>
-                            <td className="p-3">{item.usuario}</td>
-                            <td className="whitespace-nowrap p-3 font-mono text-xs">{item.sku}</td>
-                            <td className="p-3">{item.nombre}</td>
-                            <td className="p-3"><Badge variant="outline">{item.ubicacion}</Badge></td>
-                            <td className="p-3 text-right">{item.cantidad_vendida} {item.unidad_venta}</td>
-                            <td className="p-3 text-right">{item.cantidad_devuelta}</td>
-                            <td className="p-3 text-right font-semibold">{item.cantidad_neta}</td>
-                            <td className="p-3 text-right font-semibold">{money(item.ingresos)}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="mb-2 font-semibold">Cortes de caja</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className="p-2">Caja</th>
-                        <th className="p-2">Usuario</th>
-                        <th className="p-2 text-right">Esperado</th>
-                        <th className="p-2 text-right">Contado</th>
-                        <th className="p-2 text-right">Diferencia</th>
-                        <th className="p-2">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.cortes.map((cut) => (
-                        <tr key={cut.id_sesion} className="border-b">
-                          <td className="p-2">{cut.caja_nombre}</td>
-                          <td className="p-2">{cut.usuario}</td>
-                          <td className="p-2 text-right">{money(cut.efectivo_esperado)}</td>
-                          <td className="p-2 text-right">{cut.efectivo_contado == null ? "—" : money(cut.efectivo_contado)}</td>
-                          <td className="p-2 text-right">{cut.diferencia == null ? "—" : money(cut.diferencia)}</td>
-                          <td className="p-2"><Badge>{cut.estado}</Badge></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex flex-col gap-3 rounded-xl border bg-card p-5 sm:flex-row sm:items-end sm:justify-between">
+        <div><h3 className="text-lg font-bold">Reporte diario de cajas</h3><p className="text-sm text-muted-foreground">Suma ventas, devoluciones y diferencias de todas las sesiones del día.</p></div>
+        <div className="flex gap-2"><input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="rounded-md border bg-background px-3 py-2"/><button type="button" onClick={() => void loadReport()} className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground">{loading ? "Generando..." : "Actualizar"}</button></div>
+      </div>
+      {error && <p className="rounded-lg bg-destructive/10 p-4 text-destructive">{error}</p>}
+      {report && <>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Ventas</p><strong className="text-xl">{mxn(report.totales.ventas)}</strong></div>
+          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Devoluciones</p><strong className="text-xl text-amber-700">-{mxn(report.totales.devoluciones)}</strong></div>
+          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Venta neta</p><strong className="text-xl">{mxn(report.totales.ventas_netas)}</strong></div>
+          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Ganancia</p><strong className="text-xl">{mxn(report.totales.ganancia)}</strong></div>
+          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Sesiones</p><strong className="text-xl">{report.sesiones.length}</strong></div>
+        </div>
+        <div className="space-y-3 rounded-xl border bg-card p-5">
+          <h3 className="font-bold">Sesiones del día</h3>
+          {report.sesiones.map((item) => <div key={item.sesion.id_sesion} className="grid gap-2 rounded-lg border p-4 text-sm sm:grid-cols-5"><div><span className="text-muted-foreground">Caja</span><p className="font-semibold">{item.sesion.caja_nombre}</p></div><div><span className="text-muted-foreground">Operador</span><p>{item.sesion.usuario}</p></div><div><span className="text-muted-foreground">Ventas</span><p className="font-semibold">{mxn(item.totales.ventas)}</p></div><div><span className="text-muted-foreground">Devoluciones</span><p>{mxn(item.totales.devoluciones)}</p></div><div><span className="text-muted-foreground">Diferencia</span><p>{mxn(Number(item.sesion.diferencia || 0))}</p></div></div>)}
+          {report.sesiones.length === 0 && <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No hubo sesiones de caja en esta fecha.</p>}
+        </div>
+      </>}
     </div>
   );
 }
