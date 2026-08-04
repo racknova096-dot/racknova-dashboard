@@ -631,97 +631,142 @@ export default function PuntoVenta() {
   const renderTeamBoxes = () => {
     if (!isAdmin) return null;
 
+    const teamSales = activeTeamSessions.reduce(
+      (total, row) => total + Number(row.total_ventas || 0),
+      0
+    );
+    const teamExpected = activeTeamSessions.reduce(
+      (total, row) => total + Number(row.efectivo_esperado || 0),
+      0
+    );
+
     return (
-      <Card className="border-blue-500/30">
-        <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Eye className="h-5 w-5 text-blue-600" />
-                Cajas del equipo
-              </CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Supervisión de solo lectura. Se actualiza cada 10 segundos.
-              </p>
+      <Card className="overflow-hidden rounded-2xl border-blue-500/20 bg-card shadow-sm">
+        <CardHeader className="border-b bg-gradient-to-r from-blue-500/[0.09] via-blue-500/[0.04] to-transparent pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-600 shadow-sm">
+                <Eye className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle className="text-lg">Supervisión de cajas</CardTitle>
+                  <Badge className="border-blue-500/20 bg-blue-500/10 text-blue-700 hover:bg-blue-500/10 dark:text-blue-300">
+                    Solo lectura
+                  </Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Consulta el estado del equipo sin interrumpir la operación.
+                  Los datos se actualizan cada 10 segundos.
+                </p>
+              </div>
             </div>
-            <Badge variant="outline">
-              {activeTeamSessions.length} abierta(s)
-            </Badge>
+
+            <div className="grid grid-cols-3 overflow-hidden rounded-xl border bg-background/80 text-center shadow-sm">
+              <div className="px-4 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Abiertas
+                </p>
+                <p className="mt-0.5 font-black">{activeTeamSessions.length}</p>
+              </div>
+              <div className="border-x px-4 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Ventas
+                </p>
+                <p className="mt-0.5 whitespace-nowrap font-black">
+                  {money(teamSales)}
+                </p>
+              </div>
+              <div className="px-4 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Esperado
+                </p>
+                <p className="mt-0.5 whitespace-nowrap font-black">
+                  {money(teamExpected)}
+                </p>
+              </div>
+            </div>
           </div>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="p-3">Caja</th>
-                  <th className="p-3">Operador</th>
-                  <th className="p-3">Apertura</th>
-                  <th className="p-3">Estado</th>
-                  <th className="p-3 text-right">Ventas</th>
-                  <th className="p-3 text-right">Efectivo esperado</th>
-                  <th className="p-3 text-right">Consulta</th>
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="bg-muted/35">
+                <tr className="border-b text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <th className="px-5 py-3">Caja</th>
+                  <th className="px-4 py-3">Operador</th>
+                  <th className="px-4 py-3">Apertura</th>
+                  <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3 text-right">Ventas</th>
+                  <th className="px-4 py-3 text-right">Efectivo esperado</th>
+                  <th className="px-5 py-3 text-right">Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {sesiones.slice(0, 30).map((row) => (
-                  <tr key={row.id_sesion} className="border-b">
-                    <td className="p-3 font-semibold">
-                      {row.caja_nombre}
+                  <tr
+                    key={row.id_sesion}
+                    className="border-b transition-colors last:border-0 hover:bg-muted/25"
+                  >
+                    <td className="px-5 py-3.5">
+                      <p className="font-bold">{row.caja_nombre}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Sesión #{row.id_sesion}
+                      </p>
                     </td>
-                    <td className="p-3">{row.usuario}</td>
-                    <td className="p-3">
+                    <td className="px-4 py-3.5 font-medium">{row.usuario}</td>
+                    <td className="px-4 py-3.5 text-muted-foreground">
                       {formatDate(row.fecha_apertura)}
                     </td>
-                    <td className="p-3">
+                    <td className="px-4 py-3.5">
                       <Badge
                         variant={
                           row.estado === "ABIERTA"
                             ? "default"
                             : "secondary"
                         }
+                        className="rounded-full"
                       >
                         {row.estado}
                       </Badge>
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="px-4 py-3.5 text-right font-bold">
                       {money(row.total_ventas)}
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="px-4 py-3.5 text-right">
                       {money(row.efectivo_esperado)}
                     </td>
-                    <td className="p-3 text-right">
+                    <td className="px-5 py-3.5 text-right">
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={
-                          loadingTeamSession === row.id_sesion
-                        }
-                        onClick={() =>
-                          void openTeamSession(row)
-                        }
+                        className="rounded-xl"
+                        disabled={loadingTeamSession === row.id_sesion}
+                        onClick={() => void openTeamSession(row)}
                       >
                         {loadingTeamSession === row.id_sesion ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
                           <Eye className="mr-2 h-4 w-4" />
                         )}
-                        Ver caja
+                        Supervisar
                       </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
 
-            {sesiones.length === 0 && (
-              <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+          {sesiones.length === 0 && (
+            <div className="p-6">
+              <p className="rounded-xl border border-dashed bg-muted/15 p-8 text-center text-sm text-muted-foreground">
                 Todavía no existen sesiones de caja.
               </p>
-            )}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -735,9 +780,9 @@ export default function PuntoVenta() {
     const readOnly = Boolean(teamSummary);
 
     return (
-      <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">
-        <div className="max-h-[94vh] w-full max-w-6xl overflow-y-auto rounded-2xl border bg-background shadow-2xl">
-          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 p-5 backdrop-blur">
+      <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm md:p-5">
+        <div className="max-h-[94vh] w-full max-w-7xl overflow-y-auto rounded-3xl border bg-background shadow-2xl">
+          <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b bg-background/95 px-5 py-4 backdrop-blur-xl md:px-6 md:py-5">
             <div>
               <div className="flex items-center gap-2 text-blue-600">
                 <ReceiptText className="h-6 w-6" />
@@ -768,7 +813,7 @@ export default function PuntoVenta() {
             </Button>
           </div>
 
-          <div className="space-y-6 p-5">
+          <div className="space-y-5 p-4 md:p-6">
             <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
               <Card>
                 <CardContent className="p-4">
@@ -1541,8 +1586,15 @@ export default function PuntoVenta() {
           </Card>
 
           {isAdmin && (
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2"><Boxes className="h-5 w-5" /> Crear caja</CardTitle></CardHeader>
+            <Card className="overflow-hidden rounded-2xl border-primary/15 shadow-sm">
+              <CardHeader className="border-b bg-primary/[0.04] pb-4">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <Boxes className="h-5 w-5" />
+                  </span>
+                  Crear caja
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-3">
                 <Input value={newCajaName} onChange={(event) => setNewCajaName(event.target.value)} placeholder="Caja principal" />
                 <Button variant="outline" className="w-full" onClick={createBox}>Crear caja</Button>
@@ -1551,8 +1603,16 @@ export default function PuntoVenta() {
           )}
         </div>
         {renderTeamBoxes()}
-        <Card>
-          <CardHeader><CardTitle>Últimos cortes</CardTitle></CardHeader>
+        <Card className="overflow-hidden rounded-2xl shadow-sm">
+          <CardHeader className="border-b bg-muted/20">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <ReceiptText className="h-5 w-5 text-primary" />
+              Actividad reciente de cajas
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Consulta aperturas, cierres y diferencias recientes.
+            </p>
+          </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px] text-sm">
@@ -1572,56 +1632,165 @@ export default function PuntoVenta() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
-      <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="flex items-center gap-3 text-3xl font-black tracking-tight">
-            <Store className="h-8 w-8" /> Punto de Venta
-          </h1>
-          <p className="text-muted-foreground">
-            {sesion.caja_nombre} · sesión #{sesion.id_sesion} · {sesion.usuario}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void refreshPOS()}>
-            <RefreshCw className="mr-2 h-4 w-4" /> Actualizar
-          </Button>
-          {isAdmin && (
+    <main className="mx-auto max-w-[1500px] space-y-5 p-4 md:p-6">
+      {/* RACKNOVA_POS_UI_PROFESIONAL_V1 */}
+      <section className="relative overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.09] via-transparent to-blue-500/[0.05]" />
+        <div className="pointer-events-none absolute -right-16 -top-20 h-52 w-52 rounded-full bg-primary/10 blur-3xl" />
+
+        <div className="relative flex flex-col gap-5 p-5 md:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
+              <Store className="h-6 w-6" />
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="rounded-full bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300">
+                  <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500" />
+                  Caja abierta
+                </Badge>
+                <Badge variant="outline" className="rounded-full bg-background/70">
+                  {isAdmin ? "Administrador" : "Operador"}
+                </Badge>
+              </div>
+
+              <h1 className="mt-3 text-2xl font-black tracking-tight md:text-3xl">
+                Punto de Venta
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground md:text-base">
+                <span className="font-semibold text-foreground">
+                  {sesion.caja_nombre}
+                </span>
+                {" · "}Sesión #{sesion.id_sesion}
+                {" · "}{sesion.usuario}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
             <Button
-              type="button"
               variant="outline"
-              onClick={scrollToReturns}
-              className="border-amber-400/60 bg-amber-500/10 text-amber-800 hover:bg-amber-500/20 dark:text-amber-200"
+              className="h-10 rounded-xl bg-background/75 shadow-sm"
+              onClick={() => void refreshPOS()}
             >
-              <RotateCcw className="mr-2 h-4 w-4" />
-              Devoluciones
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Actualizar
             </Button>
-          )}
-          {isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}
+
+            {isAdmin && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={scrollToReturns}
+                className="h-10 rounded-xl border-amber-400/50 bg-amber-500/10 text-amber-800 shadow-sm hover:bg-amber-500/20 dark:text-amber-200"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Devoluciones
+              </Button>
+            )}
+
+            {isAdmin && (
+              <Button
+                variant="outline"
+                className="h-10 rounded-xl shadow-sm"
+                onClick={togglePOS}
+              >
+                Desactivar POS
+              </Button>
+            )}
+          </div>
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Fondo inicial</p><p className="text-xl font-black">{money(sesion.fondo_inicial)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ventas del turno</p><p className="text-xl font-black">{money(sesion.total_ventas)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Efectivo vendido</p><p className="text-xl font-black">{money(sesion.efectivo_ventas)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Efectivo esperado</p><p className="text-xl font-black">{money(sesion.efectivo_esperado)}</p></CardContent></Card>
-        <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Operaciones</p><p className="text-xl font-black">{sesion.ventas_completadas}</p></CardContent></Card>
+      <section className="grid overflow-hidden rounded-2xl border bg-card shadow-sm sm:grid-cols-2 xl:grid-cols-5">
+        <div className="border-b p-4 sm:border-r xl:border-b-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Fondo inicial
+          </p>
+          <p className="mt-2 text-2xl font-black tracking-tight">
+            {money(sesion.fondo_inicial)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Base de efectivo
+          </p>
+        </div>
+
+        <div className="border-b p-4 xl:border-b-0 xl:border-r">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Ventas del turno
+          </p>
+          <p className="mt-2 text-2xl font-black tracking-tight text-primary">
+            {money(sesion.total_ventas)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Total procesado
+          </p>
+        </div>
+
+        <div className="border-b p-4 sm:border-r xl:border-b-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Efectivo vendido
+          </p>
+          <p className="mt-2 text-2xl font-black tracking-tight">
+            {money(sesion.efectivo_ventas)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Cobros en efectivo
+          </p>
+        </div>
+
+        <div className="border-b p-4 xl:border-b-0 xl:border-r">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Efectivo esperado
+          </p>
+          <p className="mt-2 text-2xl font-black tracking-tight">
+            {money(sesion.efectivo_esperado)}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Disponible al corte
+          </p>
+        </div>
+
+        <div className="p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Operaciones
+          </p>
+          <p className="mt-2 text-2xl font-black tracking-tight">
+            {sesion.ventas_completadas}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ventas completadas
+          </p>
+        </div>
       </section>
+
       {renderTeamBoxes()}
-      <section className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+      <section className="grid gap-5 lg:items-start lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
         <div className="space-y-6">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Barcode className="h-5 w-5" /> Escanear o buscar</CardTitle></CardHeader>
+          <Card className="overflow-hidden rounded-2xl border-primary/20 bg-card shadow-sm">
+            <CardHeader className="border-b bg-gradient-to-r from-primary/[0.08] via-primary/[0.03] to-transparent pb-4">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
+                  <Barcode className="h-5 w-5" />
+                </span>
+                <div>
+                  <CardTitle className="text-lg">Escanear o buscar</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Agrega productos mediante código de barras, SKU o nombre.
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
             <CardContent>
               <form onSubmit={search} className="flex gap-2">
-                <Input ref={searchRef} autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Código de barras, SKU o nombre" autoComplete="off" />
-                <Button type="submit" disabled={searching}>{searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</Button>
+                <Input ref={searchRef} autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Escanea o escribe código, SKU o nombre" autoComplete="off" className="h-12 rounded-xl bg-background text-base shadow-sm" />
+                <Button type="submit" className="h-12 min-w-12 rounded-xl shadow-sm" disabled={searching}>{searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</Button>
               </form>
               {results.length > 0 && (
                 <div className="mt-3 divide-y rounded-xl border">
                   {results.map((product) => (
-                    <button key={product.id_producto} type="button" onClick={() => addProduct(product)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted/60">
+                    <button key={product.id_producto} type="button" onClick={() => addProduct(product)} className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition-colors hover:bg-muted/50">
                       <div><p className="font-semibold">{product.nombre}</p><p className="text-sm text-muted-foreground">{product.sku} · {product.ubicacion} · Stock {mostrarCantidad(cantidadDisponibleVenta(product))} {unidadVenta(product)}</p></div><strong>{money(product.precio_venta_sugerido)} / {unidadVenta(product)}</strong>
                     </button>
                   ))}
