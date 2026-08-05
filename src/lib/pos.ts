@@ -753,3 +753,74 @@ export const eliminarPromocionPOSV4 = (idPromocion: number) =>
   apiJson<{ mensaje: string }>(`/pos/v4/promociones/${idPromocion}`, {
     method: "DELETE",
   });
+
+
+// RACKNOVA_POS_V5_DASHBOARD
+export type POSReporteAgrupadoV5 = {
+  nombre: string;
+  sesiones: number;
+  ventas: number;
+  devoluciones: number;
+  venta_neta: number;
+  operaciones: number;
+  diferencia: number;
+};
+
+export type POSReporteProductoV5 = {
+  sku: string;
+  nombre: string;
+  unidad: string;
+  cantidad_vendida: number;
+  cantidad_devuelta: number;
+  cantidad_neta: number;
+  ingreso_neto: number;
+};
+
+export type POSReporteDiarioV5 = {
+  fecha: string;
+  generado_en: string;
+  filtros: {
+    caja?: string | null;
+    operador?: string | null;
+  };
+  catalogos: {
+    cajas: string[];
+    operadores: string[];
+  };
+  totales: {
+    ventas: number;
+    devoluciones: number;
+    ventas_netas: number;
+    numero_ventas: number;
+    ventas_canceladas: number;
+    numero_devoluciones: number;
+    descuentos: number;
+    costo: number;
+    ganancia: number;
+    fondo_inicial: number;
+    efectivo_esperado: number;
+    efectivo_contado: number;
+    diferencias: number;
+    margen_porcentaje: number;
+  };
+  metodos_pago: Array<{ metodo: string; monto: number }>;
+  cajas: POSReporteAgrupadoV5[];
+  operadores: POSReporteAgrupadoV5[];
+  productos: POSReporteProductoV5[];
+  devoluciones: Array<Record<string, any>>;
+  movimientos_efectivo: Array<Record<string, any>>;
+  sesiones: POSResumenTurno[];
+};
+
+export const obtenerReporteDiarioPOSV5 = (params: {
+  fecha: string;
+  caja?: string;
+  operador?: string;
+}) => {
+  const query = new URLSearchParams({ fecha: params.fecha });
+  if (params.caja) query.set("caja", params.caja);
+  if (params.operador) query.set("operador", params.operador);
+  return apiJson<POSReporteDiarioV5>(
+    `/pos/v5/reportes/diario?${query.toString()}`
+  );
+};

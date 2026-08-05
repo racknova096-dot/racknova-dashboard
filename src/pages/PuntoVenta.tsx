@@ -883,6 +883,178 @@ export default function PuntoVenta() {
     );
   };
 
+  // RACKNOVA_POS_V5_DASHBOARD
+  const printCashSummaryProfessional = (
+    report: POSResumenTurno,
+    format: "carta" | "ticket"
+  ) => {
+    const escapeHtml = (value: unknown) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    const moneyPrint = (value: unknown) =>
+      new Intl.NumberFormat("es-MX", {
+        style: "currency",
+        currency: "MXN",
+      }).format(Number(value || 0));
+    const datePrint = (value: unknown) => {
+      if (!value) return "—";
+      const parsed = new Date(String(value));
+      return Number.isNaN(parsed.getTime())
+        ? escapeHtml(value)
+        : new Intl.DateTimeFormat("es-MX", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(parsed);
+    };
+    const numberPrint = (value: unknown) =>
+      new Intl.NumberFormat("es-MX", {
+        maximumFractionDigits: 3,
+      }).format(Number(value || 0));
+    const companyName =
+      localStorage.getItem("empresa_nombre") ||
+      localStorage.getItem("company_name") ||
+      "RackNova";
+
+    const productRows = (report.movimientos_productos || [])
+      .map(
+        (item) => `
+          <tr>
+            <td><strong>${escapeHtml(item.nombre)}</strong><br><small>${escapeHtml(item.sku)}</small></td>
+            <td>${escapeHtml(item.unidad_venta)}</td>
+            <td class="num">${numberPrint(item.cantidad_vendida)}</td>
+            <td class="num">${numberPrint(item.cantidad_devuelta)}</td>
+            <td class="num">${numberPrint(item.cantidad_neta)}</td>
+            <td class="num">${moneyPrint(item.ingreso_neto)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const returnRows = (report.devoluciones || [])
+      .map(
+        (item) => `
+          <tr>
+            <td>${escapeHtml(item.folio)}</td>
+            <td>${escapeHtml(item.folio_venta || item.id_venta)}</td>
+            <td>${escapeHtml(item.motivo)}</td>
+            <td class="num">-${moneyPrint(item.monto)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const cashRows = (report.movimientos_efectivo || [])
+      .map(
+        (item) => `
+          <tr>
+            <td>${datePrint(item.fecha)}</td>
+            <td>${escapeHtml(item.tipo)}</td>
+            <td>${escapeHtml(item.motivo)}</td>
+            <td class="num">${moneyPrint(item.monto)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const isTicket = format === "ticket";
+    const popup = window.open(
+      "",
+      "_blank",
+      isTicket ? "width=440,height=760" : "width=1000,height=820"
+    );
+    if (!popup) {
+      toast.error("Permite las ventanas emergentes para imprimir el resumen.");
+      return;
+    }
+
+    popup.document.write(`<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Resumen ${escapeHtml(report.sesion.caja_nombre)} #${escapeHtml(report.sesion.id_sesion)}</title>
+<style>
+  @page { size: ${isTicket ? "80mm auto" : "letter"}; margin: ${isTicket ? "4mm" : "12mm"}; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #172033; font-family: Arial, Helvetica, sans-serif; font-size: ${isTicket ? "10px" : "11px"}; background: white; }
+  .page { width: 100%; }
+  .header { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; padding-bottom: 12px; border-bottom: 2px solid #1f4fa3; }
+  .brand { font-size: ${isTicket ? "18px" : "24px"}; font-weight: 800; color: #163d7a; letter-spacing: .3px; }
+  .subtitle { margin-top: 3px; color: #5b6474; }
+  .folio { text-align: right; }
+  .folio strong { display: block; font-size: ${isTicket ? "13px" : "16px"}; }
+  .meta { display: grid; grid-template-columns: ${isTicket ? "1fr" : "repeat(3,1fr)"}; gap: 8px; margin: 12px 0; }
+  .meta div, .metric { border: 1px solid #d9deea; border-radius: 7px; padding: 8px; }
+  .label { color: #657083; font-size: .88em; text-transform: uppercase; letter-spacing: .4px; }
+  .value { margin-top: 3px; font-weight: 700; }
+  .metrics { display: grid; grid-template-columns: ${isTicket ? "repeat(2,1fr)" : "repeat(4,1fr)"}; gap: 7px; margin: 10px 0 14px; }
+  .metric .value { font-size: ${isTicket ? "12px" : "15px"}; }
+  h2 { margin: 15px 0 7px; font-size: ${isTicket ? "12px" : "14px"}; color: #163d7a; border-bottom: 1px solid #cbd3e1; padding-bottom: 5px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  th { background: #eef3fb; color: #27364f; text-align: left; padding: 6px; border: 1px solid #d9deea; font-size: .9em; }
+  td { padding: 6px; border: 1px solid #e2e6ee; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; }
+  .total { font-weight: 800; background: #f4f7fb; }
+  .notes { min-height: 45px; border: 1px solid #d9deea; border-radius: 7px; padding: 8px; }
+  .signatures { display: ${isTicket ? "none" : "grid"}; grid-template-columns: 1fr 1fr; gap: 70px; margin-top: 45px; }
+  .signature { border-top: 1px solid #283448; text-align: center; padding-top: 6px; }
+  .footer { margin-top: 18px; padding-top: 8px; border-top: 1px solid #d9deea; color: #6d7685; text-align: center; font-size: .88em; }
+  .ticket-hide { display: ${isTicket ? "none" : "table-cell"}; }
+  small { color: #6b7280; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <div><div class="brand">${escapeHtml(companyName)}</div><div class="subtitle">Resumen profesional de cierre de caja</div></div>
+    <div class="folio"><span class="label">Sesión</span><strong>#${escapeHtml(report.sesion.id_sesion)}</strong><span>${escapeHtml(report.sesion.estado)}</span></div>
+  </header>
+
+  <section class="meta">
+    <div><span class="label">Caja</span><div class="value">${escapeHtml(report.sesion.caja_nombre)}</div></div>
+    <div><span class="label">Operador</span><div class="value">${escapeHtml(report.sesion.usuario)}</div></div>
+    <div><span class="label">Periodo</span><div class="value">${datePrint(report.periodo.inicio)}<br>${datePrint(report.periodo.fin)}</div></div>
+  </section>
+
+  <section class="metrics">
+    <div class="metric"><span class="label">Fondo inicial</span><div class="value">${moneyPrint(report.sesion.fondo_inicial)}</div></div>
+    <div class="metric"><span class="label">Ventas</span><div class="value">${moneyPrint(report.totales.ventas)}</div></div>
+    <div class="metric"><span class="label">Devoluciones</span><div class="value">-${moneyPrint(report.totales.devoluciones)}</div></div>
+    <div class="metric"><span class="label">Venta neta</span><div class="value">${moneyPrint(report.totales.ventas_netas)}</div></div>
+    <div class="metric"><span class="label">Efectivo esperado</span><div class="value">${moneyPrint(report.sesion.efectivo_esperado)}</div></div>
+    <div class="metric"><span class="label">Efectivo contado</span><div class="value">${report.sesion.efectivo_contado == null ? "Pendiente" : moneyPrint(report.sesion.efectivo_contado)}</div></div>
+    <div class="metric"><span class="label">Diferencia</span><div class="value">${report.sesion.diferencia == null ? "Pendiente" : moneyPrint(report.sesion.diferencia)}</div></div>
+    <div class="metric"><span class="label">Operaciones</span><div class="value">${escapeHtml(report.totales.numero_ventas)}</div></div>
+  </section>
+
+  <h2>Desglose de cobros</h2>
+  <table><tbody>
+    <tr><td>Efectivo de ventas</td><td class="num">${moneyPrint(report.sesion.efectivo_ventas)}</td></tr>
+    <tr><td>Tarjeta</td><td class="num">${moneyPrint(report.sesion.tarjeta)}</td></tr>
+    <tr><td>Transferencia</td><td class="num">${moneyPrint(report.sesion.transferencia)}</td></tr>
+    <tr class="total"><td>Total neto</td><td class="num">${moneyPrint(report.totales.ventas_netas)}</td></tr>
+  </tbody></table>
+
+  <h2>Productos vendidos y devueltos</h2>
+  <table>
+    <thead><tr><th>Producto</th><th>Unidad</th><th class="num">Vendida</th><th class="num">Devuelta</th><th class="num">Neta</th><th class="num">Ingreso</th></tr></thead>
+    <tbody>${productRows || '<tr><td colspan="6">No hay productos registrados.</td></tr>'}</tbody>
+  </table>
+
+  ${returnRows ? `<h2>Devoluciones</h2><table><thead><tr><th>Folio</th><th>Venta</th><th>Motivo</th><th class="num">Monto</th></tr></thead><tbody>${returnRows}</tbody></table>` : ""}
+  ${cashRows ? `<h2>Movimientos de efectivo</h2><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Motivo</th><th class="num">Monto</th></tr></thead><tbody>${cashRows}</tbody></table>` : ""}
+
+  <h2>Observaciones</h2>
+  <div class="notes">${escapeHtml((report.sesion as any).observaciones || "Sin observaciones registradas.")}</div>
+
+  <section class="signatures"><div class="signature">Firma del operador</div><div class="signature">Firma del supervisor</div></section>
+  <footer class="footer">Documento generado por RackNova · ${datePrint(new Date().toISOString())}</footer>
+</div>
+<script>window.addEventListener('load',()=>setTimeout(()=>window.print(),250));</script>
+</body></html>`);
+    popup.document.close();
+  };
+
   const renderCashSummary = () => {
     const report = teamSummary || cashSummary;
 
@@ -1157,10 +1329,18 @@ export default function PuntoVenta() {
               </Button>
               <Button
                 type="button"
-                onClick={() => window.print()}
+                variant="outline"
+                onClick={() => printCashSummaryProfessional(report, "ticket")}
               >
                 <Printer className="mr-2 h-4 w-4" />
-                Imprimir resumen
+                Ticket 80 mm
+              </Button>
+              <Button
+                type="button"
+                onClick={() => printCashSummaryProfessional(report, "carta")}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir carta / PDF
               </Button>
             </div>
           </div>
@@ -1722,7 +1902,17 @@ export default function PuntoVenta() {
             </div>
           </CardContent>
         </Card>
-        {renderCashSummary()}
+                {/* RACKNOVA_POS_V5_ADMIN_SIN_CAJA */}
+        <section className="space-y-3 rounded-2xl border bg-card p-4 md:p-5">
+          <div>
+            <h2 className="text-xl font-black">Administración comercial</h2>
+            <p className="text-sm text-muted-foreground">
+              Promociones, mayoreo y menudeo, clientes y crédito, y reporte diario están disponibles sin abrir una caja.
+            </p>
+          </div>
+          <POSFase3Panel />
+        </section>
+{renderCashSummary()}
       </main>
     );
   }

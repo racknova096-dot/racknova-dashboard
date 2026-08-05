@@ -48,6 +48,8 @@ import {
   obtenerReporteDiarioPOSV4,
   POSReglaMayoreo,
   POSReporteDiarioV4,
+  obtenerReporteDiarioPOSV5,
+  POSReporteDiarioV5,
 } from "@/lib/pos";
 import type {
   POSCliente,
@@ -1956,50 +1958,171 @@ function ProductsConfigPanel({ isAdmin }: { isAdmin: boolean }) {
 }
 
 function ReportsPanel({ isAdmin }: { isAdmin: boolean }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const [dateValue, setDateValue] = useState(today);
-  const [report, setReport] = useState<POSReporteDiarioV4 | null>(null);
+  const [boxValue, setBoxValue] = useState("");
+  const [operatorValue, setOperatorValue] = useState("");
+  const [report, setReport] = useState<POSReporteDiarioV5 | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const mxn = (value: number) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(value || 0));
+
+  const mxn = (value: unknown) =>
+    new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+    }).format(Number(value || 0));
+  const qty = (value: unknown) =>
+    new Intl.NumberFormat("es-MX", {
+      maximumFractionDigits: 3,
+    }).format(Number(value || 0));
+  const dateTime = (value: unknown) => {
+    if (!value) return "—";
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime())
+      ? String(value)
+      : new Intl.DateTimeFormat("es-MX", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(parsed);
+  };
 
   const loadReport = async () => {
     setLoading(true);
     setError("");
     try {
-      setReport(await obtenerReporteDiarioPOSV4(dateValue));
+      setReport(
+        await obtenerReporteDiarioPOSV5({
+          fecha: dateValue,
+          caja: boxValue || undefined,
+          operador: operatorValue || undefined,
+        })
+      );
     } catch (cause) {
       setReport(null);
-      setError(cause instanceof Error ? cause.message : "No se pudo generar el reporte.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "No se pudo generar el reporte diario."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void loadReport(); }, [dateValue]);
+  useEffect(() => {
+    void loadReport();
+  }, [dateValue, boxValue, operatorValue]);
+
+  const printReport = () => {
+    if (!report) return;
+    const escapeHtml = (value: unknown) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    const popup = window.open("", "_blank", "width=1100,height=820");
+    if (!popup) {
+      setError("Permite ventanas emergentes para imprimir el reporte.");
+      return;
+    }
+    const paymentRows = report.metodos_pago
+      .map((item) => `<tr><td>${escapeHtml(item.metodo)}</td><td class="num">${mxn(item.monto)}</td></tr>`)
+      .join("");
+    const boxRows = report.cajas
+      .map((item) => `<tr><td>${escapeHtml(item.nombre)}</td><td class="num">${item.sesiones}</td><td class="num">${mxn(item.ventas)}</td><td class="num">-${mxn(item.devoluciones)}</td><td class="num">${mxn(item.venta_neta)}</td><td class="num">${mxn(item.diferencia)}</td></tr>`)
+      .join("");
+    const operatorRows = report.operadores
+      .map((item) => `<tr><td>${escapeHtml(item.nombre)}</td><td class="num">${item.operaciones}</td><td class="num">${mxn(item.ventas)}</td><td class="num">${mxn(item.venta_neta)}</td><td class="num">${mxn(item.diferencia)}</td></tr>`)
+      .join("");
+    const productRows = report.productos
+      .map((item) => `<tr><td><strong>${escapeHtml(item.nombre)}</strong><br><small>${escapeHtml(item.sku)}</small></td><td>${escapeHtml(item.unidad)}</td><td class="num">${qty(item.cantidad_vendida)}</td><td class="num">${qty(item.cantidad_devuelta)}</td><td class="num">${qty(item.cantidad_neta)}</td><td class="num">${mxn(item.ingreso_neto)}</td></tr>`)
+      .join("");
+
+    popup.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Reporte diario POS ${escapeHtml(report.fecha)}</title><style>
+      @page{size:letter landscape;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#172033;margin:0;font-size:10px}.header{display:flex;justify-content:space-between;border-bottom:3px solid #1f4fa3;padding-bottom:10px;margin-bottom:12px}.brand{font-size:24px;font-weight:800;color:#163d7a}.muted{color:#667085}.filters{margin-top:5px}.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:7px;margin:10px 0 14px}.metric{border:1px solid #d7ddea;border-radius:7px;padding:8px}.metric span{display:block;color:#667085;text-transform:uppercase;font-size:8px}.metric strong{display:block;font-size:13px;margin-top:4px}h2{font-size:13px;color:#163d7a;margin:14px 0 6px;border-bottom:1px solid #cbd3e1;padding-bottom:4px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}table{width:100%;border-collapse:collapse;margin-bottom:8px}th{background:#edf3fb;text-align:left}th,td{border:1px solid #dce1ea;padding:5px;vertical-align:top}.num{text-align:right;white-space:nowrap}small{color:#667085}.footer{margin-top:14px;border-top:1px solid #dce1ea;padding-top:7px;text-align:center;color:#667085}
+    </style></head><body><header class="header"><div><div class="brand">RackNova</div><div class="muted">Reporte diario profesional del Punto de Venta</div><div class="filters">Fecha: ${escapeHtml(report.fecha)} · Caja: ${escapeHtml(report.filtros.caja || "Todas")} · Operador: ${escapeHtml(report.filtros.operador || "Todos")}</div></div><div><strong>Generado</strong><br>${escapeHtml(dateTime(report.generado_en))}</div></header>
+    <section class="metrics"><div class="metric"><span>Ventas</span><strong>${mxn(report.totales.ventas)}</strong></div><div class="metric"><span>Devoluciones</span><strong>-${mxn(report.totales.devoluciones)}</strong></div><div class="metric"><span>Venta neta</span><strong>${mxn(report.totales.ventas_netas)}</strong></div><div class="metric"><span>Ganancia</span><strong>${mxn(report.totales.ganancia)}</strong></div><div class="metric"><span>Operaciones</span><strong>${report.totales.numero_ventas}</strong></div><div class="metric"><span>Diferencias</span><strong>${mxn(report.totales.diferencias)}</strong></div></section>
+    <div class="grid"><section><h2>Métodos de pago</h2><table><thead><tr><th>Método</th><th class="num">Monto</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="2">Sin cobros registrados</td></tr>'}</tbody></table></section><section><h2>Resumen por caja</h2><table><thead><tr><th>Caja</th><th class="num">Ses.</th><th class="num">Ventas</th><th class="num">Dev.</th><th class="num">Neto</th><th class="num">Dif.</th></tr></thead><tbody>${boxRows || '<tr><td colspan="6">Sin cajas registradas</td></tr>'}</tbody></table></section></div>
+    <h2>Resultados por operador</h2><table><thead><tr><th>Operador</th><th class="num">Operaciones</th><th class="num">Ventas</th><th class="num">Neto</th><th class="num">Diferencia</th></tr></thead><tbody>${operatorRows || '<tr><td colspan="5">Sin operadores registrados</td></tr>'}</tbody></table>
+    <h2>Productos vendidos y devueltos</h2><table><thead><tr><th>Producto</th><th>Unidad</th><th class="num">Vendida</th><th class="num">Devuelta</th><th class="num">Neta</th><th class="num">Ingreso</th></tr></thead><tbody>${productRows || '<tr><td colspan="6">Sin productos registrados</td></tr>'}</tbody></table>
+    <footer class="footer">Documento generado por RackNova · El diálogo de impresión permite guardarlo como PDF.</footer><script>window.addEventListener('load',()=>setTimeout(()=>window.print(),250));</script></body></html>`);
+    popup.document.close();
+  };
+
   if (!isAdmin) return null;
+
+  const totalSessions = report?.sesiones.length ?? 0;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-xl border bg-card p-5 sm:flex-row sm:items-end sm:justify-between">
-        <div><h3 className="text-lg font-bold">Reporte diario de cajas</h3><p className="text-sm text-muted-foreground">Suma ventas, devoluciones y diferencias de todas las sesiones del día.</p></div>
-        <div className="flex gap-2"><input type="date" value={dateValue} onChange={(e) => setDateValue(e.target.value)} className="rounded-md border bg-background px-3 py-2"/><button type="button" onClick={() => void loadReport()} className="rounded-md bg-primary px-4 py-2 font-semibold text-primary-foreground">{loading ? "Generando..." : "Actualizar"}</button></div>
-      </div>
-      {error && <p className="rounded-lg bg-destructive/10 p-4 text-destructive">{error}</p>}
-      {report && <>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Ventas</p><strong className="text-xl">{mxn(report.totales.ventas)}</strong></div>
-          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Devoluciones</p><strong className="text-xl text-amber-700">-{mxn(report.totales.devoluciones)}</strong></div>
-          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Venta neta</p><strong className="text-xl">{mxn(report.totales.ventas_netas)}</strong></div>
-          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Ganancia</p><strong className="text-xl">{mxn(report.totales.ganancia)}</strong></div>
-          <div className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">Sesiones</p><strong className="text-xl">{report.sesiones.length}</strong></div>
+      <section className="rounded-2xl border bg-card p-5 shadow-sm">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Análisis operativo</p>
+            <h3 className="text-2xl font-black">Reporte diario del Punto de Venta</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ventas, devoluciones, métodos de pago, productos, cajas, operadores y diferencias reales del día.
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[650px]">
+            <label className="space-y-1 text-sm"><span>Fecha</span><input type="date" value={dateValue} onChange={(event) => setDateValue(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2" /></label>
+            <label className="space-y-1 text-sm"><span>Caja</span><select value={boxValue} onChange={(event) => setBoxValue(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2"><option value="">Todas las cajas</option>{(report?.catalogos.cajas || []).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+            <label className="space-y-1 text-sm"><span>Operador</span><select value={operatorValue} onChange={(event) => setOperatorValue(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2"><option value="">Todos los operadores</option>{(report?.catalogos.operadores || []).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          </div>
         </div>
-        <div className="space-y-3 rounded-xl border bg-card p-5">
-          <h3 className="font-bold">Sesiones del día</h3>
-          {report.sesiones.map((item) => <div key={item.sesion.id_sesion} className="grid gap-2 rounded-lg border p-4 text-sm sm:grid-cols-5"><div><span className="text-muted-foreground">Caja</span><p className="font-semibold">{item.sesion.caja_nombre}</p></div><div><span className="text-muted-foreground">Operador</span><p>{item.sesion.usuario}</p></div><div><span className="text-muted-foreground">Ventas</span><p className="font-semibold">{mxn(item.totales.ventas)}</p></div><div><span className="text-muted-foreground">Devoluciones</span><p>{mxn(item.totales.devoluciones)}</p></div><div><span className="text-muted-foreground">Diferencia</span><p>{mxn(Number(item.sesion.diferencia || 0))}</p></div></div>)}
-          {report.sesiones.length === 0 && <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No hubo sesiones de caja en esta fecha.</p>}
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={() => void loadReport()} disabled={loading} className="rounded-md border px-4 py-2 text-sm font-semibold hover:bg-muted disabled:opacity-50">{loading ? "Generando..." : "Actualizar"}</button>
+          <button type="button" onClick={printReport} disabled={!report} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">Imprimir / guardar PDF</button>
         </div>
-      </>}
+      </section>
+
+      {error && <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">{error}</p>}
+      {loading && !report && <p className="rounded-xl border p-8 text-center text-muted-foreground">Generando reporte diario...</p>}
+
+      {report && (
+        <>
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            {[
+              ["Ventas", mxn(report.totales.ventas)],
+              ["Devoluciones", `-${mxn(report.totales.devoluciones)}`],
+              ["Venta neta", mxn(report.totales.ventas_netas)],
+              ["Ganancia", mxn(report.totales.ganancia)],
+              ["Margen", `${report.totales.margen_porcentaje.toFixed(2)}%`],
+              ["Operaciones", String(report.totales.numero_ventas)],
+              ["Descuentos", mxn(report.totales.descuentos)],
+              ["Costo", mxn(report.totales.costo)],
+              ["Efectivo esperado", mxn(report.totales.efectivo_esperado)],
+              ["Efectivo contado", mxn(report.totales.efectivo_contado)],
+              ["Diferencias", mxn(report.totales.diferencias)],
+              ["Sesiones", String(totalSessions)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">{label}</p><strong className="mt-1 block text-lg">{value}</strong></div>
+            ))}
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <div className="rounded-xl border bg-card p-5"><h3 className="font-bold">Métodos de pago</h3><div className="mt-3 grid gap-2 sm:grid-cols-2">{report.metodos_pago.map((item) => <div key={item.metodo} className="flex justify-between rounded-lg bg-muted/40 p-3 text-sm"><span>{item.metodo}</span><strong>{mxn(item.monto)}</strong></div>)}{report.metodos_pago.length === 0 && <p className="text-sm text-muted-foreground">No hay cobros registrados.</p>}</div></div>
+            <div className="rounded-xl border bg-card p-5"><h3 className="font-bold">Control de efectivo</h3><div className="mt-3 grid gap-2 sm:grid-cols-2"><div className="rounded-lg bg-muted/40 p-3 text-sm"><span className="text-muted-foreground">Fondos iniciales</span><strong className="block">{mxn(report.totales.fondo_inicial)}</strong></div><div className="rounded-lg bg-muted/40 p-3 text-sm"><span className="text-muted-foreground">Diferencia acumulada</span><strong className="block">{mxn(report.totales.diferencias)}</strong></div><div className="rounded-lg bg-muted/40 p-3 text-sm"><span className="text-muted-foreground">Ventas canceladas</span><strong className="block">{report.totales.ventas_canceladas}</strong></div><div className="rounded-lg bg-muted/40 p-3 text-sm"><span className="text-muted-foreground">Devoluciones</span><strong className="block">{report.totales.numero_devoluciones}</strong></div></div></div>
+          </section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <div className="overflow-hidden rounded-xl border bg-card"><div className="border-b p-4"><h3 className="font-bold">Resultados por caja</h3></div><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Caja</th><th className="p-3 text-right">Sesiones</th><th className="p-3 text-right">Ventas</th><th className="p-3 text-right">Dev.</th><th className="p-3 text-right">Neto</th><th className="p-3 text-right">Diferencia</th></tr></thead><tbody>{report.cajas.map((item) => <tr key={item.nombre} className="border-t"><td className="p-3 font-semibold">{item.nombre}</td><td className="p-3 text-right">{item.sesiones}</td><td className="p-3 text-right">{mxn(item.ventas)}</td><td className="p-3 text-right">-{mxn(item.devoluciones)}</td><td className="p-3 text-right font-semibold">{mxn(item.venta_neta)}</td><td className="p-3 text-right">{mxn(item.diferencia)}</td></tr>)}</tbody></table></div></div>
+            <div className="overflow-hidden rounded-xl border bg-card"><div className="border-b p-4"><h3 className="font-bold">Resultados por operador</h3></div><div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Operador</th><th className="p-3 text-right">Operaciones</th><th className="p-3 text-right">Ventas</th><th className="p-3 text-right">Neto</th><th className="p-3 text-right">Diferencia</th></tr></thead><tbody>{report.operadores.map((item) => <tr key={item.nombre} className="border-t"><td className="p-3 font-semibold">{item.nombre}</td><td className="p-3 text-right">{item.operaciones}</td><td className="p-3 text-right">{mxn(item.ventas)}</td><td className="p-3 text-right font-semibold">{mxn(item.venta_neta)}</td><td className="p-3 text-right">{mxn(item.diferencia)}</td></tr>)}</tbody></table></div></div>
+          </section>
+
+          <section className="overflow-hidden rounded-xl border bg-card"><div className="border-b p-4"><h3 className="font-bold">Productos vendidos y devueltos</h3><p className="text-sm text-muted-foreground">Ordenados por ingreso neto.</p></div><div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm"><thead className="bg-muted/40"><tr><th className="p-3 text-left">Producto</th><th className="p-3 text-left">Unidad</th><th className="p-3 text-right">Vendida</th><th className="p-3 text-right">Devuelta</th><th className="p-3 text-right">Neta</th><th className="p-3 text-right">Ingreso</th></tr></thead><tbody>{report.productos.map((item) => <tr key={`${item.sku}-${item.unidad}`} className="border-t"><td className="p-3"><p className="font-semibold">{item.nombre}</p><p className="text-xs text-muted-foreground">{item.sku}</p></td><td className="p-3">{item.unidad}</td><td className="p-3 text-right">{qty(item.cantidad_vendida)}</td><td className="p-3 text-right">{qty(item.cantidad_devuelta)}</td><td className="p-3 text-right font-semibold">{qty(item.cantidad_neta)}</td><td className="p-3 text-right font-semibold">{mxn(item.ingreso_neto)}</td></tr>)}{report.productos.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No hay productos registrados para estos filtros.</td></tr>}</tbody></table></div></section>
+
+          <section className="grid gap-5 xl:grid-cols-2">
+            <div className="rounded-xl border bg-card p-5"><h3 className="font-bold">Devoluciones del día</h3><div className="mt-3 max-h-96 space-y-2 overflow-y-auto">{report.devoluciones.map((item: any) => <div key={`${item.id_devolucion}-${item.id_sesion}`} className="rounded-lg border p-3 text-sm"><div className="flex justify-between gap-3"><div><p className="font-semibold">{item.folio}</p><p className="text-muted-foreground">{item.caja} · {item.operador_caja} · {dateTime(item.fecha)}</p><p className="mt-1">{item.motivo}</p></div><strong className="text-amber-700">-{mxn(item.monto)}</strong></div></div>)}{report.devoluciones.length === 0 && <p className="text-sm text-muted-foreground">No hubo devoluciones.</p>}</div></div>
+            <div className="rounded-xl border bg-card p-5"><h3 className="font-bold">Movimientos de efectivo</h3><div className="mt-3 max-h-96 space-y-2 overflow-y-auto">{report.movimientos_efectivo.map((item: any, index) => <div key={`${item.id_movimiento || index}-${item.id_sesion}`} className="rounded-lg border p-3 text-sm"><div className="flex justify-between gap-3"><div><p className="font-semibold">{item.tipo}</p><p className="text-muted-foreground">{item.caja} · {item.operador_caja} · {dateTime(item.fecha)}</p><p className="mt-1">{item.motivo}</p></div><strong>{mxn(item.monto)}</strong></div></div>)}{report.movimientos_efectivo.length === 0 && <p className="text-sm text-muted-foreground">No hubo movimientos manuales.</p>}</div></div>
+          </section>
+
+          <section className="space-y-3 rounded-xl border bg-card p-5"><div><h3 className="font-bold">Sesiones incluidas</h3><p className="text-sm text-muted-foreground">Detalle de apertura, cierre y resultado por sesión.</p></div>{report.sesiones.map((item) => <div key={item.sesion.id_sesion} className="grid gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2 xl:grid-cols-6"><div><span className="text-muted-foreground">Caja</span><p className="font-semibold">{item.sesion.caja_nombre}</p></div><div><span className="text-muted-foreground">Operador</span><p>{item.sesion.usuario}</p></div><div><span className="text-muted-foreground">Apertura</span><p>{dateTime(item.periodo.inicio)}</p></div><div><span className="text-muted-foreground">Cierre</span><p>{dateTime(item.periodo.fin)}</p></div><div><span className="text-muted-foreground">Venta neta</span><p className="font-semibold">{mxn(item.totales.ventas_netas)}</p></div><div><span className="text-muted-foreground">Diferencia</span><p className="font-semibold">{mxn(Number(item.sesion.diferencia || 0))}</p></div></div>)}{report.sesiones.length === 0 && <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">No existen operaciones para la fecha y filtros seleccionados.</p>}</section>
+        </>
+      )}
     </div>
   );
 }
