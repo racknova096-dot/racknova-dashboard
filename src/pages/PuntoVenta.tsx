@@ -1260,7 +1260,7 @@ export default function PuntoVenta() {
                   {report.devoluciones.map((item) => (
                     <div
                       key={item.id_devolucion}
-                      className="rounded-xl border p-4"
+                      className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40"
                     >
                       <div className="flex justify-between gap-4">
                         <div>
@@ -1816,11 +1816,11 @@ export default function PuntoVenta() {
   if (!sesion) {
     const activeBoxes = cajas.filter((box) => box.activa);
     return (
-      <main className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
+      <main className="mx-auto max-w-[1500px] space-y-6 p-4 md:p-6">
         <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="flex items-center gap-3 text-3xl font-black tracking-tight">
-              <LockKeyhole className="h-8 w-8" /> Abrir caja
+              <LockKeyhole className="h-8 w-8 text-cyan-600 dark:text-cyan-300" /> Abrir caja
             </h1>
             <p className="text-muted-foreground">
               Debes abrir una sesión antes de registrar ventas.
@@ -1833,7 +1833,7 @@ export default function PuntoVenta() {
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
-            <CardHeader><CardTitle>Caja y fondo inicial</CardTitle></CardHeader>
+            <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle>Caja y fondo inicial</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {activeBoxes.length > 0 ? (
                 <>
@@ -1863,7 +1863,7 @@ export default function PuntoVenta() {
                       }
                     />
                   </div>
-                  <Button className="w-full" onClick={openCash} disabled={loadingCash}>
+                  <Button className="h-12 w-full rounded-xl text-base font-semibold" onClick={openCash} disabled={loadingCash}>
                     {loadingCash && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Abrir caja
                   </Button>
@@ -1922,7 +1922,7 @@ export default function PuntoVenta() {
       <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-black tracking-tight">
-            <Store className="h-8 w-8" /> Punto de Venta
+            <Store className="h-8 w-8 text-cyan-600 dark:text-cyan-300" /> Punto de Venta
           </h1>
           <p className="text-muted-foreground">
             {sesion.caja_nombre} · sesión #{sesion.id_sesion} · {sesion.usuario}
@@ -1947,7 +1947,7 @@ export default function PuntoVenta() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5 [&>div]:rounded-2xl [&>div]:border-slate-200 [&>div]:shadow-sm dark:[&>div]:border-slate-800">
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Fondo inicial</p><p className="text-xl font-black">{money(sesion.fondo_inicial)}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ventas del turno</p><p className="text-xl font-black">{money(sesion.total_ventas)}</p></CardContent></Card>
         <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Efectivo vendido</p><p className="text-xl font-black">{money(sesion.efectivo_ventas)}</p></CardContent></Card>
@@ -1957,19 +1957,19 @@ export default function PuntoVenta() {
 
       {renderTeamBoxes()}
       {renderCurrentSessionActivity()}
-      <section className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_390px]">
         <div className="space-y-6">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Barcode className="h-5 w-5" /> Escanear o buscar</CardTitle></CardHeader>
-            <CardContent>
-              <form onSubmit={search} className="flex gap-2">
-                <Input ref={searchRef} autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Código de barras, SKU o nombre" autoComplete="off" />
-                <Button type="submit" disabled={searching}>{searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</Button>
+          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+            <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2 text-xl"><Barcode className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Escanear o buscar</CardTitle></CardHeader>
+            <CardContent className="pt-6">
+              <form onSubmit={search} className="flex gap-3">
+                <Input ref={searchRef} autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Código de barras, SKU o nombre" autoComplete="off" className="h-12 rounded-xl" />
+                <Button type="submit" disabled={searching} className="h-12 rounded-xl px-5">{searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}</Button>
               </form>
               {results.length > 0 && (
-                <div className="mt-3 divide-y rounded-xl border">
+                <div className="mt-4 divide-y overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/40">
                   {results.map((product) => (
-                    <button key={product.id_producto} type="button" onClick={() => addProduct(product)} className="flex w-full items-center justify-between gap-3 p-3 text-left hover:bg-muted/60">
+                    <button key={product.id_producto} type="button" onClick={() => addProduct(product)} className="flex w-full items-center justify-between gap-4 p-4 text-left transition hover:bg-slate-50 dark:hover:bg-slate-900/70">
                       <div><p className="font-semibold">{product.nombre}</p><p className="text-sm text-muted-foreground">{product.sku} · {product.ubicacion} · Stock {mostrarCantidad(cantidadDisponibleVenta(product))} {unidadVenta(product)}</p></div><strong>{money(product.precio_venta_sugerido)} / {unidadVenta(product)}</strong>
                     </button>
                   ))}
@@ -1978,11 +1978,11 @@ export default function PuntoVenta() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><ShoppingCart className="h-5 w-5" /> Carrito <Badge variant="secondary">{cart.length}</Badge></CardTitle></CardHeader>
+          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+            <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2 text-xl"><ShoppingCart className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Carrito <Badge variant="secondary">{cart.length}</Badge></CardTitle></CardHeader>
             <CardContent>
               {cart.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-10 text-center text-muted-foreground">Escanea o busca un producto para comenzar.</div>
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-10 text-center text-muted-foreground dark:border-slate-800 dark:bg-slate-900/30">Escanea o busca un producto para comenzar.</div>
               ) : (
                 <div className="space-y-3">
                   {cart.map((item) => {
@@ -2002,7 +2002,7 @@ export default function PuntoVenta() {
                             </span>
                           </div>
                         )}
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3 sm:items-end">
+                        <div className="mt-4 grid gap-4 lg:grid-cols-[190px_1fr_170px] lg:items-end">
                           <div>
                             <label className="text-xs font-medium text-muted-foreground">Cantidad ({unidadVenta(item)})</label>
                             <div className="mt-1 flex items-center gap-2">
@@ -2058,11 +2058,11 @@ export default function PuntoVenta() {
           </Card>
         </div>
 
-        <div className="space-y-6">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><ReceiptText className="h-5 w-5" /> Cobro</CardTitle></CardHeader>
+        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+          <Card className="rounded-3xl border-slate-200 shadow-xl shadow-slate-200/40 dark:border-slate-800 dark:shadow-none">
+            <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2 text-xl"><ReceiptText className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Cobro</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2 rounded-xl bg-secondary p-4">
+              <div className="space-y-2 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/60">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <strong>{money(totals.subtotal)}</strong>
@@ -2101,8 +2101,8 @@ export default function PuntoVenta() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><CircleDollarSign className="h-5 w-5" /> Movimiento de efectivo</CardTitle></CardHeader>
+          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+            <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Movimiento de efectivo</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <select className="h-10 w-full rounded-md border bg-background px-3" value={cashType} onChange={(event) => setCashType(event.target.value)}><option value="ENTRADA">Entrada</option><option value="RETIRO">Retiro</option><option value="GASTO">Gasto</option><option value="DEPOSITO">Depósito / entrega</option>{isAdmin && <option value="AJUSTE_ENTRADA">Ajuste de entrada</option>}{isAdmin && <option value="AJUSTE_SALIDA">Ajuste de salida</option>}</select>
               <Input type="number" min="0" step="0.01" placeholder="Monto" value={cashAmount} onChange={(event) => setCashAmount(event.target.value)} />
@@ -2111,9 +2111,9 @@ export default function PuntoVenta() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5" /> Cerrar caja</CardTitle></CardHeader>
-            <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Efectivo esperado: <strong>{money(sesion.efectivo_esperado)}</strong></p><Input type="number" min="0" step="0.01" placeholder="Efectivo contado" value={cashCounted} onChange={(event) => setCashCounted(event.target.value)} /><textarea className="min-h-20 w-full rounded-md border bg-background p-3 text-sm" placeholder="Observaciones opcionales" value={closeNotes} onChange={(event) => setCloseNotes(event.target.value)} /><Button variant="destructive" className="w-full" disabled={closingCash} onClick={closeCash}>{closingCash && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cerrar turno</Button></CardContent>
+          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+            <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Cerrar caja</CardTitle></CardHeader>
+            <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Efectivo esperado: <strong>{money(sesion.efectivo_esperado)}</strong></p><Input type="number" min="0" step="0.01" placeholder="Efectivo contado" value={cashCounted} onChange={(event) => setCashCounted(event.target.value)} /><textarea className="min-h-20 w-full rounded-md border bg-background p-3 text-sm" placeholder="Observaciones opcionales" value={closeNotes} onChange={(event) => setCloseNotes(event.target.value)} /><Button variant="destructive" className="h-12 w-full rounded-xl text-base font-semibold" disabled={closingCash} onClick={closeCash}>{closingCash && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cerrar turno</Button></CardContent>
           </Card>
         </div>
       </section>
