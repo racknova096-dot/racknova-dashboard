@@ -1164,7 +1164,7 @@ export default function PuntoVenta() {
               </Card>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-3">
+            <section className="flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/40 md:flex-row md:items-center md:justify-between dark:border-slate-800 dark:bg-slate-950 dark:shadow-none">
               <div className="rounded-xl bg-secondary p-4">
                 <p className="text-sm text-muted-foreground">
                   Efectivo de ventas
@@ -1957,9 +1957,9 @@ export default function PuntoVenta() {
 
       {renderTeamBoxes()}
       {renderCurrentSessionActivity()}
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_390px]">
-        <div className="space-y-6">
-          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+      <section className="grid gap-5 xl:grid-cols-[minmax(280px,0.82fr)_minmax(420px,1.18fr)_390px] xl:items-start">
+        <div className="contents">
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-1 xl:row-start-1">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2 text-xl"><Barcode className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Escanear o buscar</CardTitle></CardHeader>
             <CardContent className="pt-6">
               <form onSubmit={search} className="flex gap-3">
@@ -1978,7 +1978,7 @@ export default function PuntoVenta() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-2 xl:row-start-1">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2 text-xl"><ShoppingCart className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Carrito <Badge variant="secondary">{cart.length}</Badge></CardTitle></CardHeader>
             <CardContent>
               {cart.length === 0 ? (
@@ -1990,7 +1990,7 @@ export default function PuntoVenta() {
 
                     const finalUnit = quoteItem?.final_unit ?? item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100);
                     return (
-                      <div key={item.sku} className="rounded-xl border p-4">
+                      <div key={item.sku} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/40">
                         <div className="flex items-start justify-between gap-3"><div><p className="font-bold">{item.nombre}</p><p className="text-sm text-muted-foreground">{item.sku} · {item.ubicacion} · Disponible {mostrarCantidad(cantidadDisponibleVenta(item))} {unidadVenta(item)}</p></div><Button size="icon" variant="ghost" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div>
                         {quoteItem?.promotion_name && (
                           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm">
@@ -2058,8 +2058,8 @@ export default function PuntoVenta() {
           </Card>
         </div>
 
-        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
-          <Card className="rounded-3xl border-slate-200 shadow-xl shadow-slate-200/40 dark:border-slate-800 dark:shadow-none">
+        <div className="contents">
+          <Card className="rounded-3xl border-cyan-200 bg-white shadow-2xl shadow-cyan-100/60 xl:sticky xl:top-24 xl:col-start-3 xl:row-start-1 xl:row-span-2 xl:self-start dark:border-cyan-500/25 dark:bg-slate-950 dark:shadow-none">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2 text-xl"><ReceiptText className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Cobro</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2 rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/60">
@@ -2094,14 +2094,14 @@ export default function PuntoVenta() {
               {metodoPago === "mixto" && <div className="grid gap-3"><Input type="number" min="0" step="0.01" placeholder="Monto en efectivo" value={montoEfectivoMixto} onChange={(e) => setMontoEfectivoMixto(e.target.value)} /><Input type="number" min="0" step="0.01" placeholder="Monto en tarjeta" value={montoTarjetaMixto} onChange={(e) => setMontoTarjetaMixto(e.target.value)} /><Input type="number" min="0" step="0.01" placeholder="Monto por transferencia" value={montoTransferenciaMixto} onChange={(e) => setMontoTransferenciaMixto(e.target.value)} /></div>}
               {(metodoPago === "tarjeta" || metodoPago === "transferencia" || metodoPago === "mixto") && <Input placeholder="Referencia opcional" value={referencia} onChange={(e) => setReferencia(e.target.value)} />}
               {(metodoPago === "efectivo" || metodoPago === "mixto") && <div><label className="text-sm font-semibold">Efectivo recibido</label><Input type="number" min="0" step="0.01" value={efectivoRecibido} onChange={(e) => setEfectivoRecibido(e.target.value)} placeholder="0.00" /><div className="mt-2 flex justify-between rounded-lg bg-secondary p-3 font-bold"><span>Cambio</span><span>{money(change)}</span></div></div>}
-              <Button className="h-12 w-full text-base" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting
+              <Button className="h-14 w-full rounded-xl text-base font-bold shadow-lg" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting
                   ? "Calculando promociones..."
                   : `Cobrar ${money(totals.total)}`}
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-1 xl:row-start-2">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Movimiento de efectivo</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <select className="h-10 w-full rounded-md border bg-background px-3" value={cashType} onChange={(event) => setCashType(event.target.value)}><option value="ENTRADA">Entrada</option><option value="RETIRO">Retiro</option><option value="GASTO">Gasto</option><option value="DEPOSITO">Depósito / entrega</option>{isAdmin && <option value="AJUSTE_ENTRADA">Ajuste de entrada</option>}{isAdmin && <option value="AJUSTE_SALIDA">Ajuste de salida</option>}</select>
@@ -2111,7 +2111,7 @@ export default function PuntoVenta() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-slate-200 shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:shadow-none">
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-2 xl:row-start-2">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Cerrar caja</CardTitle></CardHeader>
             <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Efectivo esperado: <strong>{money(sesion.efectivo_esperado)}</strong></p><Input type="number" min="0" step="0.01" placeholder="Efectivo contado" value={cashCounted} onChange={(event) => setCashCounted(event.target.value)} /><textarea className="min-h-20 w-full rounded-md border bg-background p-3 text-sm" placeholder="Observaciones opcionales" value={closeNotes} onChange={(event) => setCloseNotes(event.target.value)} /><Button variant="destructive" className="h-12 w-full rounded-xl text-base font-semibold" disabled={closingCash} onClick={closeCash}>{closingCash && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cerrar turno</Button></CardContent>
           </Card>
@@ -2233,7 +2233,7 @@ export default function PuntoVenta() {
                   </div>
                 </div>
 
-                <div className="space-y-2 rounded-xl bg-secondary p-4">
+                <div className="space-y-2 rounded-2xl bg-slate-50 p-5 dark:bg-slate-900/60">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <strong>{money(ticket.subtotal)}</strong>
