@@ -1,33 +1,18 @@
 import React, { useMemo, useState } from "react";
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  BarChart3,
-  Boxes,
-  PieChart as PieChartIcon,
-  ShoppingCart,
-  TrendingUp,
-} from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-
+import { BarChart3, TrendingUp } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -35,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import { useInventory } from "@/context/InventoryContext";
 
 type TimeFilter = "7days" | "30days" | "90days";
@@ -44,6 +28,7 @@ const money = (value: number) =>
   new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
+    maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
 const toDate = (value: string | Date) => {
@@ -51,85 +36,34 @@ const toDate = (value: string | Date) => {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 };
 
-const formatDay = (value: Date) => {
-  const day = String(value.getDate()).padStart(2, "0");
-  const month = String(value.getMonth() + 1).padStart(2, "0");
+const formatDay = (value: Date) =>
+  value.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
+  });
 
-  return `${day}/${month}`;
-};
+const getDays = (filter: TimeFilter) =>
+  filter === "7days" ? 7 : filter === "30days" ? 30 : 90;
 
-const isInsideTimeFilter = (value: string | Date, filter: TimeFilter) => {
-  const date = toDate(value);
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
+const getFilterLabel = (filter: TimeFilter) =>
+  filter === "7days"
+    ? "Últimos 7 días"
+    : filter === "30days"
+      ? "Últimos 30 días"
+      : "Últimos 90 días";
 
-  const from = new Date(today);
-
-  if (filter === "7days") {
-    from.setDate(today.getDate() - 7);
-  }
-
-  if (filter === "30days") {
-    from.setDate(today.getDate() - 30);
-  }
-
-  if (filter === "90days") {
-    from.setDate(today.getDate() - 90);
-  }
-
-  from.setHours(0, 0, 0, 0);
-
-  return date >= from && date <= today;
-};
-
-const getTimeFilterLabel = (filter: TimeFilter) => {
-  if (filter === "7days") return "Últimos 7 días";
-  if (filter === "30days") return "Últimos 30 días";
-  return "Últimos 90 días";
+const axisTick = {
+  fontSize: 11,
 };
 
 export function RealTimeCharts() {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("7days");
+  const { movements } = useInventory();
 
-  const { locations, products, movements } = useInventory();
-
-  const filteredMovements = useMemo(() => {
-    return movements.filter((movement) =>
-      isInsideTimeFilter(movement.timestamp, timeFilter)
-    );
-  }, [movements, timeFilter]);
-
-  const rackOccupationData = useMemo(() => {
-    const racks = ["A", "B", "C", "D", "E"];
-
-    return racks.map((rack) => {
-      const rackLocations = locations.filter((location) => location.rack === rack);
-
-      const occupiedSlots = rackLocations.filter((location) =>
-        products.some((product) => product.locationId === location.id)
-      ).length;
-
-      const freeSlots = rackLocations.length - occupiedSlots;
-
-      const percentage =
-        rackLocations.length > 0
-          ? Math.round((occupiedSlots / rackLocations.length) * 100)
-          : 0;
-
-      return {
-        name: `Rack ${rack}`,
-        occupied: occupiedSlots,
-        free: freeSlots,
-        percentage,
-      };
-    });
-  }, [locations, products]);
-
-  const movementData = useMemo(() => {
-    const days =
-      timeFilter === "7days" ? 7 : timeFilter === "30days" ? 30 : 90;
-
+  const dailyData = useMemo(() => {
+    const days = getDays(timeFilter);
     const today = new Date();
+    today.setHours(23, 59, 59, 999);
 
     return Array.from({ length: days }, (_, index) => {
       const date = new Date(today);
@@ -145,182 +79,108 @@ export function RealTimeCharts() {
         );
       });
 
-      const ingresos = dayMovements
-        .filter((movement) => movement.action === "Ingreso")
-        .reduce((total, movement) => total + Number(movement.quantity ?? 0), 0);
-
-      const egresos = dayMovements
-        .filter((movement) => movement.action === "Egreso")
-        .reduce((total, movement) => total + Number(movement.quantity ?? 0), 0);
+      const sales = dayMovements.filter(
+        (movement) => movement.action === "Egreso"
+      );
 
       return {
         date: formatDay(date),
-        ingresos,
-        egresos,
-        total: ingresos + egresos,
+        ventas: sales.reduce(
+          (total, movement) => total + Number(movement.ingreso_total ?? 0),
+          0
+        ),
+        ganancia: sales.reduce(
+          (total, movement) => total + Number(movement.ganancia ?? 0),
+          0
+        ),
+        unidades: sales.reduce(
+          (total, movement) => total + Number(movement.quantity ?? 0),
+          0
+        ),
       };
     });
   }, [movements, timeFilter]);
 
-  const topSoldProductsData = useMemo(() => {
-    const productSales = new Map<
+  const periodTotals = useMemo(
+    () =>
+      dailyData.reduce(
+        (totals, day) => ({
+          ventas: totals.ventas + day.ventas,
+          ganancia: totals.ganancia + day.ganancia,
+          unidades: totals.unidades + day.unidades,
+        }),
+        { ventas: 0, ganancia: 0, unidades: 0 }
+      ),
+    [dailyData]
+  );
+
+  const topProducts = useMemo(() => {
+    const days = getDays(timeFilter);
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    from.setDate(from.getDate() - days);
+
+    const sales = new Map<
       string,
-      {
-        name: string;
-        sku: string;
-        quantity: number;
-        income: number;
-        profit: number;
-        movements: number;
-      }
+      { sku: string; name: string; quantity: number }
     >();
 
-    filteredMovements
-      .filter((movement) => movement.action === "Egreso")
+    movements
+      .filter(
+        (movement) =>
+          movement.action === "Egreso" &&
+          toDate(movement.timestamp).getTime() >= from.getTime()
+      )
       .forEach((movement) => {
-        const key = movement.productSku;
-
-        const current = productSales.get(key) ?? {
-          name: movement.productName,
+        const current = sales.get(movement.productSku) ?? {
           sku: movement.productSku,
+          name: movement.productName,
           quantity: 0,
-          income: 0,
-          profit: 0,
-          movements: 0,
         };
 
         current.quantity += Number(movement.quantity ?? 0);
-        current.income += Number(movement.ingreso_total ?? 0);
-        current.profit += Number(movement.ganancia ?? 0);
-        current.movements += 1;
-
-        productSales.set(key, current);
+        sales.set(movement.productSku, current);
       });
 
-    return Array.from(productSales.values())
+    return Array.from(sales.values())
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5)
       .map((item) => ({
         ...item,
         shortName:
-          item.name.length > 18 ? `${item.name.slice(0, 18)}...` : item.name,
+          item.name.length > 18 ? `${item.name.slice(0, 18)}…` : item.name,
       }));
-  }, [filteredMovements]);
+  }, [movements, timeFilter]);
 
-  const overallOccupationData = useMemo(() => {
-    const totalSlots = locations.length;
-
-    const occupiedSlots = locations.filter((location) =>
-      products.some((product) => product.locationId === location.id)
-    ).length;
-
-    const freeSlots = totalSlots - occupiedSlots;
-
-    return [
-      {
-        name: "Ocupados",
-        value: occupiedSlots,
-        color: "hsl(var(--slot-occupied))",
-      },
-      {
-        name: "Libres",
-        value: freeSlots,
-        color: "hsl(var(--slot-free))",
-      },
-    ];
-  }, [locations, products]);
-
-  const totalSoldPieces = topSoldProductsData.reduce(
-    (total, product) => total + product.quantity,
-    0
-  );
-
-  const totalSoldIncome = topSoldProductsData.reduce(
-    (total, product) => total + product.income,
-    0
-  );
-
-  const totalSoldProfit = topSoldProductsData.reduce(
-    (total, product) => total + product.profit,
-    0
-  );
-
-  const COLORS = {
-    occupied: "hsl(var(--slot-occupied))",
-    free: "hsl(var(--slot-free))",
-    ingresos: "hsl(var(--slot-free))",
-    egresos: "hsl(var(--slot-occupied))",
-    primary: "hsl(var(--primary))",
-    accent: "hsl(var(--accent))",
-    warning: "hsl(var(--warning))",
-    profit: "hsl(var(--profit))",
-  };
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload || !payload.length) return null;
-
-    return (
-      <div className="rounded-lg border bg-background p-3 shadow-lg">
-        <p className="mb-2 font-semibold">{label}</p>
-
-        <div className="space-y-1">
-          {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-sm">
-              <span
-                className="mr-2 inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: entry.color }}
-              />
-              {entry.name}: {entry.value}
-            </p>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const SalesTooltip = ({ active, payload }: any) => {
-    if (!active || !payload || !payload.length) return null;
-
-    const data = payload[0].payload;
-
-    return (
-      <div className="rounded-lg border bg-background p-3 shadow-lg">
-        <p className="font-semibold">{data.name}</p>
-        <p className="text-xs text-muted-foreground">SKU: {data.sku}</p>
-
-        <div className="mt-2 space-y-1 text-sm">
-          <p>Piezas vendidas: {data.quantity}</p>
-          <p>Ingreso total: {money(data.income)}</p>
-          <p>Ganancia: {money(data.profit)}</p>
-          <p>Movimientos de salida: {data.movements}</p>
-        </div>
-      </div>
-    );
+  const tooltipStyle = {
+    background: "hsl(var(--popover))",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: "12px",
+    color: "hsl(var(--popover-foreground))",
+    boxShadow: "0 12px 35px rgba(15, 23, 42, 0.12)",
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6" />
-            Análisis de Inventario en Tiempo Real
-          </h2>
+    <Card className="racknova-card overflow-hidden rounded-2xl">
+      <CardHeader className="border-b border-border/60 pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Rendimiento comercial
+            </CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ventas, utilidad y rotación en {getFilterLabel(timeFilter).toLowerCase()}.
+            </p>
+          </div>
 
-          <p className="text-sm text-muted-foreground">
-            Visualiza ocupación, movimientos y productos con mayor salida.
-          </p>
-        </div>
-
-        <div className="w-full sm:w-56">
           <Select
             value={timeFilter}
             onValueChange={(value) => setTimeFilter(value as TimeFilter)}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Periodo" />
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue />
             </SelectTrigger>
-
             <SelectContent>
               <SelectItem value="7days">Últimos 7 días</SelectItem>
               <SelectItem value="30days">Últimos 30 días</SelectItem>
@@ -328,254 +188,183 @@ export function RealTimeCharts() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </CardHeader>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChartIcon className="h-5 w-5" />
-              Ocupación General de Slots
-            </CardTitle>
-          </CardHeader>
+      <CardContent className="space-y-6 pt-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Ventas del periodo
+            </p>
+            <p className="mt-1 text-lg font-black">
+              {money(periodTotals.ventas)}
+            </p>
+          </div>
 
-          <CardContent>
-            <div className="h-80">
+          <div className="rounded-xl border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Ganancia
+            </p>
+            <p
+              className={`mt-1 text-lg font-black ${
+                periodTotals.ganancia >= 0
+                  ? "text-emerald-600"
+                  : "text-red-600"
+              }`}
+            >
+              {money(periodTotals.ganancia)}
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground">
+              Unidades vendidas
+            </p>
+            <p className="mt-1 text-lg font-black">
+              {periodTotals.unidades.toLocaleString("es-MX")}
+            </p>
+          </div>
+        </div>
+
+        <div className="h-[280px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={dailyData}
+              margin={{ top: 10, right: 8, left: 0, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient id="salesArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="5%"
+                    stopColor="hsl(var(--chart-blue))"
+                    stopOpacity={0.3}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="hsl(var(--chart-blue))"
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+                <linearGradient id="profitArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop
+                    offset="5%"
+                    stopColor="hsl(var(--chart-green))"
+                    stopOpacity={0.22}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor="hsl(var(--chart-green))"
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={axisTick}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={18}
+              />
+              <YAxis
+                tick={axisTick}
+                axisLine={false}
+                tickLine={false}
+                width={50}
+                tickFormatter={(value) =>
+                  Number(value) >= 1000
+                    ? `${Math.round(Number(value) / 1000)}k`
+                    : String(value)
+                }
+              />
+
+              <Tooltip
+                contentStyle={tooltipStyle}
+                formatter={(value: number, name: string) => [
+                  money(Number(value)),
+                  name === "ventas" ? "Ventas" : "Ganancia",
+                ]}
+              />
+
+              <Area
+                type="monotone"
+                dataKey="ventas"
+                stroke="hsl(var(--chart-blue))"
+                strokeWidth={2.5}
+                fill="url(#salesArea)"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+              <Area
+                type="monotone"
+                dataKey="ganancia"
+                stroke="hsl(var(--chart-green))"
+                strokeWidth={2}
+                fill="url(#profitArea)"
+                dot={false}
+                activeDot={{ r: 4 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="border-t border-border/60 pt-5">
+          <div className="mb-4 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <p className="text-sm font-bold">Productos más vendidos</p>
+          </div>
+
+          {topProducts.length === 0 ? (
+            <div className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">
+              No hay ventas registradas en este periodo.
+            </div>
+          ) : (
+            <div className="h-[210px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={overallOccupationData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={65}
-                    outerRadius={105}
-                    paddingAngle={4}
-                    dataKey="value"
-                  >
-                    {overallOccupationData.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-
+                <BarChart
+                  data={topProducts}
+                  layout="vertical"
+                  margin={{ top: 0, right: 20, bottom: 0, left: 8 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    horizontal={false}
+                  />
+                  <XAxis
+                    type="number"
+                    tick={axisTick}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="shortName"
+                    tick={axisTick}
+                    axisLine={false}
+                    tickLine={false}
+                    width={115}
+                  />
                   <Tooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload || !payload.length) return null;
-
-                      const data = payload[0].payload;
-                      const total = overallOccupationData.reduce(
-                        (sum, item) => sum + item.value,
-                        0
-                      );
-
-                      const percentage =
-                        total > 0 ? ((data.value / total) * 100).toFixed(1) : 0;
-
-                      return (
-                        <div className="rounded-lg border bg-background p-3 shadow-lg">
-                          <p className="font-semibold">{data.name}</p>
-                          <p className="text-sm">
-                            {data.value} slots ({percentage}%)
-                          </p>
-                        </div>
-                      );
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="mt-4 flex justify-center gap-6">
-              {overallOccupationData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <span
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm">
-                    {item.name}: {item.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Boxes className="h-5 w-5" />
-              Ocupación por Rack
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={rackOccupationData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar
-                    dataKey="occupied"
-                    name="Ocupados"
-                    stackId="rack"
-                    fill={COLORS.occupied}
-                    radius={[0, 0, 4, 4]}
+                    contentStyle={tooltipStyle}
+                    formatter={(value: number) => [
+                      `${Number(value).toLocaleString("es-MX")} uds.`,
+                      "Vendidas",
+                    ]}
                   />
                   <Bar
-                    dataKey="free"
-                    name="Libres"
-                    stackId="rack"
-                    fill={COLORS.free}
-                    radius={[4, 4, 0, 0]}
+                    dataKey="quantity"
+                    fill="hsl(var(--chart-cyan))"
+                    radius={[0, 8, 8, 0]}
+                    maxBarSize={22}
                   />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-5">
-              {rackOccupationData.map((rack) => (
-                <div
-                  key={rack.name}
-                  className="rounded-lg border bg-muted/30 p-3 text-center"
-                >
-                  <p className="text-sm font-medium">{rack.name}</p>
-                  <p className="text-lg font-bold">{rack.percentage}%</p>
-                  <p className="text-xs text-muted-foreground">
-                    {rack.occupied} ocupados
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              Movimientos por Día
-            </CardTitle>
-
-            <p className="text-sm text-muted-foreground">
-              Periodo: {getTimeFilterLabel(timeFilter)}
-            </p>
-          </CardHeader>
-
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={movementData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="ingresos"
-                    name="Piezas ingresadas"
-                    stroke={COLORS.ingresos}
-                    strokeWidth={3}
-                    dot={{ r: 3 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="egresos"
-                    name="Piezas egresadas"
-                    stroke={COLORS.egresos}
-                    strokeWidth={3}
-                    dot={{ r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="racknova-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5" />
-              Top 5 Productos por Piezas Vendidas
-            </CardTitle>
-
-            <p className="text-sm text-muted-foreground">
-              Solo considera salidas tipo Egreso en{" "}
-              {getTimeFilterLabel(timeFilter).toLowerCase()}.
-            </p>
-          </CardHeader>
-
-          <CardContent>
-            {topSoldProductsData.length === 0 ? (
-              <div className="flex h-80 items-center justify-center rounded-xl border bg-muted/30 text-center text-muted-foreground">
-                No hay ventas registradas en este periodo.
-              </div>
-            ) : (
-              <>
-                <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border bg-muted/30 p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Piezas vendidas
-                    </p>
-                    <p className="text-xl font-bold">{totalSoldPieces}</p>
-                  </div>
-
-                  <div className="rounded-xl border bg-muted/30 p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Ingreso top 5
-                    </p>
-                    <p className="text-xl font-bold">
-                      {money(totalSoldIncome)}
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border bg-muted/30 p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Ganancia top 5
-                    </p>
-                    <p
-                      className={`text-xl font-bold ${
-                        totalSoldProfit >= 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {money(totalSoldProfit)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={topSoldProductsData}
-                      layout="vertical"
-                      margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" />
-                      <YAxis
-                        type="category"
-                        dataKey="shortName"
-                        width={120}
-                        tick={{ fontSize: 12 }}
-                      />
-                      <Tooltip content={<SalesTooltip />} />
-                      <Bar
-                        dataKey="quantity"
-                        name="Piezas vendidas"
-                        fill={COLORS.primary}
-                        radius={[0, 6, 6, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
