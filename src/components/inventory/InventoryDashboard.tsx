@@ -527,7 +527,7 @@ export function InventoryDashboard() {
         value={reportPeriod}
         onValueChange={(value) => setReportPeriod(value as ReportPeriod)}
       >
-        <SelectTrigger className="h-10 w-full border-white/20 bg-white/10 text-white backdrop-blur sm:w-48 [&>svg]:text-white">
+        <SelectTrigger className="h-10 w-full border-slate-200 bg-white text-slate-900 shadow-sm sm:w-48 dark:border-white/20 dark:bg-white/10 dark:text-white dark:backdrop-blur dark:[&>svg]:text-white">
           <SelectValue placeholder="Periodo" />
         </SelectTrigger>
         <SelectContent>
@@ -541,7 +541,7 @@ export function InventoryDashboard() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button className="h-10 border border-white/20 bg-white text-slate-950 hover:bg-white/90">
+          <Button className="h-10 border border-slate-200 bg-slate-950 text-white shadow-sm hover:bg-slate-800 dark:border-white/20 dark:bg-white dark:text-slate-950 dark:hover:bg-white/90">
             <Download className="mr-2 h-4 w-4" />
             Reporte maestro
             <ChevronDown className="ml-2 h-4 w-4" />
@@ -563,25 +563,25 @@ export function InventoryDashboard() {
 
   return (
     <div className="space-y-6 pb-10">
-      <section className="relative overflow-hidden rounded-[28px] border border-slate-800/10 bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 px-5 py-6 text-white shadow-2xl shadow-blue-950/15 sm:px-7 lg:px-9 lg:py-8">
-        <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl" />
+      <section className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-white px-5 py-6 text-slate-950 shadow-xl shadow-slate-200/40 transition-colors sm:px-7 lg:px-9 lg:py-8 dark:border-slate-800/10 dark:bg-gradient-to-br dark:from-slate-950 dark:via-blue-950 dark:to-slate-900 dark:text-white dark:shadow-2xl dark:shadow-blue-950/15">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-cyan-400/5 blur-3xl dark:bg-cyan-400/10" />
+        <div className="pointer-events-none absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-blue-500/5 blur-3xl dark:bg-blue-500/15" />
 
         <div className="relative grid gap-7 xl:grid-cols-[1.4fr_0.6fr] xl:items-end">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-100">
+              <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700 dark:border-cyan-300/20 dark:bg-cyan-300/10 dark:text-cyan-100">
                 <Sparkles className="h-3.5 w-3.5" />
                 Centro operativo RackNova
               </span>
 
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">
+              <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-200">
                 <CircleDot className="h-3 w-3 text-emerald-400" />
                 Datos en tiempo real
               </span>
             </div>
 
-            <p className="text-sm font-medium text-cyan-100/90">
+            <p className="text-sm font-medium text-cyan-700 dark:text-cyan-100/90">
               {getGreeting()}, {userName}
             </p>
 
@@ -589,13 +589,13 @@ export function InventoryDashboard() {
               Tu operación, clara y bajo control.
             </h1>
 
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base dark:text-slate-300">
               Inventario, ventas, alertas y estado del sistema en una sola vista.
               El Dashboard ahora funciona como centro de monitoreo y localización,
               sin mezclar altas ni salidas de inventario.
             </p>
 
-            <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-slate-300">
+            <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-300">
               <span>
                 {now.toLocaleDateString("es-MX", {
                   weekday: "long",
@@ -603,7 +603,7 @@ export function InventoryDashboard() {
                   month: "long",
                 })}
               </span>
-              <span className="h-1 w-1 rounded-full bg-slate-500" />
+              <span className="h-1 w-1 rounded-full bg-slate-400 dark:bg-slate-500" />
               <span>Reporte: {getReportPeriodLabel(reportPeriod)}</span>
             </div>
           </div>
@@ -614,7 +614,7 @@ export function InventoryDashboard() {
             <div className="grid w-full gap-2 sm:grid-cols-3 xl:max-w-xl">
               <Button
                 variant="outline"
-                className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                className="border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 dark:hover:text-white"
                 onClick={() => navigate("/products")}
               >
                 <Package className="mr-2 h-4 w-4" />
@@ -625,7 +625,7 @@ export function InventoryDashboard() {
                 <>
                   <Button
                     variant="outline"
-                    className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+                    className="border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50 hover:text-slate-950 dark:border-white/15 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 dark:hover:text-white"
                     onClick={() => navigate("/pos")}
                   >
                     <ShoppingCart className="mr-2 h-4 w-4" />
@@ -633,7 +633,7 @@ export function InventoryDashboard() {
                   </Button>
 
                   <Button
-                    className="bg-cyan-400 text-slate-950 hover:bg-cyan-300"
+                    className="bg-cyan-500 text-slate-950 shadow-sm hover:bg-cyan-400 dark:bg-cyan-400 dark:hover:bg-cyan-300"
                     onClick={() => navigate("/add")}
                   >
                     <Plus className="mr-2 h-4 w-4" />
