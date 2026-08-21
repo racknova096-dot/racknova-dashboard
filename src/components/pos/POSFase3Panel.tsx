@@ -127,7 +127,7 @@ const emitInventoryUpdated = () => {
 };
 
 export default function POSFase3Panel() {
-  const [tab, setTab] = useState<TabKey>("venta");
+  const [tab, setTab] = useState<TabKey>("clientes");
   const role = (localStorage.getItem("rol") || "viewer").toLowerCase();
   const isAdmin = role === "admin";
 
@@ -160,12 +160,12 @@ export default function POSFase3Panel() {
 
   return (
     <section className="space-y-4">
-      <Card className="border-primary/20">
+      <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/30 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none">
         <CardHeader className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <BadgeDollarSign className="h-5 w-5" />
-              POS comercial — Fase 3
+              Herramientas comerciales
             </CardTitle>
             <Button variant="outline" size="sm" onClick={() => void loadBase()} disabled={loadingBase}>
               {loadingBase ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}

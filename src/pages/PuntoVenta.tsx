@@ -85,6 +85,7 @@ type CartItem = POSProducto & {
 
 type MetodoPago = "efectivo" | "tarjeta" | "transferencia" | "mixto";
 type MetodoReembolso = "efectivo" | "tarjeta" | "transferencia";
+type POSWorkspacePanel = "sale" | "cash" | "history" | "tools";
 
 const round2 = (value: number) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -149,6 +150,7 @@ const emitInventoryUpdated = (source: string) => {
   );
 };
 
+// RACKNOVA_POS_SIMPLE_PRO_V5_1
 export default function PuntoVenta() {
   const [estado, setEstado] = useState<POSEstado | null>(null);
   const [loadingState, setLoadingState] = useState(true);
@@ -217,6 +219,7 @@ export default function PuntoVenta() {
   const searchRef = useRef<HTMLInputElement>(null);
   const role = getRole();
   const isAdmin = role === "admin";
+  const [workspacePanel, setWorkspacePanel] = useState<POSWorkspacePanel>("sale");
 
   const loadState = useCallback(async () => {
     setLoadingState(true);
@@ -1910,7 +1913,18 @@ export default function PuntoVenta() {
               Promociones, mayoreo y menudeo, clientes y crédito, y reporte diario están disponibles sin abrir una caja.
             </p>
           </div>
+
+      {workspacePanel === "tools" && (
+        <section className="space-y-3">
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <h2 className="text-lg font-bold text-slate-900 dark:text-white">Herramientas comerciales</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Funciones avanzadas disponibles sin saturar la pantalla principal de venta.
+            </p>
+          </div>
           <POSFase3Panel />
+        </section>
+      )}
         </section>
 {renderCashSummary()}
       </main>
@@ -1918,7 +1932,7 @@ export default function PuntoVenta() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-6">
+    <main className="mx-auto max-w-[1500px] space-y-5 p-4 md:p-6">
       <section className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="flex items-center gap-3 text-3xl font-black tracking-tight">
@@ -1943,7 +1957,79 @@ export default function PuntoVenta() {
               Devoluciones
             </Button>
           )}
+
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-1.5 dark:border-slate-800 dark:bg-slate-900/60">
+            <Button
+              type="button"
+              size="sm"
+              variant={workspacePanel === "sale" ? "default" : "ghost"}
+              className="rounded-xl"
+              onClick={() => {
+                setWorkspacePanel("sale");
+                window.setTimeout(() => searchRef.current?.focus(), 50);
+              }}
+            >
+              <ShoppingCart className="mr-2 h-4 w-4" />
+              Venta
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={workspacePanel === "cash" ? "default" : "ghost"}
+              className="rounded-xl"
+              onClick={() => setWorkspacePanel("cash")}
+            >
+              <CircleDollarSign className="mr-2 h-4 w-4" />
+              Caja
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={workspacePanel === "history" ? "default" : "ghost"}
+              className="rounded-xl"
+              onClick={() => setWorkspacePanel("history")}
+            >
+              <History className="mr-2 h-4 w-4" />
+              Historial
+            </Button>
+
+            <Button
+              type="button"
+              size="sm"
+              variant={workspacePanel === "tools" ? "default" : "ghost"}
+              className="rounded-xl"
+              onClick={() => setWorkspacePanel("tools")}
+            >
+              <Boxes className="mr-2 h-4 w-4" />
+              Herramientas
+            </Button>
+          </div>
           {isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}
+        </div>
+      </section>
+
+
+      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+              Área de trabajo
+            </p>
+            <p className="mt-1 font-semibold text-slate-900 dark:text-white">
+              {workspacePanel === "sale" && "Venta rápida"}
+              {workspacePanel === "cash" && "Control de caja"}
+              {workspacePanel === "history" && "Historial y devoluciones"}
+              {workspacePanel === "tools" && "Herramientas comerciales"}
+            </p>
+          </div>
+          <p className="max-w-xl text-sm text-slate-500 dark:text-slate-400">
+            {workspacePanel === "sale" && "Escanea, agrega productos y cobra. Todo lo demás permanece fuera del flujo principal."}
+            {workspacePanel === "cash" && "Registra movimientos y realiza el cierre sin llenar la pantalla de venta."}
+            {workspacePanel === "history" && "Consulta ventas, reimprime, cancela o inicia devoluciones cuando corresponda."}
+            {workspacePanel === "tools" && "Clientes, crédito, promociones, precios, fracciones, reportes y venta avanzada."}
+          </p>
         </div>
       </section>
 
@@ -2101,7 +2187,8 @@ export default function PuntoVenta() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-1 xl:row-start-2">
+          {workspacePanel === "cash" && (
+<Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-1 xl:row-start-2">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2"><CircleDollarSign className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Movimiento de efectivo</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <select className="h-10 w-full rounded-md border bg-background px-3" value={cashType} onChange={(event) => setCashType(event.target.value)}><option value="ENTRADA">Entrada</option><option value="RETIRO">Retiro</option><option value="GASTO">Gasto</option><option value="DEPOSITO">Depósito / entrega</option>{isAdmin && <option value="AJUSTE_ENTRADA">Ajuste de entrada</option>}{isAdmin && <option value="AJUSTE_SALIDA">Ajuste de salida</option>}</select>
@@ -2110,11 +2197,14 @@ export default function PuntoVenta() {
               <Button variant="outline" className="w-full" disabled={cashSaving} onClick={saveCashMovement}>{cashSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Registrar</Button>
             </CardContent>
           </Card>
+)}
 
-          <Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-2 xl:row-start-2">
+          {workspacePanel === "cash" && (
+<Card className="rounded-3xl border-slate-200 bg-white shadow-lg shadow-slate-200/35 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none xl:col-start-2 xl:row-start-2">
             <CardHeader className="border-b border-slate-100 pb-5 dark:border-slate-800"><CardTitle className="flex items-center gap-2"><WalletCards className="h-5 w-5 text-cyan-600 dark:text-cyan-300" /> Cerrar caja</CardTitle></CardHeader>
             <CardContent className="space-y-3"><p className="text-sm text-muted-foreground">Efectivo esperado: <strong>{money(sesion.efectivo_esperado)}</strong></p><Input type="number" min="0" step="0.01" placeholder="Efectivo contado" value={cashCounted} onChange={(event) => setCashCounted(event.target.value)} /><textarea className="min-h-20 w-full rounded-md border bg-background p-3 text-sm" placeholder="Observaciones opcionales" value={closeNotes} onChange={(event) => setCloseNotes(event.target.value)} /><Button variant="destructive" className="h-12 w-full rounded-xl text-base font-semibold" disabled={closingCash} onClick={closeCash}>{closingCash && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Cerrar turno</Button></CardContent>
           </Card>
+)}
         </div>
       </section>
 
@@ -2624,12 +2714,14 @@ export default function PuntoVenta() {
       </div>
       <POSFase3Panel />
 
-      <Card>
+      {workspacePanel === "cash" && (
+<Card>
         <CardHeader><CardTitle>Movimientos de efectivo del turno</CardTitle></CardHeader>
         <CardContent>
           {sesion.movimientos_efectivo.length === 0 ? <p className="text-sm text-muted-foreground">No hay movimientos manuales.</p> : <div className="space-y-2">{sesion.movimientos_efectivo.map((movement) => <div key={movement.id_movimiento} className="flex items-center justify-between rounded-lg border p-3"><div><p className="font-semibold">{movement.tipo}</p><p className="text-sm text-muted-foreground">{movement.motivo} · {formatDate(movement.fecha)}</p></div><strong>{money(movement.monto)}</strong></div>)}</div>}
         </CardContent>
       </Card>
+)}
       {renderCashSummary()}
     </main>
   );
