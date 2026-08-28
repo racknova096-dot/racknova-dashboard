@@ -61,7 +61,7 @@ export default function Login() {
       localStorage.setItem("nombre", user?.nombre || user?.name || user?.email || username);
       localStorage.setItem("rol", role);
 
-     window.location.href = "/";
+     window.location.href = import.meta.env.BASE_URL;
     } catch (error) {
       console.error("Error en login:", error);
       setError("No se pudo conectar con el servidor");
