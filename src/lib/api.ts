@@ -7,7 +7,7 @@ const clearSessionAndRedirect = () => {
   localStorage.removeItem("rol");
 
   if (window.location.pathname !== "/login") {
-    window.location.href = "/login";
+    window.location.href = `${import.meta.env.BASE_URL}login`;
   }
 };
 

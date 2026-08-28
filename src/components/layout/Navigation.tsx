@@ -179,7 +179,7 @@ export function Navigation() {
     localStorage.removeItem("usuario");
     localStorage.removeItem("nombre");
     localStorage.removeItem("rol");
-    window.location.href = "/login";
+    window.location.href = `${import.meta.env.BASE_URL}login`;
   };
 
   return (
