@@ -5,6 +5,22 @@ const LIVE_REFRESH_EVENT = "racknova:inventory-updated";
 
 const isNativeDashboard = () => import.meta.env.BASE_URL === "/ui/";
 
+const refreshVisiblePOS = () => {
+  const currentPath = window.location.pathname.replace(/\/+$/, "");
+  if (!currentPath.endsWith("/pos")) {
+    return;
+  }
+
+  const refreshButton = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("button"),
+  ).find((button) => {
+    const label = (button.textContent || "").replace(/\s+/g, " ").trim();
+    return !button.disabled && label === "Actualizar";
+  });
+
+  refreshButton?.click();
+};
+
 export function NativeLiveDataRefresh() {
   useEffect(() => {
     if (!isNativeDashboard()) {
@@ -32,6 +48,11 @@ export function NativeLiveDataRefresh() {
           },
         }),
       );
+
+      // Punto de Venta mantiene su propio estado para caja e historial.
+      // Reutilizamos su acción oficial "Actualizar" para reflejar ventas
+      // sincronizadas desde Cloud sin tocar carrito, cobro o formulario activo.
+      refreshVisiblePOS();
     };
 
     const onVisibilityChange = () => {
