@@ -1,0 +1,40 @@
+name: Repair Premium POS Workflow
+
+on:
+  push:
+    branches:
+      - feat/premium-pos-redesign
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/premium-pos-redesign
+          fetch-depth: 0
+
+      - name: Repair condition and remove helper
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/patch-premium-pos.yml')
+          text = path.read_text(encoding='utf-8')
+          old = "    if: github.event.head_commit.message != 'feat: redesign POS with premium visual workspace'\n"
+          new = "    if: ${{ github.event.head_commit.message != 'feat: redesign POS with premium visual workspace' }}\n"
+          if old not in text:
+              raise SystemExit('workflow condition marker not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git config user.name "racknova096-dot"
+          git config user.email "racknova096@gmail.com"
+          git rm .github/workflows/fix-premium-workflow.yml
+          git add .github/workflows/patch-premium-pos.yml
+          git diff --cached --check
+          git commit -m "test: fix premium POS workflow condition"
+          git push origin HEAD:feat/premium-pos-redesign
