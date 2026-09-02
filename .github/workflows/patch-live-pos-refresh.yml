@@ -1,0 +1,62 @@
+name: Patch Native POS live refresh
+
+on:
+  push:
+    branches:
+      - fix/live-pos-auto-refresh
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'fix: refresh POS sales history automatically'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: fix/live-pos-auto-refresh
+          fetch-depth: 0
+
+      - name: Patch PuntoVenta
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/PuntoVenta.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          if 'RACKNOVA_POS_LIVE_SALES_REFRESH' in text:
+              print('POS live refresh already present')
+          else:
+              marker = '''  useEffect(() => {\n    if (estado?.habilitado) {\n      void refreshPOS();\n    }\n  }, [estado?.habilitado, refreshPOS]);\n'''
+              addition = marker + '''\n  // RACKNOVA_POS_LIVE_SALES_REFRESH\n  // Las ventas que llegan por Sync Cloud -> Local se reflejan sin F5.\n  // Solo actualiza el historial: no toca carrito, cobro ni formulario activo.\n  useEffect(() => {\n    if (!estado?.habilitado) return;\n\n    const refreshSyncedSales = () => {\n      if (document.visibilityState !== "visible") return;\n\n      void listarVentasPOS(50)\n        .then(setVentas)\n        .catch(() => undefined);\n    };\n\n    const onVisibilityChange = () => {\n      if (document.visibilityState === "visible") {\n        refreshSyncedSales();\n      }\n    };\n\n    const timer = window.setInterval(refreshSyncedSales, 8_000);\n    document.addEventListener("visibilitychange", onVisibilityChange);\n\n    return () => {\n      window.clearInterval(timer);\n      document.removeEventListener("visibilitychange", onVisibilityChange);\n    };\n  }, [estado?.habilitado]);\n'''
+
+              count = text.count(marker)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one refreshPOS effect marker, found {count}')
+
+              text = text.replace(marker, addition, 1)
+              path.write_text(text, encoding='utf-8')
+              print('PuntoVenta patched')
+          PY
+
+          git diff --check
+          git diff -- src/pages/PuntoVenta.tsx
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet -- src/pages/PuntoVenta.tsx; then
+            echo "No source changes to commit"
+            exit 0
+          fi
+
+          git config user.name "racknova096-dot"
+          git config user.email "racknova096@gmail.com"
+          git add src/pages/PuntoVenta.tsx
+          git commit -m "fix: refresh POS sales history automatically"
+          git push origin HEAD:fix/live-pos-auto-refresh
