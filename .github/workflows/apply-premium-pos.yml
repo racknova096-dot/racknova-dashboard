@@ -39,7 +39,7 @@ jobs:
       - name: Validate source diff
         shell: bash
         run: |
-          git checkout -- bun.lock
+          rm -f bun.lock
           git diff --check
           git diff --stat
 
