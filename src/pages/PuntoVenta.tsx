@@ -9,6 +9,7 @@ import {
 import {
   Banknote,
   Barcode,
+  Camera,
   Boxes,
   CircleDollarSign,
   CreditCard,
@@ -35,6 +36,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { RackNovaScannerDialog } from "@/components/scanner/RackNovaScannerDialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -43,7 +45,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useRackNovaScanner } from "@/hooks/useRackNovaScanner";
 import POSFase3Panel from "@/components/pos/POSFase3Panel";
+import type { RackNovaScanResult } from "@/lib/racknovaScan";
 import {
   abrirCajaPOS,
   buscarProductosPOS,
@@ -230,6 +234,8 @@ export default function PuntoVenta() {
   const role = getRole();
   const isAdmin = role === "admin";
   const [workspacePanel, setWorkspacePanel] = useState<POSWorkspacePanel>("sale");
+  const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
+  const [lastScanSource, setLastScanSource] = useState<RackNovaScanResult["source"] | null>(null);
 
   const loadState = useCallback(async () => {
     setLoadingState(true);
@@ -1420,20 +1426,31 @@ export default function PuntoVenta() {
     window.setTimeout(() => searchRef.current?.focus(), 50);
   };
 
-  const search = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const value = query.trim();
+  const searchByValue = async (
+    rawValue: string,
+    source: RackNovaScanResult["source"] = "manual"
+  ) => {
+    const value = rawValue.trim();
     if (!value) return;
     if (!sesion) {
       toast.error("Abre una caja antes de buscar productos.");
       return;
     }
+
+    if (source !== "manual") {
+      setLastScanSource(source);
+    }
+    setQuery(value);
     setSearching(true);
     try {
       const products = await buscarProductosPOS(value);
       if (products.length === 0) {
         setResults([]);
-        toast.error("Producto no encontrado.");
+        toast.error(
+          source === "manual"
+            ? "Producto no encontrado."
+            : `El código ${value} no corresponde a un producto registrado.`
+        );
         return;
       }
       const exact = products.find(
@@ -1454,6 +1471,33 @@ export default function PuntoVenta() {
       setSearching(false);
     }
   };
+
+  const search = async (event?: FormEvent) => {
+    event?.preventDefault();
+    await searchByValue(query, "manual");
+  };
+
+  const handleRackNovaScan = (result: RackNovaScanResult) => {
+    if (result.kind === "location") {
+      toast.error(
+        "Escaneaste una ubicación de RackNova. En Venta se espera el código de un producto."
+      );
+      return;
+    }
+    if (result.kind !== "product") {
+      toast.error("No se pudo reconocer el código escaneado.");
+      return;
+    }
+    void searchByValue(result.code, result.source);
+  };
+
+  useRackNovaScanner({
+    enabled:
+      Boolean(sesion?.estado === "ABIERTA") &&
+      workspacePanel === "sale" &&
+      !cameraScannerOpen,
+    onScan: handleRackNovaScan,
+  });
 
   const updateQuantity = (sku: string, direction: -1 | 1) => {
     setCart((current) =>
@@ -1981,9 +2025,52 @@ export default function PuntoVenta() {
               </div>
               <form onSubmit={search} className="relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                <Input ref={searchRef} autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar productos..." autoComplete="off" className="h-14 rounded-2xl border-border/70 bg-background pl-12 pr-16 text-base shadow-none" />
-                <Button type="submit" size="icon" disabled={searching} className="absolute right-1.5 top-1/2 h-11 w-11 -translate-y-1/2 rounded-xl" aria-label="Buscar o escanear">{searching ? <Loader2 className="h-5 w-5 animate-spin" /> : <ScanLine className="h-5 w-5" />}</Button>
+                <Input
+                  ref={searchRef}
+                  autoFocus
+                  data-racknova-scan-input="true"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Buscar o escanear producto..."
+                  autoComplete="off"
+                  className="h-14 rounded-2xl border-border/70 bg-background pl-12 pr-28 text-base shadow-none"
+                />
+                <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 gap-1.5">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    className="h-11 w-11 rounded-xl bg-background"
+                    onClick={() => setCameraScannerOpen(true)}
+                    aria-label="Escanear con cámara"
+                    title="Escanear con cámara"
+                  >
+                    <Camera className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={searching}
+                    className="h-11 w-11 rounded-xl"
+                    aria-label="Buscar producto"
+                  >
+                    {searching ? <Loader2 className="h-5 w-5 animate-spin" /> : <Search className="h-5 w-5" />}
+                  </Button>
+                </div>
               </form>
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] font-semibold text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />
+                  <ScanLine className="h-3.5 w-3.5" /> Pistola USB / Bluetooth lista
+                </span>
+                <span>
+                  {lastScanSource === "camera"
+                    ? "Última lectura: cámara"
+                    : lastScanSource === "hardware"
+                      ? "Última lectura: pistola"
+                      : "Puedes escanear aunque el buscador no tenga el foco"}
+                </span>
+              </div>
             </div>
 
             <div className="rn-pos-surface min-h-[510px] p-4 md:p-5">
@@ -2050,6 +2137,14 @@ export default function PuntoVenta() {
       )}
 
       {workspacePanel === "tools" && <section className="space-y-4"><div className="rn-pos-surface flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-bold text-primary">Administración comercial</p><h2 className="mt-1 text-2xl font-black">Herramientas</h2><p className="mt-1 text-sm text-muted-foreground">Clientes, crédito, promociones, mayoreo, precios y reportes fuera del flujo principal de cobro.</p></div>{isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}</div><POSFase3Panel /></section>}
+
+      <RackNovaScannerDialog
+        open={cameraScannerOpen}
+        onOpenChange={setCameraScannerOpen}
+        onScan={handleRackNovaScan}
+        title="Escanear producto"
+        description="Usa la cámara para leer el código de barras o QR del producto."
+      />
 
       {ticket && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setTicket(null); }}><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-white/10 bg-background shadow-2xl"><div className="flex items-start justify-between border-b border-border/60 p-5"><div><p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">Ticket de venta</p><h2 className="mt-1 text-2xl font-black">{ticket.folio}</h2><p className="text-sm text-muted-foreground">{formatDate(ticket.fecha)} · {ticket.usuario}</p></div><Button size="icon" variant="ghost" onClick={() => setTicket(null)}><XCircle className="h-5 w-5" /></Button></div><div className="space-y-4 p-5"><div className="divide-y divide-border/60 rounded-2xl border border-border/60">{ticket.items.map((item) => <div key={item.id_detalle} className="flex items-center justify-between gap-4 p-3.5"><div><p className="font-bold">{item.nombre}</p><p className="text-xs text-muted-foreground">{mostrarCantidad(item.cantidad)} {unidadVenta(item)} · {item.sku}</p></div><strong>{money(item.subtotal)}</strong></div>)}</div><div className="rounded-2xl bg-secondary/45 p-4"><div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal</span><span>{money(ticket.subtotal)}</span></div><div className="mt-2 flex justify-between text-sm text-muted-foreground"><span>Descuentos</span><span>-{money(ticket.descuento_total)}</span></div><div className="mt-3 flex justify-between border-t border-border/60 pt-3 text-xl"><span className="font-bold">Total</span><strong>{money(ticket.total)}</strong></div></div><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={() => setTicket(null)}>Cerrar</Button><Button onClick={() => printTicket(ticket)}><Printer className="mr-2 h-4 w-4" />Imprimir ticket</Button></div></div></div></div>}
 

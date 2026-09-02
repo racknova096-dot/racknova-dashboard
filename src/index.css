@@ -429,3 +429,31 @@
 }
 @media (max-width: 1279px) { .rn-pos-sale-panel { position: static; } }
 @media (prefers-reduced-motion: reduce) { .rn-pos-product-card, .rn-pos-cart-item { transition: none; animation: none; } }
+
+
+/* RACKNOVA_SCAN_ENGINE_V1 */
+#racknova-camera-reader {
+  border: 0 !important;
+  color: hsl(var(--foreground));
+}
+#racknova-camera-reader > div:first-child {
+  border: 0 !important;
+}
+#racknova-camera-reader video {
+  border-radius: 14px;
+  object-fit: cover;
+}
+#racknova-camera-reader button,
+#racknova-camera-reader select {
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  padding: 8px 12px;
+  font-weight: 700;
+}
+#racknova-camera-reader a {
+  color: hsl(var(--primary));
+  font-weight: 700;
+}
