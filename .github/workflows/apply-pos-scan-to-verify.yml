@@ -1,0 +1,57 @@
+name: Apply POS Scan-to-Verify
+
+on:
+  push:
+    branches:
+      - feat/pos-scan-to-verify
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/pos-scan-to-verify
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Apply Scan-to-Verify patch
+        run: python scripts/patch-pos-scan-to-verify.py
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build Dashboard
+        run: bun run build
+
+      - name: Validate Scan-to-Verify wiring
+        run: |
+          rm -f bun.lock
+          grep -q 'RACKNOVA_POS_SCAN_TO_VERIFY_V1' src/pages/PuntoVenta.tsx
+          grep -q 'verificationStatus' src/pages/PuntoVenta.tsx
+          grep -q 'pendingVerificationCount' src/pages/PuntoVenta.tsx
+          grep -q 'Verificación física pendiente' src/pages/PuntoVenta.tsx
+          git diff --check
+          git diff --stat
+
+      - name: Commit functional source
+        run: |
+          if git diff --quiet -- src/pages/PuntoVenta.tsx; then
+            echo "No functional source changes to commit"
+            exit 0
+          fi
+          git config user.name "racknova096-dot"
+          git config user.email "racknova096@gmail.com"
+          git add src/pages/PuntoVenta.tsx
+          git diff --cached --check
+          git commit -m "feat: require physical scan verification before POS checkout"
+          git push origin HEAD:feat/pos-scan-to-verify
