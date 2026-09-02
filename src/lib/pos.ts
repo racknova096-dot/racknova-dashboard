@@ -11,6 +11,10 @@ export type POSProducto = {
   id_producto: number;
   sku: string;
   codigo_barras?: string | null;
+  imagen_url?: string | null;
+  image_url?: string | null;
+  foto_url?: string | null;
+  imagen?: string | null;
   nombre: string;
   descripcion?: string | null;
   cantidad: number;

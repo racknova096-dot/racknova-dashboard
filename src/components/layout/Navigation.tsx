@@ -183,12 +183,12 @@ export function Navigation() {
   };
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border/70 bg-background/90 backdrop-blur-xl">
+    <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_1px_0_hsl(222_47%_11%/0.025)] backdrop-blur-2xl">
       <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6">
         <div className="flex items-center justify-between gap-3">
           <Link to="/" className="group flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-primary shadow-lg transition-transform group-hover:scale-105">
-              <Package className="h-6 w-6 text-white" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 shadow-lg shadow-slate-950/15 transition-transform group-hover:scale-[1.03] dark:bg-white">
+              <Package className="h-6 w-6 text-white dark:text-slate-950" />
             </div>
             <div className="hidden min-w-0 sm:block">
               <h1 className="truncate text-xl font-black tracking-tight racknova-page-title">RackNova</h1>
@@ -286,8 +286,8 @@ function NavButton({ item, active }: { item: NavItem; active: boolean }) {
         size="sm"
         className={
           active
-            ? `bg-gradient-to-r ${item.color} text-white shadow-md hover:opacity-95`
-            : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+            ? "bg-primary text-primary-foreground shadow-md shadow-primary/15 hover:bg-primary/90"
+            : "text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
         }
       >
         <Icon className="mr-2 h-4 w-4" />
