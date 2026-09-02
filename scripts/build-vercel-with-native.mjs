@@ -14,6 +14,7 @@ const feedFiles = path.join(feedRoot, "files");
 const configPath = path.join(root, "src", "config.ts");
 const appPath = path.join(root, "src", "App.tsx");
 const cloudBackendLiteral = "racknova-backend-1.onrender.com";
+const nativeReloadMarker = "/racknova-native/dashboard-update/status";
 
 function runVite(args) {
   const result = spawnSync(process.execPath, [viteCli, ...args], {
@@ -89,6 +90,7 @@ function validateNativeBundle() {
   const textFiles = walkFiles(nativeOut).filter((item) =>
     /\.(?:html|js|css|json|txt|map)$/i.test(item.relative),
   );
+  let autoReloadPresent = false;
 
   for (const item of textFiles) {
     const content = fs.readFileSync(item.absolute, "utf8");
@@ -97,6 +99,15 @@ function validateNativeBundle() {
         `El bundle Native contiene el backend Cloud en ${item.relative}. Debe usar window.location.origin.`,
       );
     }
+    if (content.includes(nativeReloadMarker)) {
+      autoReloadPresent = true;
+    }
+  }
+
+  if (!autoReloadPresent) {
+    throw new Error(
+      "El bundle Native no contiene el monitor de actualización automática del Dashboard.",
+    );
   }
 }
 
