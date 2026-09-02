@@ -13,6 +13,7 @@ const feedRoot = path.join(cloudOut, "native-dashboard");
 const feedFiles = path.join(feedRoot, "files");
 const configPath = path.join(root, "src", "config.ts");
 const appPath = path.join(root, "src", "App.tsx");
+const cloudBackendLiteral = "racknova-backend-1.onrender.com";
 
 function runVite(args) {
   const result = spawnSync(process.execPath, [viteCli, ...args], {
@@ -63,8 +64,7 @@ function patchNativeSources(configOriginal, appOriginal) {
   const configPattern = /export\s+const\s+API_URL\s*=\s*.*?;/s;
   const configReplacement = [
     "export const API_URL =",
-    "  import.meta.env.VITE_API_URL ||",
-    '  (typeof window !== "undefined" ? window.location.origin : "");',
+    '  typeof window !== "undefined" ? window.location.origin : "";',
   ].join("\n");
   const configPatched = configOriginal.replace(configPattern, configReplacement);
   if (configPatched === configOriginal) {
@@ -85,6 +85,21 @@ function patchNativeSources(configOriginal, appOriginal) {
   fs.writeFileSync(appPath, appPatched, "utf8");
 }
 
+function validateNativeBundle() {
+  const textFiles = walkFiles(nativeOut).filter((item) =>
+    /\.(?:html|js|css|json|txt|map)$/i.test(item.relative),
+  );
+
+  for (const item of textFiles) {
+    const content = fs.readFileSync(item.absolute, "utf8");
+    if (content.includes(cloudBackendLiteral)) {
+      throw new Error(
+        `El bundle Native contiene el backend Cloud en ${item.relative}. Debe usar window.location.origin.`,
+      );
+    }
+  }
+}
+
 console.log("=== RackNova Cloud Dashboard ===");
 runVite(["build"]);
 
@@ -101,6 +116,7 @@ try {
     `--outDir=${nativeOut}`,
     "--emptyOutDir",
   ]);
+  validateNativeBundle();
 } finally {
   fs.writeFileSync(configPath, configOriginal, "utf8");
   fs.writeFileSync(appPath, appOriginal, "utf8");
