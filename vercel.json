@@ -1,4 +1,5 @@
 {
+  "buildCommand": "bun run build:vercel",
   "rewrites": [
     { "source": "/(.*)", "destination": "/" }
   ]
