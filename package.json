@@ -75,7 +75,7 @@
   "devDependencies": {
     "jsbarcode": "^3.11.6",
     "@eslint/js": "^9.32.0",
-    "@tailwindcss/typography": "^1.5.16",
+    "@tailwindcss/typography": "^0.5.16",
     "@types/file-saver": "^2.0.7",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
