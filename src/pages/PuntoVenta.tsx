@@ -10,6 +10,8 @@ import {
   Banknote,
   Barcode,
   Camera,
+  CheckCircle2,
+  CircleAlert,
   Boxes,
   CircleDollarSign,
   CreditCard,
@@ -83,11 +85,17 @@ import type {
   POSVentaResumen,
 } from "@/lib/pos";
 
+type CartVerificationStatus = "pending" | "verified";
+
 type CartItem = POSProducto & {
   cantidadVenta: number;
   cantidadInput: string;
   descuentoPorcentaje: number;
   descuentoInput: string;
+  verificationStatus: CartVerificationStatus;
+  verifiedCode: string | null;
+  verifiedAt: number | null;
+  verifiedSource: RackNovaScanResult["source"] | null;
 };
 
 type MetodoPago = "efectivo" | "tarjeta" | "transferencia" | "mixto";
@@ -162,6 +170,20 @@ const emitInventoryUpdated = (source: string) => {
       detail: { source, at: Date.now() },
     })
   );
+};
+
+// RACKNOVA_POS_SCAN_TO_VERIFY_V1
+const normalizeProductIdentifier = (value?: string | null) =>
+  String(value ?? "").trim().toLowerCase();
+
+const productMatchesScan = (product: POSProducto, code: string) => {
+  const normalizedCode = normalizeProductIdentifier(code);
+  if (!normalizedCode) return false;
+
+  return [product.codigo_barras, product.sku]
+    .map(normalizeProductIdentifier)
+    .filter(Boolean)
+    .includes(normalizedCode);
 };
 
 // RACKNOVA_POS_SIMPLE_PRO_V5_1
@@ -490,6 +512,12 @@ export default function PuntoVenta() {
       total: round2(quote.total),
     };
   }, [cart.length, localTotals, quote]);
+
+  const pendingVerificationCount = useMemo(
+    () => cart.filter((item) => item.verificationStatus !== "verified").length,
+    [cart]
+  );
+  const verifiedProductCount = cart.length - pendingVerificationCount;
 
   const change = useMemo(() => {
     const received = Number(efectivoRecibido || 0);
@@ -1368,7 +1396,10 @@ export default function PuntoVenta() {
     );
   };
 
-  const addProduct = (product: POSProducto) => {
+  const addProduct = (
+    product: POSProducto,
+    options?: { verified?: boolean; scan?: RackNovaScanResult | null }
+  ) => {
     if (!sesion) {
       toast.error("Abre una caja antes de vender.");
       return;
@@ -1376,6 +1407,8 @@ export default function PuntoVenta() {
 
     const available = cantidadDisponibleVenta(product);
     const step = pasoVenta(product);
+    const verified = Boolean(options?.verified);
+    const scan = options?.scan ?? null;
 
     if (available <= 0) {
       toast.error(`${product.nombre} no tiene existencias.`);
@@ -1403,6 +1436,15 @@ export default function PuntoVenta() {
                 ...row,
                 cantidadVenta: next,
                 cantidadInput: String(next),
+                verificationStatus:
+                  verified || row.verificationStatus === "verified"
+                    ? "verified"
+                    : "pending",
+                verifiedCode: verified
+                  ? scan?.code ?? product.codigo_barras ?? product.sku
+                  : row.verifiedCode,
+                verifiedAt: verified ? scan?.scannedAt ?? Date.now() : row.verifiedAt,
+                verifiedSource: verified ? scan?.source ?? null : row.verifiedSource,
               }
             : row
         );
@@ -1417,6 +1459,12 @@ export default function PuntoVenta() {
           cantidadInput: String(Math.max(initial, step)),
           descuentoPorcentaje: 0,
           descuentoInput: "",
+          verificationStatus: verified ? "verified" : "pending",
+          verifiedCode: verified
+            ? scan?.code ?? product.codigo_barras ?? product.sku
+            : null,
+          verifiedAt: verified ? scan?.scannedAt ?? Date.now() : null,
+          verifiedSource: verified ? scan?.source ?? null : null,
         },
       ];
     });
@@ -1426,9 +1474,49 @@ export default function PuntoVenta() {
     window.setTimeout(() => searchRef.current?.focus(), 50);
   };
 
+  const verifyPendingProduct = (
+    product: POSProducto,
+    scan: RackNovaScanResult
+  ) => {
+    const pending = cart.filter(
+      (item) => item.verificationStatus !== "verified"
+    );
+
+    if (pending.length === 0) return false;
+
+    const target = pending.find((item) => item.sku === product.sku);
+    if (!target) {
+      const expected = pending[0];
+      toast.error(
+        `Producto incorrecto. Debes verificar ${expected.nombre} antes de continuar.`
+      );
+      return true;
+    }
+
+    setCart((current) =>
+      current.map((item) =>
+        item.sku === target.sku
+          ? {
+              ...item,
+              verificationStatus: "verified",
+              verifiedCode: scan.code,
+              verifiedAt: scan.scannedAt,
+              verifiedSource: scan.source,
+            }
+          : item
+      )
+    );
+    setQuery("");
+    setResults([]);
+    toast.success(`${target.nombre} verificado correctamente.`);
+    window.setTimeout(() => searchRef.current?.focus(), 50);
+    return true;
+  };
+
   const searchByValue = async (
     rawValue: string,
-    source: RackNovaScanResult["source"] = "manual"
+    source: RackNovaScanResult["source"] = "manual",
+    scan?: RackNovaScanResult
   ) => {
     const value = rawValue.trim();
     if (!value) return;
@@ -1453,13 +1541,32 @@ export default function PuntoVenta() {
         );
         return;
       }
-      const exact = products.find(
-        (product) =>
-          product.sku.toLowerCase() === value.toLowerCase() ||
-          product.codigo_barras === value
-      );
+
+      const exact = products.find((product) => productMatchesScan(product, value));
+
+      if (source !== "manual") {
+        if (!exact || !scan) {
+          setResults([]);
+          toast.error(
+            "El código escaneado no coincide exactamente con el código de barras o SKU de un producto."
+          );
+          return;
+        }
+
+        if (verifyPendingProduct(exact, scan)) {
+          return;
+        }
+
+        addProduct(exact, { verified: true, scan });
+        toast.success(`${exact.nombre} agregado y verificado.`);
+        return;
+      }
+
       if (exact || products.length === 1) {
         addProduct(exact || products[0]);
+        toast.message(
+          `Escanea ${exact?.nombre || products[0].nombre} para verificar el producto físico.`
+        );
       } else {
         setResults(products);
       }
@@ -1488,7 +1595,7 @@ export default function PuntoVenta() {
       toast.error("No se pudo reconocer el código escaneado.");
       return;
     }
-    void searchByValue(result.code, result.source);
+    void searchByValue(result.code, result.source, result);
   };
 
   useRackNovaScanner({
@@ -1643,6 +1750,12 @@ export default function PuntoVenta() {
     }
     if (cart.length === 0) {
       toast.error("Agrega al menos un producto.");
+      return;
+    }
+    if (pendingVerificationCount > 0) {
+      toast.error(
+        `Falta verificar ${pendingVerificationCount} producto(s). Escanea cada artículo antes de cobrar.`
+      );
       return;
     }
     if (cartQuantityError) {
@@ -2101,17 +2214,18 @@ export default function PuntoVenta() {
             <div className="max-h-[430px] min-h-[250px] overflow-y-auto px-4 py-3">
               {cart.length === 0 ? <div className="flex min-h-[230px] flex-col items-center justify-center px-5 text-center text-muted-foreground"><ShoppingCart className="mb-3 h-9 w-9 opacity-30" /><p className="font-semibold text-foreground">Tu venta está vacía</p><p className="mt-1 text-xs leading-5">Selecciona un producto del catálogo para comenzar.</p></div> : (
                 <div className="space-y-2.5">{cart.map((item) => { const quoteItem = quote?.items.find((row) => row.sku === item.sku); const finalUnit = quoteItem?.final_unit ?? item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100); const imageUrl = productImageUrl(item); return (
-                  <div key={item.sku} className="rn-pos-cart-item"><div className="flex gap-3"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-secondary/40">{imageUrl ? <img src={imageUrl} alt={item.nombre} className="h-full w-full object-contain p-1.5" /> : <div className="flex h-full w-full items-center justify-center text-muted-foreground/50"><ImageIcon className="h-5 w-5" /></div>}</div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.nombre}</p><p className="truncate text-[11px] text-muted-foreground">{item.sku}</p></div><Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2 flex items-center justify-between gap-2"><div className="inline-flex items-center rounded-xl border border-border/70 bg-background p-0.5"><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, -1)}><Minus className="h-3.5 w-3.5" /></Button><Input className="h-7 w-14 border-0 bg-transparent px-1 text-center text-xs font-black shadow-none focus-visible:ring-0" type="number" min={pasoVenta(item)} max={cantidadDisponibleVenta(item)} step={pasoVenta(item)} value={item.cantidadInput} onChange={(event) => setProductQuantityInput(item.sku, event.target.value)} /><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-3.5 w-3.5" /></Button></div><strong className="text-sm font-black">{money(round2(finalUnit * item.cantidadVenta))}</strong></div><div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] text-muted-foreground">{money(finalUnit)} / {unidadVenta(item)}</span><label className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">Desc.<Input type="number" min="0" max={isAdmin ? 100 : 10} step="0.01" value={item.descuentoInput} onChange={(event) => setDiscountInput(item.sku, event.target.value)} className="h-7 w-14 rounded-lg px-1.5 text-center text-[11px] shadow-none" placeholder="0" />%</label></div>{quoteItem?.promotion_name && <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">{quoteItem.promotion_name} · -{money(quoteItem.automatic_discount)}</p>}</div></div></div>
+                  <div key={item.sku} className="rn-pos-cart-item"><div className="flex gap-3"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-secondary/40">{imageUrl ? <img src={imageUrl} alt={item.nombre} className="h-full w-full object-contain p-1.5" /> : <div className="flex h-full w-full items-center justify-center text-muted-foreground/50"><ImageIcon className="h-5 w-5" /></div>}</div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.nombre}</p><p className="truncate text-[11px] text-muted-foreground">{item.sku}</p>{item.verificationStatus === "verified" ? <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />Verificado</span> : <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300"><ScanLine className="h-3.5 w-3.5" />Pendiente de escaneo</span>}</div><Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2 flex items-center justify-between gap-2"><div className="inline-flex items-center rounded-xl border border-border/70 bg-background p-0.5"><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, -1)}><Minus className="h-3.5 w-3.5" /></Button><Input className="h-7 w-14 border-0 bg-transparent px-1 text-center text-xs font-black shadow-none focus-visible:ring-0" type="number" min={pasoVenta(item)} max={cantidadDisponibleVenta(item)} step={pasoVenta(item)} value={item.cantidadInput} onChange={(event) => setProductQuantityInput(item.sku, event.target.value)} /><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-3.5 w-3.5" /></Button></div><strong className="text-sm font-black">{money(round2(finalUnit * item.cantidadVenta))}</strong></div><div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] text-muted-foreground">{money(finalUnit)} / {unidadVenta(item)}</span><label className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">Desc.<Input type="number" min="0" max={isAdmin ? 100 : 10} step="0.01" value={item.descuentoInput} onChange={(event) => setDiscountInput(item.sku, event.target.value)} className="h-7 w-14 rounded-lg px-1.5 text-center text-[11px] shadow-none" placeholder="0" />%</label></div>{quoteItem?.promotion_name && <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">{quoteItem.promotion_name} · -{money(quoteItem.automatic_discount)}</p>}</div></div></div>
                 ); })}</div>
               )}
             </div>
             <div className="border-t border-border/60 bg-secondary/20 p-4">
               <div className="space-y-2 text-sm"><div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{money(totals.subtotal)}</span></div>{(totals.automaticDiscount + totals.manualDiscount) > 0 && <div className="flex justify-between text-emerald-700 dark:text-emerald-300"><span>Descuentos</span><span>-{money(totals.automaticDiscount + totals.manualDiscount)}</span></div>}<div className="flex items-end justify-between border-t border-border/60 pt-3"><span className="font-bold">Total</span><strong className="text-3xl font-black tracking-[-0.04em]">{money(totals.total)}</strong></div>{quoteError && <p className="rounded-xl bg-destructive/10 p-2 text-xs text-destructive">{quoteError}</p>}</div>
+              {cart.length > 0 && <div className={`mt-3 rounded-2xl border p-3 ${pendingVerificationCount > 0 ? "border-amber-500/30 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>{pendingVerificationCount > 0 ? <div className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><div><p className="text-xs font-black text-amber-800 dark:text-amber-200">Verificación física pendiente</p><p className="mt-0.5 text-[11px] leading-4 text-amber-700/90 dark:text-amber-300">{pendingVerificationCount} producto(s) pendiente(s). Escanea el código de cada artículo para habilitar el cobro.</p></div></div> : <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /><div><p className="text-xs font-black">Venta verificada</p><p className="text-[11px]">{verifiedProductCount} producto(s) confirmado(s) físicamente.</p></div></div>}</div>}
               <div className="mt-4 grid grid-cols-4 gap-1.5 rounded-2xl bg-background/70 p-1.5 ring-1 ring-border/60">{(["efectivo", "tarjeta", "transferencia", "mixto"] as MetodoPago[]).map((method) => <button key={method} type="button" onClick={() => setMetodoPago(method)} className={`rounded-xl px-1.5 py-2 text-[10px] font-bold capitalize transition ${metodoPago === method ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-secondary"}`}>{method === "transferencia" ? "Transfer." : method}</button>)}</div>
               {metodoPago === "mixto" && <div className="mt-3 grid grid-cols-3 gap-2"><Input type="number" min="0" step="0.01" placeholder="Efectivo" value={montoEfectivoMixto} onChange={(event) => setMontoEfectivoMixto(event.target.value)} className="h-9 text-xs" /><Input type="number" min="0" step="0.01" placeholder="Tarjeta" value={montoTarjetaMixto} onChange={(event) => setMontoTarjetaMixto(event.target.value)} className="h-9 text-xs" /><Input type="number" min="0" step="0.01" placeholder="Transfer." value={montoTransferenciaMixto} onChange={(event) => setMontoTransferenciaMixto(event.target.value)} className="h-9 text-xs" /></div>}
               {(metodoPago === "tarjeta" || metodoPago === "transferencia" || metodoPago === "mixto") && <Input className="mt-3 h-9" placeholder="Referencia opcional" value={referencia} onChange={(event) => setReferencia(event.target.value)} />}
               {(metodoPago === "efectivo" || metodoPago === "mixto") && <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-3"><div><label className="text-[11px] font-bold text-muted-foreground">Efectivo recibido</label><Input type="number" min="0" step="0.01" value={efectivoRecibido} onChange={(event) => setEfectivoRecibido(event.target.value)} placeholder="0.00" className="mt-1 h-10" /></div><div className="pb-1 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Cambio</p><p className="text-lg font-black">{money(change)}</p></div></div>}
-              <Button className="mt-4 h-14 w-full rounded-2xl text-base font-black shadow-lg shadow-primary/20" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting ? "Calculando..." : `Cobrar · ${money(totals.total)}`}</Button>
+              <Button className="mt-4 h-14 w-full rounded-2xl text-base font-black shadow-lg shadow-primary/20" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0 || pendingVerificationCount > 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : pendingVerificationCount > 0 ? <ScanLine className="mr-2 h-5 w-5" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting ? "Calculando..." : pendingVerificationCount > 0 ? `Verifica ${pendingVerificationCount} producto(s)` : `Cobrar · ${money(totals.total)}`}</Button>
             </div>
           </aside>
         </section>
