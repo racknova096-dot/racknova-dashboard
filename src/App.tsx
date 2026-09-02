@@ -8,6 +8,7 @@ import { Navigation } from "@/components/layout/Navigation";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { RackNovaIAAssistant } from "@/components/ia/RackNovaIAAssistant";
 import { BlockingLoader } from "@/components/ui/blocking-loader";
+import { NativeDashboardAutoReload } from "@/components/system/NativeDashboardAutoReload";
 import { canUseIA } from "@/lib/roles";
 import Finanzas from "./pages/Finanzas";
 import Reportes from "./pages/Reportes";
@@ -36,6 +37,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background">
+      <NativeDashboardAutoReload />
       {!isLoginPage && <Navigation />}
       {showIAAssistant && <RackNovaIAAssistant />}
       <BlockingLoader
@@ -180,4 +182,3 @@ const App = () => {
 };
 
 export default App;
-
