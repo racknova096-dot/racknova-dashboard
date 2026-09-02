@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +10,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { RackNovaIAAssistant } from "@/components/ia/RackNovaIAAssistant";
 import { BlockingLoader } from "@/components/ui/blocking-loader";
 import { NativeDashboardAutoReload } from "@/components/system/NativeDashboardAutoReload";
+import { NativeLiveDataRefresh } from "@/components/system/NativeLiveDataRefresh";
 import { canUseIA } from "@/lib/roles";
 import Finanzas from "./pages/Finanzas";
 import Reportes from "./pages/Reportes";
@@ -31,17 +33,27 @@ const queryClient = new QueryClient();
 function AppContent() {
   const location = useLocation();
   const { isInventoryLoading } = useInventory();
+  const initialInventoryLoaded = useRef(false);
+
+  useEffect(() => {
+    if (!isInventoryLoading) {
+      initialInventoryLoaded.current = true;
+    }
+  }, [isInventoryLoading]);
 
   const isLoginPage = location.pathname === "/login";
   const showIAAssistant = !isLoginPage && canUseIA();
+  const showInitialInventoryLoader =
+    !initialInventoryLoaded.current && isInventoryLoading;
 
   return (
     <div className="min-h-screen bg-background">
       <NativeDashboardAutoReload />
+      <NativeLiveDataRefresh />
       {!isLoginPage && <Navigation />}
       {showIAAssistant && <RackNovaIAAssistant />}
       <BlockingLoader
-        show={!isLoginPage && isInventoryLoading}
+        show={!isLoginPage && showInitialInventoryLoader}
         title="Cargando base de datos"
         description="Estamos cargando inventario y movimientos. Las acciones estarán bloqueadas hasta terminar."
       />
