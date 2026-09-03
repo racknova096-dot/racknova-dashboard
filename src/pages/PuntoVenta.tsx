@@ -39,6 +39,8 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { RackNovaScannerDialog } from "@/components/scanner/RackNovaScannerDialog";
+import { ScanControlPanel } from "@/components/scanner/ScanControlPanel";
+import { LocationIdentityPanel } from "@/components/scanner/LocationIdentityPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -50,6 +52,7 @@ import { Input } from "@/components/ui/input";
 import { useRackNovaScanner } from "@/hooks/useRackNovaScanner";
 import POSFase3Panel from "@/components/pos/POSFase3Panel";
 import type { RackNovaScanResult } from "@/lib/racknovaScan";
+import { DEFAULT_SCAN_CONFIG, obtenerConfiguracionScan, type RackNovaScanConfig } from "@/lib/scanControl";
 import {
   abrirCajaPOS,
   buscarProductosPOS,
@@ -258,6 +261,41 @@ export default function PuntoVenta() {
   const [workspacePanel, setWorkspacePanel] = useState<POSWorkspacePanel>("sale");
   const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
   const [lastScanSource, setLastScanSource] = useState<RackNovaScanResult["source"] | null>(null);
+  // RACKNOVA_SCAN_OPTIONS_PHASE3
+  const [scanConfig, setScanConfig] = useState<RackNovaScanConfig>(DEFAULT_SCAN_CONFIG);
+  const canManageScan = role === "admin" || role === "owner";
+  const canManageLocations = canManageScan || role === "operator";
+
+  useEffect(() => {
+    let cancelled = false;
+    void obtenerConfiguracionScan()
+      .then((config) => {
+        if (!cancelled) setScanConfig(config);
+      })
+      .catch(() => {
+        if (!cancelled) setScanConfig(DEFAULT_SCAN_CONFIG);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!scanConfig.pos_verificacion_requerida) return;
+    setCart((current) =>
+      current.map((item) =>
+        item.verifiedSource
+          ? item
+          : {
+              ...item,
+              verificationStatus: "pending",
+              verifiedCode: null,
+              verifiedAt: null,
+              verifiedSource: null,
+            }
+      )
+    );
+  }, [scanConfig.pos_verificacion_requerida]);
 
   const loadState = useCallback(async () => {
     setLoadingState(true);
@@ -514,8 +552,11 @@ export default function PuntoVenta() {
   }, [cart.length, localTotals, quote]);
 
   const pendingVerificationCount = useMemo(
-    () => cart.filter((item) => item.verificationStatus !== "verified").length,
-    [cart]
+    () =>
+      scanConfig.pos_verificacion_requerida
+        ? cart.filter((item) => item.verificationStatus !== "verified").length
+        : 0,
+    [cart, scanConfig.pos_verificacion_requerida]
   );
   const verifiedProductCount = cart.length - pendingVerificationCount;
 
@@ -1407,7 +1448,7 @@ export default function PuntoVenta() {
 
     const available = cantidadDisponibleVenta(product);
     const step = pasoVenta(product);
-    const verified = Boolean(options?.verified);
+    const verified = !scanConfig.pos_verificacion_requerida || Boolean(options?.verified);
     const scan = options?.scan ?? null;
 
     if (available <= 0) {
@@ -1478,6 +1519,8 @@ export default function PuntoVenta() {
     product: POSProducto,
     scan: RackNovaScanResult
   ) => {
+    if (!scanConfig.pos_verificacion_requerida) return false;
+
     const pending = cart.filter(
       (item) => item.verificationStatus !== "verified"
     );
@@ -1602,6 +1645,7 @@ export default function PuntoVenta() {
     enabled:
       Boolean(sesion?.estado === "ABIERTA") &&
       workspacePanel === "sale" &&
+      scanConfig.hid_habilitado &&
       !cameraScannerOpen,
     onScan: handleRackNovaScan,
   });
@@ -2155,8 +2199,9 @@ export default function PuntoVenta() {
                     variant="outline"
                     className="h-11 w-11 rounded-xl bg-background"
                     onClick={() => setCameraScannerOpen(true)}
+                    disabled={!scanConfig.camara_habilitada}
                     aria-label="Escanear con cámara"
-                    title="Escanear con cámara"
+                    title={scanConfig.camara_habilitada ? "Escanear con cámara" : "Cámara desactivada por configuración"}
                   >
                     <Camera className="h-5 w-5" />
                   </Button>
@@ -2173,8 +2218,8 @@ export default function PuntoVenta() {
               </form>
               <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] font-semibold text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />
-                  <ScanLine className="h-3.5 w-3.5" /> Pistola USB / Bluetooth lista
+                  <span className={`h-2 w-2 rounded-full ${scanConfig.hid_habilitado ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" : "bg-slate-400"}`} />
+                  <ScanLine className="h-3.5 w-3.5" /> {scanConfig.hid_habilitado ? "Pistola USB / Bluetooth lista" : "Pistola desactivada"}
                 </span>
                 <span>
                   {lastScanSource === "camera"
@@ -2214,13 +2259,13 @@ export default function PuntoVenta() {
             <div className="max-h-[430px] min-h-[250px] overflow-y-auto px-4 py-3">
               {cart.length === 0 ? <div className="flex min-h-[230px] flex-col items-center justify-center px-5 text-center text-muted-foreground"><ShoppingCart className="mb-3 h-9 w-9 opacity-30" /><p className="font-semibold text-foreground">Tu venta está vacía</p><p className="mt-1 text-xs leading-5">Selecciona un producto del catálogo para comenzar.</p></div> : (
                 <div className="space-y-2.5">{cart.map((item) => { const quoteItem = quote?.items.find((row) => row.sku === item.sku); const finalUnit = quoteItem?.final_unit ?? item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100); const imageUrl = productImageUrl(item); return (
-                  <div key={item.sku} className="rn-pos-cart-item"><div className="flex gap-3"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-secondary/40">{imageUrl ? <img src={imageUrl} alt={item.nombre} className="h-full w-full object-contain p-1.5" /> : <div className="flex h-full w-full items-center justify-center text-muted-foreground/50"><ImageIcon className="h-5 w-5" /></div>}</div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.nombre}</p><p className="truncate text-[11px] text-muted-foreground">{item.sku}</p>{item.verificationStatus === "verified" ? <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />Verificado</span> : <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300"><ScanLine className="h-3.5 w-3.5" />Pendiente de escaneo</span>}</div><Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2 flex items-center justify-between gap-2"><div className="inline-flex items-center rounded-xl border border-border/70 bg-background p-0.5"><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, -1)}><Minus className="h-3.5 w-3.5" /></Button><Input className="h-7 w-14 border-0 bg-transparent px-1 text-center text-xs font-black shadow-none focus-visible:ring-0" type="number" min={pasoVenta(item)} max={cantidadDisponibleVenta(item)} step={pasoVenta(item)} value={item.cantidadInput} onChange={(event) => setProductQuantityInput(item.sku, event.target.value)} /><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-3.5 w-3.5" /></Button></div><strong className="text-sm font-black">{money(round2(finalUnit * item.cantidadVenta))}</strong></div><div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] text-muted-foreground">{money(finalUnit)} / {unidadVenta(item)}</span><label className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">Desc.<Input type="number" min="0" max={isAdmin ? 100 : 10} step="0.01" value={item.descuentoInput} onChange={(event) => setDiscountInput(item.sku, event.target.value)} className="h-7 w-14 rounded-lg px-1.5 text-center text-[11px] shadow-none" placeholder="0" />%</label></div>{quoteItem?.promotion_name && <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">{quoteItem.promotion_name} · -{money(quoteItem.automatic_discount)}</p>}</div></div></div>
+                  <div key={item.sku} className="rn-pos-cart-item"><div className="flex gap-3"><div className="h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-secondary/40">{imageUrl ? <img src={imageUrl} alt={item.nombre} className="h-full w-full object-contain p-1.5" /> : <div className="flex h-full w-full items-center justify-center text-muted-foreground/50"><ImageIcon className="h-5 w-5" /></div>}</div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="truncate text-sm font-bold">{item.nombre}</p><p className="truncate text-[11px] text-muted-foreground">{item.sku}</p>{scanConfig.pos_verificacion_requerida && (item.verificationStatus === "verified" ? <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />Verificado</span> : <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-300"><ScanLine className="h-3.5 w-3.5" />Pendiente de escaneo</span>)}</div><Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => setCart((current) => current.filter((row) => row.sku !== item.sku))}><Trash2 className="h-4 w-4" /></Button></div><div className="mt-2 flex items-center justify-between gap-2"><div className="inline-flex items-center rounded-xl border border-border/70 bg-background p-0.5"><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, -1)}><Minus className="h-3.5 w-3.5" /></Button><Input className="h-7 w-14 border-0 bg-transparent px-1 text-center text-xs font-black shadow-none focus-visible:ring-0" type="number" min={pasoVenta(item)} max={cantidadDisponibleVenta(item)} step={pasoVenta(item)} value={item.cantidadInput} onChange={(event) => setProductQuantityInput(item.sku, event.target.value)} /><Button type="button" size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => updateQuantity(item.sku, 1)}><Plus className="h-3.5 w-3.5" /></Button></div><strong className="text-sm font-black">{money(round2(finalUnit * item.cantidadVenta))}</strong></div><div className="mt-2 flex items-center justify-between gap-2"><span className="text-[10px] text-muted-foreground">{money(finalUnit)} / {unidadVenta(item)}</span><label className="flex items-center gap-1.5 text-[10px] font-semibold text-muted-foreground">Desc.<Input type="number" min="0" max={isAdmin ? 100 : 10} step="0.01" value={item.descuentoInput} onChange={(event) => setDiscountInput(item.sku, event.target.value)} className="h-7 w-14 rounded-lg px-1.5 text-center text-[11px] shadow-none" placeholder="0" />%</label></div>{quoteItem?.promotion_name && <p className="mt-2 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">{quoteItem.promotion_name} · -{money(quoteItem.automatic_discount)}</p>}</div></div></div>
                 ); })}</div>
               )}
             </div>
             <div className="border-t border-border/60 bg-secondary/20 p-4">
               <div className="space-y-2 text-sm"><div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{money(totals.subtotal)}</span></div>{(totals.automaticDiscount + totals.manualDiscount) > 0 && <div className="flex justify-between text-emerald-700 dark:text-emerald-300"><span>Descuentos</span><span>-{money(totals.automaticDiscount + totals.manualDiscount)}</span></div>}<div className="flex items-end justify-between border-t border-border/60 pt-3"><span className="font-bold">Total</span><strong className="text-3xl font-black tracking-[-0.04em]">{money(totals.total)}</strong></div>{quoteError && <p className="rounded-xl bg-destructive/10 p-2 text-xs text-destructive">{quoteError}</p>}</div>
-              {cart.length > 0 && <div className={`mt-3 rounded-2xl border p-3 ${pendingVerificationCount > 0 ? "border-amber-500/30 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>{pendingVerificationCount > 0 ? <div className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><div><p className="text-xs font-black text-amber-800 dark:text-amber-200">Verificación física pendiente</p><p className="mt-0.5 text-[11px] leading-4 text-amber-700/90 dark:text-amber-300">{pendingVerificationCount} producto(s) pendiente(s). Escanea el código de cada artículo para habilitar el cobro.</p></div></div> : <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /><div><p className="text-xs font-black">Venta verificada</p><p className="text-[11px]">{verifiedProductCount} producto(s) confirmado(s) físicamente.</p></div></div>}</div>}
+              {scanConfig.pos_verificacion_requerida && cart.length > 0 && <div className={`mt-3 rounded-2xl border p-3 ${pendingVerificationCount > 0 ? "border-amber-500/30 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>{pendingVerificationCount > 0 ? <div className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><div><p className="text-xs font-black text-amber-800 dark:text-amber-200">Verificación física pendiente</p><p className="mt-0.5 text-[11px] leading-4 text-amber-700/90 dark:text-amber-300">{pendingVerificationCount} producto(s) pendiente(s). Escanea el código de cada artículo para habilitar el cobro.</p></div></div> : <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /><div><p className="text-xs font-black">Venta verificada</p><p className="text-[11px]">{verifiedProductCount} producto(s) confirmado(s) físicamente.</p></div></div>}</div>}
               <div className="mt-4 grid grid-cols-4 gap-1.5 rounded-2xl bg-background/70 p-1.5 ring-1 ring-border/60">{(["efectivo", "tarjeta", "transferencia", "mixto"] as MetodoPago[]).map((method) => <button key={method} type="button" onClick={() => setMetodoPago(method)} className={`rounded-xl px-1.5 py-2 text-[10px] font-bold capitalize transition ${metodoPago === method ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-secondary"}`}>{method === "transferencia" ? "Transfer." : method}</button>)}</div>
               {metodoPago === "mixto" && <div className="mt-3 grid grid-cols-3 gap-2"><Input type="number" min="0" step="0.01" placeholder="Efectivo" value={montoEfectivoMixto} onChange={(event) => setMontoEfectivoMixto(event.target.value)} className="h-9 text-xs" /><Input type="number" min="0" step="0.01" placeholder="Tarjeta" value={montoTarjetaMixto} onChange={(event) => setMontoTarjetaMixto(event.target.value)} className="h-9 text-xs" /><Input type="number" min="0" step="0.01" placeholder="Transfer." value={montoTransferenciaMixto} onChange={(event) => setMontoTransferenciaMixto(event.target.value)} className="h-9 text-xs" /></div>}
               {(metodoPago === "tarjeta" || metodoPago === "transferencia" || metodoPago === "mixto") && <Input className="mt-3 h-9" placeholder="Referencia opcional" value={referencia} onChange={(event) => setReferencia(event.target.value)} />}
@@ -2250,7 +2295,10 @@ export default function PuntoVenta() {
         </section>
       )}
 
-      {workspacePanel === "tools" && <section className="space-y-4"><div className="rn-pos-surface flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-bold text-primary">Administración comercial</p><h2 className="mt-1 text-2xl font-black">Herramientas</h2><p className="mt-1 text-sm text-muted-foreground">Clientes, crédito, promociones, mayoreo, precios y reportes fuera del flujo principal de cobro.</p></div>{isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}</div><POSFase3Panel /></section>}
+      {workspacePanel === "tools" && <section className="space-y-4">
+        <ScanControlPanel config={scanConfig} canManage={canManageScan} onChange={setScanConfig} />
+        <LocationIdentityPanel canManage={canManageLocations} />
+        <div className="rn-pos-surface flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-bold text-primary">Administración comercial</p><h2 className="mt-1 text-2xl font-black">Herramientas</h2><p className="mt-1 text-sm text-muted-foreground">Clientes, crédito, promociones, mayoreo, precios y reportes fuera del flujo principal de cobro.</p></div>{isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}</div><POSFase3Panel /></section>}
 
       <RackNovaScannerDialog
         open={cameraScannerOpen}
