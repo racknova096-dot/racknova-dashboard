@@ -18,7 +18,7 @@ import {
 
 type Props = {
   config: RackNovaScanConfig;
-  canManage: boolean;
+  canManage?: boolean;
   onChange: (next: RackNovaScanConfig) => void;
 };
 
@@ -39,7 +39,7 @@ const ITEMS: Array<{
     key: "pos_verificacion_requerida",
     title: "Confirmar productos antes de cobrar",
     description:
-      "Si está activo, los productos elegidos manualmente deben coincidir con un escaneo físico antes de habilitar Cobrar.",
+      "Si lo activas en este dispositivo, los productos elegidos manualmente deben coincidir con un escaneo físico antes de habilitar Cobrar.",
     icon: ShieldCheck,
     accent: "text-emerald-600",
   },
@@ -47,7 +47,7 @@ const ITEMS: Array<{
     key: "ubicacion_verificacion_requerida",
     title: "Confirmar ubicación con escaneo",
     description:
-      "Prepara RackNova para exigir ubicación + producto en los flujos de acomodo y reubicación. Se aplicará en la siguiente fase operativa.",
+      "Activa en este dispositivo el flujo de ubicación + producto para acomodo y reubicación cuando esa operación esté disponible.",
     icon: MapPinCheck,
     accent: "text-violet-600",
   },
@@ -55,7 +55,7 @@ const ITEMS: Array<{
     key: "hid_habilitado",
     title: "Pistola USB / Bluetooth",
     description:
-      "Permite lectores que trabajan como teclado HID. Desactívalo si el negocio no utiliza pistola física.",
+      "Permite lectores que trabajan como teclado HID en este dispositivo. Desactívalo aquí si prefieres trabajar sin pistola.",
     icon: Barcode,
     accent: "text-blue-600",
   },
@@ -63,17 +63,17 @@ const ITEMS: Array<{
     key: "camara_habilitada",
     title: "Cámara de celular o tablet",
     description:
-      "Muestra el lector por cámara para QR, Code128, EAN, UPC y otros formatos compatibles.",
+      "Habilita en este dispositivo el lector por cámara para QR, Code128, EAN, UPC y otros formatos compatibles.",
     icon: Camera,
     accent: "text-cyan-600",
   },
 ];
 
-export function ScanControlPanel({ config, canManage, onChange }: Props) {
+export function ScanControlPanel({ config, onChange }: Props) {
   const [savingKey, setSavingKey] = useState<BooleanConfigKey | null>(null);
 
   const toggle = async (key: BooleanConfigKey, value: boolean) => {
-    if (!canManage || savingKey) return;
+    if (savingKey) return;
     setSavingKey(key);
     const previous = config;
     const optimistic = { ...config, [key]: value };
@@ -82,7 +82,7 @@ export function ScanControlPanel({ config, canManage, onChange }: Props) {
     try {
       const saved = await guardarConfiguracionScan({ [key]: value });
       onChange(saved);
-      toast.success("Preferencia de escaneo actualizada.");
+      toast.success("Preferencia guardada solo en este dispositivo.");
     } catch (error) {
       onChange(previous);
       toast.error(
@@ -106,20 +106,18 @@ export function ScanControlPanel({ config, canManage, onChange }: Props) {
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-lg font-black">Control de escaneo</h3>
               <Badge variant="secondary" className="rounded-full">
-                Opcional
+                Este dispositivo
               </Badge>
             </div>
             <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">
-              RackNova ofrece estas capas de control, pero el negocio decide cuáles
-              forman parte de su operación diaria.
+              Tú decides cómo trabajar aquí. Estas preferencias se guardan solo
+              para tu usuario en este dispositivo y no cambian otras cajas, PCs o celulares.
             </p>
           </div>
         </div>
-        {!canManage && (
-          <span className="text-xs font-semibold text-muted-foreground">
-            Solo administración puede cambiar estas preferencias.
-          </span>
-        )}
+        <span className="text-xs font-semibold text-muted-foreground">
+          No se sincroniza
+        </span>
       </div>
 
       <div className="grid gap-3 p-4 md:grid-cols-2">
@@ -141,13 +139,13 @@ export function ScanControlPanel({ config, canManage, onChange }: Props) {
                     {item.description}
                   </p>
                   <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    {checked ? "Activo" : "Desactivado"}
+                    {checked ? "Activo aquí" : "Desactivado aquí"}
                   </p>
                 </div>
               </div>
               <Switch
                 checked={checked}
-                disabled={!canManage || savingKey !== null}
+                disabled={savingKey !== null}
                 onCheckedChange={(value) => void toggle(item.key, value)}
                 aria-label={item.title}
               />
