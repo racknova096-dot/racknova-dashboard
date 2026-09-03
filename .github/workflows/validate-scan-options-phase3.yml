@@ -1,0 +1,59 @@
+name: Validate Scan Options Phase 3
+
+on:
+  push:
+    branches:
+      - feat/scan-options-location-identity
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: feat/scan-options-location-identity
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Apply POS wiring
+        run: python scripts/patch-scan-options-phase3.py
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build Dashboard
+        run: bun run build
+
+      - name: Validate optional scan behavior
+        run: |
+          rm -f bun.lock
+          grep -q 'RACKNOVA_SCAN_OPTIONS_PHASE3' src/pages/PuntoVenta.tsx
+          grep -q 'pos_verificacion_requerida' src/pages/PuntoVenta.tsx
+          grep -q 'scanConfig.hid_habilitado' src/pages/PuntoVenta.tsx
+          grep -q 'scanConfig.camara_habilitada' src/pages/PuntoVenta.tsx
+          grep -q 'ScanControlPanel' src/pages/PuntoVenta.tsx
+          grep -q 'LocationIdentityPanel' src/pages/PuntoVenta.tsx
+          grep -q 'RNLOC' src/components/scanner/LocationIdentityPanel.tsx
+          git diff --check
+
+      - name: Commit functional POS wiring
+        run: |
+          if git diff --quiet -- src/pages/PuntoVenta.tsx; then
+            echo "No PuntoVenta changes to commit"
+            exit 0
+          fi
+          git config user.name "racknova096-dot"
+          git config user.email "racknova096@gmail.com"
+          git add src/pages/PuntoVenta.tsx
+          git diff --cached --check
+          git commit -m "feat: make scan verification optional and expose location controls"
+          git push origin HEAD:feat/scan-options-location-identity
