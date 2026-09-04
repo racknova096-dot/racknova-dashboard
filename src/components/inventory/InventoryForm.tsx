@@ -181,6 +181,9 @@ export function InventoryForm() {
   const stockActualComercial = selectedInventoryProduct
     ? Number(selectedInventoryProduct.cantidad || 0) / factorInventario
     : 0;
+  const locationVerificationActive =
+    scanConfig.ubicacion_verificacion_requerida &&
+    (scanConfig.hid_habilitado || scanConfig.camara_habilitada);
 
 
   const searchTerm = useMemo(() => {
@@ -252,7 +255,7 @@ export function InventoryForm() {
   useRackNovaScanner({
     enabled:
       Boolean(selectedInventoryProduct) &&
-      scanConfig.ubicacion_verificacion_requerida &&
+      locationVerificationActive &&
       scanConfig.hid_habilitado,
     onScan: handleLocationScan,
   });
@@ -593,11 +596,19 @@ export function InventoryForm() {
     patch: Partial<RackNovaScanConfig>
   ) => {
     const previous = scanConfig;
-    const optimistic = { ...scanConfig, ...patch };
+    const normalizedPatch: Partial<RackNovaScanConfig> = { ...patch };
+    const nextHid = patch.hid_habilitado ?? scanConfig.hid_habilitado;
+    const nextCamera = patch.camara_habilitada ?? scanConfig.camara_habilitada;
+
+    if (!nextHid && !nextCamera) {
+      normalizedPatch.ubicacion_verificacion_requerida = false;
+    }
+
+    const optimistic = { ...scanConfig, ...normalizedPatch };
     setScanConfig(optimistic);
 
     try {
-      const saved = await guardarConfiguracionScan(patch);
+      const saved = await guardarConfiguracionScan(normalizedPatch);
       setScanConfig(saved);
     } catch (error) {
       setScanConfig(previous);
@@ -757,7 +768,7 @@ export function InventoryForm() {
     if (
       isRestock &&
       alreadyHasFreeLocation &&
-      scanConfig.ubicacion_verificacion_requerida &&
+      locationVerificationActive &&
       !locationVerified
     ) {
       toast({
@@ -1459,7 +1470,7 @@ export function InventoryForm() {
                         </p>
                       </div>
 
-                      {scanConfig.ubicacion_verificacion_requerida ? (
+                      {locationVerificationActive ? (
                         <div className={`rounded-xl border p-3 ${locationVerified ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
                           <div className="flex items-start gap-3">
                             {locationVerified ? (

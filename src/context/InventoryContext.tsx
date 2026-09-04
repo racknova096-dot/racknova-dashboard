@@ -420,8 +420,7 @@ useEffect(() => {
         if (!response.ok) {
           const errorText = await response.text();
           console.error("❌ Error guardando producto:", response.status, errorText);
-          alert("No se pudo guardar el producto en backend.");
-          return;
+          throw new Error("No se pudo guardar el producto en backend.");
         }
 
         const saved = await response.json();
