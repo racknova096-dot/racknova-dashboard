@@ -59,6 +59,27 @@ const emitProductSaved = async (endpoint: string, options: RequestInit, response
   }
 };
 
+const emitCatalogUpdated = (
+  endpoint: string,
+  options: RequestInit,
+  response: Response
+) => {
+  if (typeof window === "undefined" || !response.ok) return;
+  const method = String(options.method || "GET").toUpperCase();
+  const isCatalogMutation =
+    endpoint.startsWith("/catalogo/productos") &&
+    !endpoint.includes("/imagen") &&
+    ["POST", "PUT", "DELETE"].includes(method);
+
+  if (isCatalogMutation) {
+    window.dispatchEvent(
+      new CustomEvent("racknova:catalog-updated", {
+        detail: { endpoint, method, at: Date.now() },
+      })
+    );
+  }
+};
+
 export const apiFetch = async (
   endpoint: string,
   options: RequestInit = {}
@@ -89,6 +110,7 @@ export const apiFetch = async (
   }
 
   void emitProductSaved(endpoint, options, response);
+  emitCatalogUpdated(endpoint, options, response);
 
   return response;
 };
