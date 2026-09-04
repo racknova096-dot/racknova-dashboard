@@ -21,7 +21,9 @@ jobs:
         with:
           bun-version: latest
       - name: Apply functional patch
-        run: python scripts/patch_free_location_entry.py
+        run: |
+          python scripts/prepatch_free_location_anchor.py
+          python scripts/patch_free_location_entry.py
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Build dashboard
@@ -32,6 +34,7 @@ jobs:
           grep -q 'Ubicación física libre' src/components/inventory/InventoryForm.tsx
           grep -q 'crearUbicacionScan' src/components/inventory/InventoryForm.tsx
           grep -q 'ubicacion_verificacion_requerida' src/components/inventory/InventoryForm.tsx
+          grep -q 'Ubicación RNLOC: no requiere comando físico de rack' src/context/InventoryContext.tsx
           grep -q 'Elige dónde guardarás el producto' src/components/inventory/LocationLabelModal.tsx
           ! grep -q 'LocationIdentityPanel' src/pages/PuntoVenta.tsx
           grep -q 'Libre · RNLOC' src/pages/AddProduct.tsx
