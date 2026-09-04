@@ -208,7 +208,7 @@ export default function Configuracion() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-5">
-            <div className="flex items-start gap-3 rounded-2xl border border-border/60 bg-secondary/25 p-4">
+            <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-secondary/25 p-3 sm:rounded-2xl sm:p-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background">
                 {cameraPermission === "granted" ? (
                   <CheckCircle2 className="h-5 w-5 text-emerald-600" />
@@ -271,24 +271,24 @@ export default function Configuracion() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-border/60 bg-secondary/25 p-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+              <div className="rounded-xl border border-border/60 bg-secondary/25 p-3 sm:rounded-2xl sm:p-4">
                 <Laptop className="h-5 w-5 text-blue-600" />
                 <p className="mt-2 text-sm font-black">Pistola HID</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 hidden text-xs leading-5 text-muted-foreground sm:block">
                   Escanea cualquier etiqueta mientras esta pantalla está abierta.
                 </p>
               </div>
-              <div className="rounded-2xl border border-border/60 bg-secondary/25 p-4">
+              <div className="rounded-xl border border-border/60 bg-secondary/25 p-3 sm:rounded-2xl sm:p-4">
                 <Smartphone className="h-5 w-5 text-cyan-600" />
                 <p className="mt-2 text-sm font-black">Cámara móvil</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1 hidden text-xs leading-5 text-muted-foreground sm:block">
                   Usa preferentemente la cámara trasera y buena iluminación.
                 </p>
               </div>
             </div>
 
-            <div className="min-h-[105px] rounded-2xl border border-dashed border-border bg-background p-4">
+            <div className="min-h-[88px] rounded-xl border border-dashed border-border bg-background p-3 sm:min-h-[105px] sm:rounded-2xl sm:p-4">
               {lastScan ? (
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />

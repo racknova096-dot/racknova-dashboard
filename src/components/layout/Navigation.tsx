@@ -167,6 +167,19 @@ export function Navigation() {
     [allowedPaths]
   );
 
+  const mobilePrimaryItems = useMemo(() => {
+    const preferredPaths = ["/", "/add", "/products", "/pos"];
+    const preferred = preferredPaths
+      .map((path) => visiblePrimaryItems.find((item) => item.path === path))
+      .filter(Boolean) as NavItem[];
+
+    if (preferred.length >= 4) return preferred.slice(0, 4);
+    const fallback = [...visibleOperationItems, ...visibleManagementItems].filter(
+      (item) => !preferred.some((current) => current.path === item.path)
+    );
+    return [...preferred, ...fallback].slice(0, 4);
+  }, [visibleManagementItems, visibleOperationItems, visiblePrimaryItems]);
+
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
@@ -181,13 +194,16 @@ export function Navigation() {
     window.location.href = `${import.meta.env.BASE_URL}login`;
   };
 
+  const mobileMoreActive = !mobilePrimaryItems.some((item) => isActive(item.path));
+
   return (
+    <>
     <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_1px_0_hsl(222_47%_11%/0.025)] backdrop-blur-2xl">
-      <div className="mx-auto max-w-[1500px] px-4 py-3 sm:px-6">
+      <div className="mx-auto max-w-[1500px] px-3 py-2 sm:px-6 sm:py-3">
         <div className="flex items-center justify-between gap-3">
           <Link to="/" className="group flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 shadow-lg shadow-slate-950/15 transition-transform group-hover:scale-[1.03] dark:bg-white">
-              <Package className="h-6 w-6 text-white dark:text-slate-950" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 shadow-lg shadow-slate-950/15 transition-transform group-hover:scale-[1.03] sm:h-11 sm:w-11 dark:bg-white">
+              <Package className="h-5 w-5 text-white sm:h-6 sm:w-6 dark:text-slate-950" />
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-lg font-black tracking-tight racknova-page-title sm:text-xl">RackNova</h1>
@@ -218,7 +234,7 @@ export function Navigation() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <div className="xl:hidden">
+            <div className="hidden md:block xl:hidden">
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
                 <SheetTrigger asChild>
                   <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl" aria-label="Abrir menú">
@@ -251,6 +267,13 @@ export function Navigation() {
                         <p className="truncate text-sm font-bold">{userName}</p>
                         <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
                       </div>
+                    </div>
+                    <div className="mb-3 flex items-center justify-between rounded-xl bg-background p-3">
+                      <div>
+                        <p className="text-sm font-bold">Apariencia</p>
+                        <p className="text-xs text-muted-foreground">Claro, oscuro o sistema</p>
+                      </div>
+                      <ThemeToggle />
                     </div>
                     <Button variant="outline" className="h-11 w-full justify-start text-destructive" onClick={logout}>
                       <LogOut className="mr-2 h-4 w-4" />
@@ -287,9 +310,75 @@ export function Navigation() {
               </DropdownMenuContent>
             </DropdownMenu>
             </div>
-            <ThemeToggle />
+            <div className="hidden sm:block">
+              <ThemeToggle />
+            </div>
           </div>
         </div>
+      </div>
+    </nav>
+    <MobileBottomNavigation
+      items={mobilePrimaryItems}
+      isActive={isActive}
+      moreActive={mobileMoreActive || mobileMenuOpen}
+      onMore={() => setMobileMenuOpen(true)}
+    />
+    </>
+  );
+}
+
+function MobileBottomNavigation({
+  items,
+  isActive,
+  moreActive,
+  onMore,
+}: {
+  items: NavItem[];
+  isActive: (path: string) => boolean;
+  moreActive: boolean;
+  onMore: () => void;
+}) {
+  return (
+    <nav
+      className="rn-mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-background/95 px-1.5 pt-1.5 backdrop-blur-2xl md:hidden"
+      aria-label="Navegación móvil"
+    >
+      <div
+        className="mx-auto grid max-w-lg"
+        style={{ gridTemplateColumns: `repeat(${items.length + 1}, minmax(0, 1fr))` }}
+      >
+        {items.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.path);
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-bold transition-colors ${
+                active ? "text-primary" : "text-muted-foreground"
+              }`}
+              aria-current={active ? "page" : undefined}
+            >
+              <span className={`rounded-xl p-1.5 ${active ? "bg-primary/10" : ""}`}>
+                <Icon className="h-[19px] w-[19px]" />
+              </span>
+              <span className="max-w-full truncate">{item.label === "Punto de Venta" ? "Venta" : item.label}</span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          onClick={onMore}
+          className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] font-bold transition-colors ${
+            moreActive ? "text-primary" : "text-muted-foreground"
+          }`}
+          aria-label="Más opciones"
+        >
+          <span className={`rounded-xl p-1.5 ${moreActive ? "bg-primary/10" : ""}`}>
+            <Menu className="h-[19px] w-[19px]" />
+          </span>
+          Más
+        </button>
       </div>
     </nav>
   );

@@ -41,26 +41,26 @@ export function PageHero({
       <div className="absolute -top-20 -right-20 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl dark:bg-blue-500/30" />
       <div className="absolute -bottom-24 -left-24 h-64 w-64 rounded-full bg-cyan-500/20 blur-3xl dark:bg-emerald-500/20" />
 
-      <div className="relative p-4 sm:p-6 md:p-8">
-        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1 text-sm border border-slate-200 text-slate-700 dark:bg-white/10 dark:border-white/20 dark:text-blue-50">
+      <div className="relative p-3.5 sm:p-6 md:p-8">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start lg:gap-6">
+          <div className="space-y-2.5 sm:space-y-3">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/70 px-2.5 py-1 text-xs text-slate-700 sm:gap-2 sm:px-3 sm:text-sm dark:border-white/20 dark:bg-white/10 dark:text-blue-50">
               <Icon className="h-4 w-4" />
               {badge}
             </div>
 
             <div>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
+              <h1 className="text-[1.65rem] font-bold leading-tight tracking-tight sm:text-3xl md:text-4xl">
                 {title}
               </h1>
 
-              <p className="text-slate-600 mt-2 max-w-2xl dark:text-blue-100">
+              <p className="mt-1.5 max-w-2xl text-sm leading-5 text-slate-600 sm:mt-2 sm:text-base sm:leading-6 dark:text-blue-100">
                 {description}
               </p>
             </div>
 
             {children && (
-              <div className="rounded-xl bg-white/75 border border-slate-200 p-4 max-w-3xl dark:bg-white/10 dark:border-white/15">
+              <div className="hidden max-w-3xl rounded-xl border border-slate-200 bg-white/75 p-4 sm:block dark:border-white/15 dark:bg-white/10">
                 <div className="text-sm leading-relaxed text-slate-700 dark:text-blue-50">
                   {children}
                 </div>
@@ -76,16 +76,16 @@ export function PageHero({
         </div>
 
         {stats.length > 0 && (
-          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          <div className="mt-4 grid auto-cols-[minmax(132px,1fr)] grid-flow-col gap-2 overflow-x-auto pb-1 sm:auto-cols-[minmax(150px,1fr)] md:mt-6 md:grid-flow-row md:grid-cols-4 md:gap-4 md:overflow-visible md:pb-0">
             {stats.map((stat) => {
               const tone = stat.tone ?? "default";
 
               return (
                 <div
                   key={stat.label}
-                  className="min-w-0 rounded-xl border border-slate-200 bg-white/75 p-3 sm:p-4 dark:border-white/15 dark:bg-white/10"
+                  className="min-w-0 rounded-xl border border-slate-200 bg-white/75 p-2.5 sm:p-4 dark:border-white/15 dark:bg-white/10"
                 >
-                  <p className="text-sm text-slate-500 dark:text-blue-100">
+                  <p className="truncate text-xs text-slate-500 sm:text-sm dark:text-blue-100">
                     {stat.label}
                   </p>
 

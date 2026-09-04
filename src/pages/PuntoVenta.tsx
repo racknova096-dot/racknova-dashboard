@@ -259,6 +259,7 @@ export default function PuntoVenta() {
   const role = getRole();
   const isAdmin = role === "admin";
   const [workspacePanel, setWorkspacePanel] = useState<POSWorkspacePanel>("sale");
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
   const [lastScanSource, setLastScanSource] = useState<RackNovaScanResult["source"] | null>(null);
   // RACKNOVA_SCAN_OPTIONS_PHASE3
@@ -294,6 +295,31 @@ export default function PuntoVenta() {
       )
     );
   }, [scanConfig.pos_verificacion_requerida]);
+
+  useEffect(() => {
+    if (!mobileCartOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const mobileViewport = window.matchMedia("(max-width: 767px)");
+    const syncBodyScroll = () => {
+      document.body.style.overflow = mobileViewport.matches
+        ? "hidden"
+        : previousOverflow;
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileCartOpen(false);
+    };
+
+    syncBodyScroll();
+    mobileViewport.addEventListener("change", syncBodyScroll);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      mobileViewport.removeEventListener("change", syncBodyScroll);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileCartOpen]);
 
   const loadState = useCallback(async () => {
     setLoadingState(true);
@@ -1849,6 +1875,7 @@ export default function PuntoVenta() {
       });
       setTicket(response);
       setCart([]);
+      setMobileCartOpen(false);
       setResults([]);
       setQuery("");
       setEfectivoRecibido("");
@@ -2143,21 +2170,21 @@ export default function PuntoVenta() {
 
   return (
     <main className="racknova-pos-premium mx-auto w-full max-w-[1680px] space-y-4 p-2.5 sm:p-4 md:p-5">
-      <section className="rn-pos-topbar flex flex-col gap-4 p-4 md:p-5 xl:flex-row xl:items-center xl:justify-between">
+      <section className="rn-pos-topbar flex flex-col gap-3 p-3 md:p-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-            <Store className="h-6 w-6" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20 sm:h-12 sm:w-12 sm:rounded-2xl">
+            <Store className="h-5 w-5 sm:h-6 sm:w-6" />
           </div>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-black tracking-[-0.03em] md:text-3xl">Punto de Venta</h1>
+              <h1 className="text-xl font-black tracking-[-0.03em] sm:text-2xl md:text-3xl">Punto de Venta</h1>
               <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Caja abierta</span>
             </div>
             <p className="mt-1 truncate text-sm text-muted-foreground">{sesion.caja_nombre} · Sesión #{sesion.id_sesion} · {sesion.usuario}</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="grid w-full grid-cols-2 items-center gap-1 rounded-2xl border border-border/70 bg-secondary/45 p-1.5 sm:inline-flex sm:w-auto sm:flex-wrap">
+          <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-border/70 bg-secondary/45 p-1 sm:w-auto sm:flex-wrap sm:rounded-2xl sm:p-1.5">
             <Button type="button" size="sm" variant={workspacePanel === "sale" ? "default" : "ghost"} onClick={() => { setWorkspacePanel("sale"); window.setTimeout(() => searchRef.current?.focus(), 50); }}><ShoppingCart className="mr-1 h-4 w-4" />Venta</Button>
             <Button type="button" size="sm" variant={workspacePanel === "cash" ? "default" : "ghost"} onClick={() => setWorkspacePanel("cash")}><CircleDollarSign className="mr-1 h-4 w-4" />Caja</Button>
             <Button type="button" size="sm" variant={workspacePanel === "history" ? "default" : "ghost"} onClick={() => setWorkspacePanel("history")}><History className="mr-1 h-4 w-4" />Historial</Button>
@@ -2168,14 +2195,14 @@ export default function PuntoVenta() {
       </section>
 
       {workspacePanel === "sale" && (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
-          <div className="min-w-0 space-y-4">
-            <div className="rn-pos-surface p-4 md:p-5">
+        <section className="rn-pos-workspace grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+          <div className="rn-pos-catalog-column min-w-0 space-y-4">
+            <div className="rn-pos-search-panel rn-pos-surface p-3 md:p-5">
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2 text-sm font-bold text-primary"><Sparkles className="h-4 w-4" />Venta rápida</div>
                   <h2 className="mt-1 text-xl font-black tracking-tight md:text-2xl">Encuentra un producto</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Escanea el código o busca por nombre, SKU o código de barras.</p>
+                  <p className="mt-1 hidden text-sm text-muted-foreground sm:block">Escanea el código o busca por nombre, SKU o código de barras.</p>
                 </div>
                 <div className="flex gap-2 text-[11px] font-semibold text-muted-foreground"><span className="rounded-full border bg-background/70 px-2.5 py-1">Código</span><span className="rounded-full border bg-background/70 px-2.5 py-1">SKU</span><span className="rounded-full border bg-background/70 px-2.5 py-1">Nombre</span></div>
               </div>
@@ -2215,7 +2242,7 @@ export default function PuntoVenta() {
                   </Button>
                 </div>
               </form>
-              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] font-semibold text-muted-foreground">
+              <div className="mt-2.5 hidden flex-wrap items-center justify-between gap-2 px-1 text-[11px] font-semibold text-muted-foreground sm:flex">
                 <span className="inline-flex items-center gap-1.5">
                   <span className={`h-2 w-2 rounded-full ${scanConfig.escaneo_habilitado && scanConfig.hid_habilitado ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" : "bg-slate-400"}`} />
                   <ScanLine className="h-3.5 w-3.5" /> {scanConfig.escaneo_habilitado && scanConfig.hid_habilitado ? "Pistola USB / Bluetooth lista" : "Escaneo HID desactivado"}
@@ -2230,7 +2257,7 @@ export default function PuntoVenta() {
               </div>
             </div>
 
-            <div className="rn-pos-surface min-h-[510px] p-4 md:p-5">
+            <div className="rn-pos-catalog-panel rn-pos-surface min-h-[510px] p-3 md:p-5">
               <div className="mb-4 flex items-center justify-between gap-3"><div><p className="text-sm font-bold">Catálogo</p><p className="text-xs text-muted-foreground">{results.length > 0 ? `${results.length} coincidencia(s)` : "Los resultados aparecerán aquí"}</p></div>{results.length > 0 && <Badge variant="secondary" className="rounded-full px-3">Selecciona para agregar</Badge>}</div>
               {results.length > 0 ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -2253,8 +2280,17 @@ export default function PuntoVenta() {
             </div>
           </div>
 
-          <aside className="rn-pos-sale-panel overflow-hidden xl:sticky xl:top-20">
-            <div className="flex items-center justify-between border-b border-border/60 px-5 py-4"><div><p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Venta actual</p><h2 className="mt-1 text-xl font-black">{cart.length} producto(s)</h2></div><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ShoppingCart className="h-5 w-5" /></div></div>
+          {mobileCartOpen && (
+            <button
+              type="button"
+              className="rn-mobile-cart-backdrop md:hidden"
+              aria-label="Cerrar carrito"
+              onClick={() => setMobileCartOpen(false)}
+            />
+          )}
+
+          <aside className={`rn-pos-sale-panel overflow-hidden xl:sticky xl:top-20 ${mobileCartOpen ? "rn-mobile-cart-open" : ""}`}>
+            <div className="flex items-center justify-between border-b border-border/60 px-4 py-3.5 sm:px-5 sm:py-4"><div><p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">Venta actual</p><h2 className="mt-1 text-xl font-black">{cart.length} producto(s)</h2></div><div className="flex items-center gap-1"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary"><ShoppingCart className="h-5 w-5" /></div><Button type="button" size="icon" variant="ghost" className="md:hidden" onClick={() => setMobileCartOpen(false)} aria-label="Cerrar carrito"><XCircle className="h-5 w-5" /></Button></div></div>
             <div className="max-h-[430px] min-h-[250px] overflow-y-auto px-4 py-3">
               {cart.length === 0 ? <div className="flex min-h-[230px] flex-col items-center justify-center px-5 text-center text-muted-foreground"><ShoppingCart className="mb-3 h-9 w-9 opacity-30" /><p className="font-semibold text-foreground">Tu venta está vacía</p><p className="mt-1 text-xs leading-5">Selecciona un producto del catálogo para comenzar.</p></div> : (
                 <div className="space-y-2.5">{cart.map((item) => { const quoteItem = quote?.items.find((row) => row.sku === item.sku); const finalUnit = quoteItem?.final_unit ?? item.precio_venta_sugerido * (1 - item.descuentoPorcentaje / 100); const imageUrl = productImageUrl(item); return (
@@ -2272,6 +2308,23 @@ export default function PuntoVenta() {
               <Button className="mt-4 h-14 w-full rounded-2xl text-base font-black shadow-lg shadow-primary/20" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0 || pendingVerificationCount > 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : pendingVerificationCount > 0 ? <ScanLine className="mr-2 h-5 w-5" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting ? "Calculando..." : pendingVerificationCount > 0 ? `Verifica ${pendingVerificationCount} producto(s)` : `Cobrar · ${money(totals.total)}`}</Button>
             </div>
           </aside>
+
+          <button
+            type="button"
+            className="rn-mobile-cart-bar md:hidden"
+            onClick={() => setMobileCartOpen(true)}
+            aria-label={`Abrir venta actual con ${cart.length} productos`}
+            data-racknova-ia-avoid
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                <ShoppingCart className="h-5 w-5" />
+                {cart.length > 0 && <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-[10px] font-black text-primary">{cart.length}</span>}
+              </span>
+              <span className="truncate text-left"><span className="block text-[10px] font-bold uppercase tracking-[0.12em] text-primary-foreground/75">Venta actual</span><span className="block text-sm font-black">{cart.length === 0 ? "Carrito vacío" : `${cart.length} producto(s)`}</span></span>
+            </span>
+            <strong className="shrink-0 text-base font-black">{money(totals.total)}</strong>
+          </button>
         </section>
       )}
 

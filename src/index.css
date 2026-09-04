@@ -368,6 +368,18 @@
     transform: none;
   }
 
+  .racknova-card,
+  .rn-pos-product-card,
+  button,
+  a {
+    transition-duration: 140ms !important;
+  }
+
+  .racknova-card {
+    border-radius: 0.875rem;
+    box-shadow: 0 1px 2px hsl(222 47% 11% / 0.04);
+  }
+
   .overflow-x-auto {
     margin-left: -0.25rem;
     margin-right: -0.25rem;
@@ -375,6 +387,25 @@
     padding-right: 0.25rem;
     overscroll-behavior-inline: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .overflow-x-auto table {
+    font-size: 0.75rem;
+  }
+
+  .overflow-x-auto table th,
+  .overflow-x-auto table td {
+    padding: 0.625rem !important;
+    white-space: nowrap;
+  }
+
+  .overflow-x-auto table th:first-child,
+  .overflow-x-auto table td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: hsl(var(--card));
+    box-shadow: 1px 0 0 hsl(var(--border) / 0.65);
   }
 }
 
@@ -477,6 +508,153 @@
 }
 @media (max-width: 1279px) { .rn-pos-sale-panel { position: static; } }
 @media (prefers-reduced-motion: reduce) { .rn-pos-product-card, .rn-pos-cart-item { transition: none; animation: none; } }
+
+@keyframes rn-mobile-cart-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 767px) {
+  .rn-page {
+    padding: 0.625rem 0.625rem calc(5.1rem + env(safe-area-inset-bottom));
+  }
+
+  .rn-mobile-bottom-nav {
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 32px hsl(222 47% 11% / 0.08);
+  }
+
+  .rn-mobile-sticky-action {
+    position: sticky;
+    bottom: calc(4.45rem + env(safe-area-inset-bottom));
+    z-index: 30;
+    margin-inline: -0.25rem;
+    padding: 0.65rem;
+    border: 1px solid hsl(var(--border) / 0.75);
+    border-radius: 0.875rem;
+    background: hsl(var(--background) / 0.96);
+    box-shadow: 0 12px 32px hsl(222 47% 11% / 0.13);
+    backdrop-filter: blur(16px);
+  }
+
+  .racknova-pos-premium {
+    padding-bottom: calc(8.9rem + env(safe-area-inset-bottom));
+  }
+
+  .rn-pos-topbar,
+  .rn-pos-surface {
+    border-radius: 1rem;
+    box-shadow: 0 5px 18px hsl(222 47% 11% / 0.045);
+  }
+
+  .rn-pos-search-panel {
+    position: sticky;
+    top: 3.65rem;
+    z-index: 30;
+  }
+
+  .rn-pos-search-panel h2 {
+    font-size: 1.125rem;
+  }
+
+  .rn-pos-catalog-panel {
+    min-height: 22rem;
+  }
+
+  .rn-pos-product-card {
+    display: grid;
+    grid-template-columns: 5.75rem minmax(0, 1fr);
+    border-radius: 0.875rem;
+  }
+
+  .rn-pos-product-card:hover,
+  .rn-pos-product-card:active {
+    transform: none;
+  }
+
+  .rn-pos-product-media {
+    min-height: 6.25rem;
+    height: 100%;
+    aspect-ratio: auto;
+    border-right: 1px solid hsl(var(--border) / 0.55);
+    border-bottom: 0;
+  }
+
+  .rn-pos-product-media img {
+    padding: 0.55rem !important;
+  }
+
+  .rn-pos-product-media > span {
+    top: 0.35rem;
+    right: 0.35rem;
+    max-width: calc(100% - 0.7rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rn-pos-sale-panel {
+    display: none;
+  }
+
+  .rn-pos-sale-panel.rn-mobile-cart-open {
+    display: block;
+    position: fixed !important;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0;
+    z-index: 70;
+    max-height: calc(92dvh - env(safe-area-inset-top));
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom);
+    border-radius: 1.5rem 1.5rem 0 0;
+    animation: rn-mobile-cart-up 160ms ease-out;
+    overscroll-behavior: contain;
+  }
+
+  .rn-mobile-cart-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    border: 0;
+    background: hsl(222 47% 5% / 0.58);
+    backdrop-filter: blur(2px);
+  }
+
+  .rn-mobile-cart-bar {
+    position: fixed;
+    left: 0.625rem;
+    right: 0.625rem;
+    bottom: calc(4.15rem + env(safe-area-inset-bottom));
+    z-index: 45;
+    display: flex;
+    min-height: 3.5rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid hsl(var(--primary) / 0.75);
+    border-radius: 1rem;
+    color: hsl(var(--primary-foreground));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    box-shadow: 0 14px 34px hsl(var(--primary) / 0.3);
+  }
+
+  .rn-ia-launcher {
+    min-height: 3.15rem !important;
+    width: 3.15rem !important;
+    padding: 0.2rem !important;
+  }
+
+  .rn-ia-launcher-copy,
+  .rn-ia-launcher-sparkles {
+    display: none !important;
+  }
+
+  .animate-racknova-attention {
+    animation: none;
+  }
+}
 
 
 /* RACKNOVA_SCAN_ENGINE_V1 */

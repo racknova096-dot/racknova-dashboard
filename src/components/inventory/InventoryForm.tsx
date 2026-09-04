@@ -1451,7 +1451,7 @@ export function InventoryForm() {
                 </CardContent>
               </Card>
 
-              <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:justify-end">
+              <div className="rn-mobile-sticky-action flex flex-col gap-3 pt-4 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="outline"

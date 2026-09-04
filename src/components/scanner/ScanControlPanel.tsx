@@ -115,20 +115,20 @@ export function ScanControlPanel({ config, onChange }: Props) {
     return (
       <div
         key={item.key}
-        className={`flex min-h-[132px] items-start justify-between gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm transition-opacity ${
+        className={`flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-background/70 p-3 shadow-sm transition-opacity sm:min-h-[132px] sm:gap-4 sm:rounded-2xl sm:p-4 ${
           disabled ? "opacity-55" : ""
         }`}
       >
         <div className="flex min-w-0 gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/65">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-secondary/65 sm:h-10 sm:w-10">
             <Icon className={`h-5 w-5 ${item.accent}`} />
           </div>
           <div>
             <p className="text-sm font-black">{item.title}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            <p className="mt-1 hidden text-xs leading-5 text-muted-foreground sm:block">
               {item.description}
             </p>
-            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground sm:mt-2">
               {checked ? "Activo aquí" : "Desactivado aquí"}
             </p>
           </div>
@@ -145,9 +145,9 @@ export function ScanControlPanel({ config, onChange }: Props) {
 
   return (
     <section className="rn-pos-surface overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:px-5 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-2 border-b border-border/60 px-3.5 py-3.5 sm:gap-3 sm:px-5 sm:py-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:h-11 sm:w-11 sm:rounded-2xl">
             <SlidersHorizontal className="h-5 w-5" />
           </div>
           <div>
@@ -157,25 +157,25 @@ export function ScanControlPanel({ config, onChange }: Props) {
                 Este usuario y dispositivo
               </Badge>
             </div>
-            <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">
+            <p className="mt-1 hidden max-w-2xl text-sm leading-5 text-muted-foreground sm:block">
               Estos ajustes no cambian otras cajas, computadoras, tablets o celulares.
             </p>
           </div>
         </div>
-        <span className="text-xs font-semibold text-muted-foreground">
+        <span className="hidden text-xs font-semibold text-muted-foreground sm:block">
           Configuración local
         </span>
       </div>
 
-      <div className="space-y-5 p-3 sm:p-4">
-        <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-3 p-3 sm:space-y-5 sm:p-4">
+        <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/5 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:rounded-2xl sm:p-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground sm:h-11 sm:w-11 sm:rounded-2xl">
               <ScanLine className="h-5 w-5" />
             </div>
             <div>
               <p className="font-black">Usar funciones de escaneo</p>
-              <p className="mt-1 text-sm leading-5 text-muted-foreground">
+              <p className="mt-1 hidden text-sm leading-5 text-muted-foreground sm:block">
                 Al desactivarlo, RackNova trabajará con búsqueda y captura manual y ocultará los lectores.
               </p>
             </div>

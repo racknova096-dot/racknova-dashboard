@@ -156,7 +156,11 @@ export function RackNovaIAAssistant() {
         if (!trigger) return;
 
         const mobile = window.innerWidth < 640;
-        const baseBottom = mobile ? 12 : 24;
+        const baseBottom = mobile
+          ? location.pathname === "/pos"
+            ? 142
+            : 76
+          : 24;
         const baseRight = mobile ? 12 : 24;
         const viewportPadding = mobile ? 12 : 16;
         const obstacleGap = mobile ? 8 : 12;
@@ -509,7 +513,7 @@ export function RackNovaIAAssistant() {
       bottom: floatingPosition.bottom,
       right: floatingPosition.right,
     }}
-    className="
+    className="rn-ia-launcher
       animate-racknova-attention
       group fixed z-50
       h-auto min-h-[60px] w-auto
@@ -531,7 +535,7 @@ export function RackNovaIAAssistant() {
       <span className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 rounded-full border-2 border-blue-600 bg-emerald-400" />
     </span>
 
-    <span className="ml-3 min-w-0 text-left leading-tight">
+    <span className="rn-ia-launcher-copy ml-3 min-w-0 text-left leading-tight">
       <span className="block text-sm font-bold">
         RackNova IA
       </span>
@@ -541,7 +545,7 @@ export function RackNovaIAAssistant() {
       </span>
     </span>
 
-    <Sparkles className="ml-3 h-5 w-5 text-yellow-200 transition-transform group-hover:rotate-12" />
+    <Sparkles className="rn-ia-launcher-sparkles ml-3 h-5 w-5 text-yellow-200 transition-transform group-hover:rotate-12" />
   </Button>
 )}
 
