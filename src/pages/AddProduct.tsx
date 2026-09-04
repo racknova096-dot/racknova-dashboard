@@ -12,7 +12,7 @@ export default function AddProduct() {
       <PageHero
         badge="Alta y restock de inventario"
         title="Agregar Producto"
-        description="Registra productos nuevos, reabastece productos existentes y controla caducidad, costos, ubicación y stock crítico."
+        description="Registra entradas, crea una ubicación física libre para productos nuevos y guía cada reabastecimiento hacia el mismo lugar."
         icon={PackagePlus}
         actions={
           <Button variant="secondary" asChild>
@@ -35,7 +35,7 @@ export default function AddProduct() {
           },
           {
             label: "Ubicación",
-            value: "Rack / Nivel / Slot",
+            value: "Libre · RNLOC",
             tone: "purple",
           },
           {
@@ -45,8 +45,9 @@ export default function AddProduct() {
           },
         ]}
       >
-        Si el producto ya existe, RackNova lo detecta como restock y conserva su
-        ubicación. Si es nuevo, se registra en inventario y catálogo.
+        Si el producto es nuevo, RackNova genera una etiqueta para el lugar
+        físico que tú elijas. En entradas futuras puede pedirte escanear esa misma
+        etiqueta antes de confirmar el acomodo.
       </PageHero>
 
       <InventoryForm />

@@ -40,7 +40,6 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { RackNovaScannerDialog } from "@/components/scanner/RackNovaScannerDialog";
 import { ScanControlPanel } from "@/components/scanner/ScanControlPanel";
-import { LocationIdentityPanel } from "@/components/scanner/LocationIdentityPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -263,8 +262,7 @@ export default function PuntoVenta() {
   const [lastScanSource, setLastScanSource] = useState<RackNovaScanResult["source"] | null>(null);
   // RACKNOVA_SCAN_OPTIONS_PHASE3
   const [scanConfig, setScanConfig] = useState<RackNovaScanConfig>(DEFAULT_SCAN_CONFIG);
-  const canManageScan = role === "admin" || role === "owner";
-  const canManageLocations = canManageScan || role === "operator";
+  const canManageScan = role === "admin" || role === "owner" || role === "operator";
 
   useEffect(() => {
     let cancelled = false;
@@ -2297,7 +2295,6 @@ export default function PuntoVenta() {
 
       {workspacePanel === "tools" && <section className="space-y-4">
         <ScanControlPanel config={scanConfig} canManage={canManageScan} onChange={setScanConfig} />
-        <LocationIdentityPanel canManage={canManageLocations} />
         <div className="rn-pos-surface flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-bold text-primary">Administración comercial</p><h2 className="mt-1 text-2xl font-black">Herramientas</h2><p className="mt-1 text-sm text-muted-foreground">Clientes, crédito, promociones, mayoreo, precios y reportes fuera del flujo principal de cobro.</p></div>{isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}</div><POSFase3Panel /></section>}
 
       <RackNovaScannerDialog
