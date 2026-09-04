@@ -14,6 +14,7 @@ import {
   Package,
   Plus,
   ShoppingCart,
+  Settings,
   Table,
   UserCircle2,
   Users,
@@ -27,6 +28,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { obtenerEstadoPOS } from "@/lib/pos";
 import type { POSEstado } from "@/lib/pos";
 
@@ -60,6 +69,7 @@ const managementItems: NavItem[] = [
   { path: "/catalogo", label: "Catálogo", icon: BookOpen, color: "from-sky-500 to-blue-500" },
   { path: "/racknova-ia", label: "RackNova IA", icon: Bot, color: "from-blue-600 to-cyan-500" },
   { path: "/usuarios", label: "Usuarios", icon: Users, color: "from-indigo-500 to-purple-500" },
+  { path: "/configuracion", label: "Configuración", icon: Settings, color: "from-slate-500 to-slate-700" },
 ];
 
 const roleLabels: Record<string, string> = {
@@ -71,6 +81,7 @@ const roleLabels: Record<string, string> = {
 export function Navigation() {
   const location = useLocation();
   const [posState, setPosState] = useState<POSEstado | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const role = (localStorage.getItem("rol") || "viewer").toLowerCase();
   const canUsePOS = role === "admin" || role === "operator";
   const userName =
@@ -117,6 +128,7 @@ export function Navigation() {
         "/reportes",
         "/catalogo",
         "/racknova-ia",
+        "/configuracion",
       ]);
     }
 
@@ -155,19 +167,6 @@ export function Navigation() {
     [allowedPaths]
   );
 
-  const allVisibleItems = useMemo(
-    () => [
-      ...visiblePrimaryItems,
-      ...visibleOperationItems,
-      ...visibleManagementItems,
-    ],
-    [
-      visiblePrimaryItems,
-      visibleOperationItems,
-      visibleManagementItems,
-    ]
-  );
-
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
 
@@ -190,9 +189,9 @@ export function Navigation() {
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 shadow-lg shadow-slate-950/15 transition-transform group-hover:scale-[1.03] dark:bg-white">
               <Package className="h-6 w-6 text-white dark:text-slate-950" />
             </div>
-            <div className="hidden min-w-0 sm:block">
-              <h1 className="truncate text-xl font-black tracking-tight racknova-page-title">RackNova</h1>
-              <p className="truncate text-xs text-muted-foreground">Sistema inteligente de inventario</p>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-black tracking-tight racknova-page-title sm:text-xl">RackNova</h1>
+              <p className="hidden truncate text-xs text-muted-foreground sm:block">Sistema inteligente de inventario</p>
             </div>
           </Link>
 
@@ -218,33 +217,51 @@ export function Navigation() {
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <div className="xl:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2">
-                    <Menu className="h-4 w-4" />
-                    Menú
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl" aria-label="Abrir menú">
+                    <Menu className="h-5 w-5" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel>Navegación</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {allVisibleItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <DropdownMenuItem key={item.path} asChild>
-                        <Link to={item.path} className={isActive(item.path) ? "bg-accent font-semibold" : undefined}>
-                          <Icon className="mr-2 h-4 w-4" />
-                          {item.label}
-                        </Link>
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </SheetTrigger>
+                <SheetContent side="left" className="flex w-[88vw] max-w-sm flex-col overflow-hidden p-0">
+                  <SheetHeader className="border-b border-border/60 p-5 text-left">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 dark:bg-white">
+                        <Package className="h-6 w-6 text-white dark:text-slate-950" />
+                      </div>
+                      <div>
+                        <SheetTitle className="text-xl font-black">RackNova</SheetTitle>
+                        <SheetDescription>Menú principal</SheetDescription>
+                      </div>
+                    </div>
+                  </SheetHeader>
+
+                  <div className="flex-1 overflow-y-auto p-3">
+                    <MobileNavGroup label="Principal" items={visiblePrimaryItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />
+                    {visibleOperationItems.length > 0 && <MobileNavGroup label="Operación" items={visibleOperationItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />}
+                    {visibleManagementItems.length > 0 && <MobileNavGroup label="Gestión" items={visibleManagementItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />}
+                  </div>
+
+                  <div className="border-t border-border/60 bg-secondary/20 p-4">
+                    <div className="mb-3 flex items-center gap-3 rounded-xl bg-background p-3">
+                      <UserCircle2 className="h-9 w-9 shrink-0 text-primary" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">{userName}</p>
+                        <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+                      </div>
+                    </div>
+                    <Button variant="outline" className="h-11 w-full justify-start text-destructive" onClick={logout}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Cerrar sesión
+                    </Button>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
 
+            <div className="hidden md:block">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" className="h-10 max-w-[230px] gap-2 rounded-xl px-3">
@@ -269,11 +286,53 @@ export function Navigation() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
             <ThemeToggle />
           </div>
         </div>
       </div>
     </nav>
+  );
+}
+
+function MobileNavGroup({
+  label,
+  items,
+  isActive,
+  onSelect,
+}: {
+  label: string;
+  items: NavItem[];
+  isActive: (path: string) => boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div className="mb-4">
+      <p className="mb-1.5 px-3 text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <div className="space-y-1">
+        {items.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.path);
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={onSelect}
+              className={`flex min-h-12 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
+                active
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-5 w-5 shrink-0" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

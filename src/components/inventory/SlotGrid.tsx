@@ -74,7 +74,7 @@ export function SlotGrid({ rack, nivel, onSlotClick }: SlotGridProps) {
 
   return (
     <TooltipProvider>
-      <div className="grid grid-cols-4 md:grid-cols-8 gap-3 p-6 bg-card rounded-lg">
+      <div className="grid grid-cols-2 gap-3 rounded-lg bg-card p-3 sm:grid-cols-4 sm:p-5 md:grid-cols-8 md:p-6">
         {rackLocations.map((location) => {
           const product = getProductByLocation(location.id);
           const hasProduct = !!product;

@@ -194,7 +194,7 @@ export function LocationIdentityPanel({ canManage }: Props) {
               <p className="mt-1 text-xs text-muted-foreground">Ejemplo: Rack A · Nivel 2 · Posición 3.</p>
             </div>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre visible: Bebidas A3" disabled={!canManage} />
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <Input value={rack} onChange={(e) => setRack(e.target.value)} placeholder="Rack" disabled={!canManage} />
               <Input value={nivel} onChange={(e) => setNivel(e.target.value)} placeholder="Nivel" disabled={!canManage} />
               <Input value={posicion} onChange={(e) => setPosicion(e.target.value)} placeholder="Posición" disabled={!canManage} />

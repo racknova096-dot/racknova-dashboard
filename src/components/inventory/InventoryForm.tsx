@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { DateInputMX } from "@/components/ui/date-input-mx";
 import { BlockingLoader } from "@/components/ui/blocking-loader";
 import { apiFetch } from "@/lib/api";
@@ -13,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 
 import {
   Select,
@@ -35,7 +35,6 @@ import {
   crearUbicacionScan,
   desactivarUbicacionScan,
   obtenerConfiguracionScan,
-  guardarConfiguracionScan,
   type RackNovaLocationIdentity,
   type RackNovaScanConfig,
 } from "@/lib/scanControl";
@@ -55,6 +54,7 @@ import {
   Layers,
   X,
   Loader2,
+  Settings,
 } from "lucide-react";
 
 import {
@@ -182,6 +182,7 @@ export function InventoryForm() {
     ? Number(selectedInventoryProduct.cantidad || 0) / factorInventario
     : 0;
   const locationVerificationActive =
+    scanConfig.escaneo_habilitado &&
     scanConfig.ubicacion_verificacion_requerida &&
     (scanConfig.hid_habilitado || scanConfig.camara_habilitada);
 
@@ -256,6 +257,7 @@ export function InventoryForm() {
     enabled:
       Boolean(selectedInventoryProduct) &&
       locationVerificationActive &&
+      scanConfig.escaneo_habilitado &&
       scanConfig.hid_habilitado,
     onScan: handleLocationScan,
   });
@@ -590,37 +592,6 @@ export function InventoryForm() {
     resolveAutocomplete(term, {
       showToast: true,
     });
-  };
-
-  const updateEntryScanPreference = async (
-    patch: Partial<RackNovaScanConfig>
-  ) => {
-    const previous = scanConfig;
-    const normalizedPatch: Partial<RackNovaScanConfig> = { ...patch };
-    const nextHid = patch.hid_habilitado ?? scanConfig.hid_habilitado;
-    const nextCamera = patch.camara_habilitada ?? scanConfig.camara_habilitada;
-
-    if (!nextHid && !nextCamera) {
-      normalizedPatch.ubicacion_verificacion_requerida = false;
-    }
-
-    const optimistic = { ...scanConfig, ...normalizedPatch };
-    setScanConfig(optimistic);
-
-    try {
-      const saved = await guardarConfiguracionScan(normalizedPatch);
-      setScanConfig(saved);
-    } catch (error) {
-      setScanConfig(previous);
-      toast({
-        title: "No se pudo guardar la preferencia",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Intenta nuevamente.",
-        variant: "destructive",
-      });
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1381,73 +1352,26 @@ export function InventoryForm() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  <div className="rounded-2xl border border-border/70 bg-background p-4">
-                    <div className="mb-4">
-                      <p className="text-sm font-bold">Control de acomodo en este dispositivo</p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        Estas opciones son locales. Cambiarlas aquí no obliga a otras
-                        cajas, computadoras o celulares a trabajar igual.
-                      </p>
+                  <div className="flex flex-col gap-3 rounded-2xl border border-border/70 bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600">
+                        <Settings className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">Verificación de acomodo</p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {locationVerificationActive
+                            ? "Activa: esta terminal solicitará la etiqueta RNLOC al reabastecer."
+                            : "Desactivada: esta terminal permite confirmar el acomodo manualmente."}
+                        </p>
+                      </div>
                     </div>
-
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                        <div>
-                          <p className="text-sm font-semibold">Confirmar acomodo</p>
-                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                            Exige escanear la ubicación al reabastecer.
-                          </p>
-                        </div>
-                        <Switch
-                          checked={scanConfig.ubicacion_verificacion_requerida}
-                          disabled={!scanConfig.hid_habilitado && !scanConfig.camara_habilitada}
-                          onCheckedChange={(value) =>
-                            void updateEntryScanPreference({
-                              ubicacion_verificacion_requerida: value,
-                            })
-                          }
-                          aria-label="Confirmar acomodo con escaneo"
-                        />
-                      </label>
-
-                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                        <div>
-                          <p className="text-sm font-semibold">Pistola USB / Bluetooth</p>
-                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                            Acepta lectores tipo teclado HID.
-                          </p>
-                        </div>
-                        <Switch
-                          checked={scanConfig.hid_habilitado}
-                          onCheckedChange={(value) =>
-                            void updateEntryScanPreference({ hid_habilitado: value })
-                          }
-                          aria-label="Lector HID para entrada"
-                        />
-                      </label>
-
-                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                        <div>
-                          <p className="text-sm font-semibold">Cámara</p>
-                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-                            Permite confirmar con cámara del dispositivo.
-                          </p>
-                        </div>
-                        <Switch
-                          checked={scanConfig.camara_habilitada}
-                          onCheckedChange={(value) =>
-                            void updateEntryScanPreference({ camara_habilitada: value })
-                          }
-                          aria-label="Cámara para entrada"
-                        />
-                      </label>
-                    </div>
-
-                    {!scanConfig.hid_habilitado && !scanConfig.camara_habilitada && (
-                      <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
-                        Activa al menos un lector antes de exigir confirmación de acomodo.
-                      </p>
-                    )}
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link to="/configuracion">
+                        <Settings className="mr-2 h-4 w-4" />
+                        Configurar
+                      </Link>
+                    </Button>
                   </div>
 
                   {!isRestock && (
@@ -1489,7 +1413,7 @@ export function InventoryForm() {
                                   ? "La lectura coincide con la ubicación guardada."
                                   : "Esto confirma físicamente que el reabastecimiento va al mismo lugar."}
                               </p>
-                              {!locationVerified && scanConfig.camara_habilitada && (
+                              {!locationVerified && scanConfig.escaneo_habilitado && scanConfig.camara_habilitada && (
                                 <Button
                                   type="button"
                                   variant="outline"

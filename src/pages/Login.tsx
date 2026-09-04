@@ -78,7 +78,7 @@ export default function Login() {
         description="Estamos validando tus credenciales. No cierres la página."
       />
 
-      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-background p-3 sm:p-6">
         <Card className="w-full max-w-md racknova-card">
           <CardHeader>
             <CardTitle className="text-center text-2xl">

@@ -1,6 +1,7 @@
 import { apiJson } from "@/lib/api";
 
 export type RackNovaScanConfig = {
+  escaneo_habilitado: boolean;
   pos_verificacion_requerida: boolean;
   ubicacion_verificacion_requerida: boolean;
   hid_habilitado: boolean;
@@ -10,6 +11,7 @@ export type RackNovaScanConfig = {
 };
 
 export const DEFAULT_SCAN_CONFIG: RackNovaScanConfig = {
+  escaneo_habilitado: true,
   pos_verificacion_requerida: false,
   ubicacion_verificacion_requerida: false,
   hid_habilitado: true,
@@ -36,6 +38,10 @@ const storageKey = () => `${SCAN_CONFIG_STORAGE_PREFIX}:${currentUserScope()}`;
 const normalizeConfig = (value: unknown): RackNovaScanConfig => {
   const input = value && typeof value === "object" ? (value as Partial<RackNovaScanConfig>) : {};
   return {
+    escaneo_habilitado:
+      typeof input.escaneo_habilitado === "boolean"
+        ? input.escaneo_habilitado
+        : DEFAULT_SCAN_CONFIG.escaneo_habilitado,
     pos_verificacion_requerida:
       typeof input.pos_verificacion_requerida === "boolean"
         ? input.pos_verificacion_requerida
@@ -105,9 +111,15 @@ export const guardarConfiguracionScan = async (
         "Este dispositivo"
       : "Este dispositivo";
 
+  const normalizedPatch = { ...config };
+  if (config.escaneo_habilitado === false) {
+    normalizedPatch.pos_verificacion_requerida = false;
+    normalizedPatch.ubicacion_verificacion_requerida = false;
+  }
+
   const next = normalizeConfig({
     ...current,
-    ...config,
+    ...normalizedPatch,
     fecha_actualizacion: new Date().toISOString(),
     actualizado_por: actor,
   });

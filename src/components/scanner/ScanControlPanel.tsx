@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   Barcode,
   Camera,
+  MapPinCheck,
   ScanLine,
   ShieldCheck,
   SlidersHorizontal,
@@ -17,131 +18,210 @@ import {
 
 type Props = {
   config: RackNovaScanConfig;
-  canManage?: boolean;
   onChange: (next: RackNovaScanConfig) => void;
 };
 
 type BooleanConfigKey =
+  | "escaneo_habilitado"
   | "pos_verificacion_requerida"
+  | "ubicacion_verificacion_requerida"
   | "hid_habilitado"
   | "camara_habilitada";
 
-const ITEMS: Array<{
-  key: BooleanConfigKey;
-  title: string;
-  description: string;
-  icon: typeof ScanLine;
-  accent: string;
-}> = [
+const FLOW_ITEMS = [
   {
-    key: "pos_verificacion_requerida",
-    title: "Confirmar productos antes de cobrar",
+    key: "pos_verificacion_requerida" as const,
+    title: "Verificar productos antes de cobrar",
     description:
-      "Si lo activas en este dispositivo, los productos elegidos manualmente deben coincidir con un escaneo físico antes de habilitar Cobrar.",
+      "Los productos agregados manualmente deben coincidir con una lectura física antes de habilitar el cobro.",
     icon: ShieldCheck,
     accent: "text-emerald-600",
   },
   {
-    key: "hid_habilitado",
+    key: "ubicacion_verificacion_requerida" as const,
+    title: "Verificar ubicación al reabastecer",
+    description:
+      "Solicita escanear la etiqueta RNLOC asignada antes de confirmar una nueva entrada de inventario.",
+    icon: MapPinCheck,
+    accent: "text-violet-600",
+  },
+];
+
+const READER_ITEMS = [
+  {
+    key: "hid_habilitado" as const,
     title: "Pistola USB / Bluetooth",
     description:
-      "Permite lectores que trabajan como teclado HID en este dispositivo. Desactívalo aquí si prefieres trabajar sin pistola.",
+      "Acepta lectores que funcionan como teclado HID, incluso cuando el buscador no tiene el foco.",
     icon: Barcode,
     accent: "text-blue-600",
   },
   {
-    key: "camara_habilitada",
-    title: "Cámara de celular o tablet",
+    key: "camara_habilitada" as const,
+    title: "Cámara del dispositivo",
     description:
-      "Habilita en este dispositivo el lector por cámara para QR, Code128, EAN, UPC y otros formatos compatibles.",
+      "Muestra el botón de cámara para leer QR, Code128, Code39, EAN, UPC e ITF.",
     icon: Camera,
     accent: "text-cyan-600",
   },
 ];
 
+type Item = (typeof FLOW_ITEMS)[number] | (typeof READER_ITEMS)[number];
+
 export function ScanControlPanel({ config, onChange }: Props) {
   const [savingKey, setSavingKey] = useState<BooleanConfigKey | null>(null);
+  const hasReader = config.hid_habilitado || config.camara_habilitada;
 
   const toggle = async (key: BooleanConfigKey, value: boolean) => {
     if (savingKey) return;
     setSavingKey(key);
     const previous = config;
-    const optimistic = { ...config, [key]: value };
-    onChange(optimistic);
+    const patch: Partial<RackNovaScanConfig> = { [key]: value };
+
+    if (key === "escaneo_habilitado" && !value) {
+      patch.pos_verificacion_requerida = false;
+      patch.ubicacion_verificacion_requerida = false;
+    }
+
+    const nextHid = key === "hid_habilitado" ? value : config.hid_habilitado;
+    const nextCamera =
+      key === "camara_habilitada" ? value : config.camara_habilitada;
+    if (!nextHid && !nextCamera) {
+      patch.pos_verificacion_requerida = false;
+      patch.ubicacion_verificacion_requerida = false;
+    }
+
+    onChange({ ...config, ...patch });
 
     try {
-      const saved = await guardarConfiguracionScan({ [key]: value });
+      const saved = await guardarConfiguracionScan(patch);
       onChange(saved);
-      toast.success("Preferencia guardada solo en este dispositivo.");
+      toast.success("Configuración guardada en este dispositivo.");
     } catch (error) {
       onChange(previous);
       toast.error(
         error instanceof Error
           ? error.message
-          : "No se pudo guardar la preferencia de escaneo."
+          : "No se pudo guardar la configuración de escaneo."
       );
     } finally {
       setSavingKey(null);
     }
   };
 
+  const renderItem = (item: Item, disabled: boolean) => {
+    const Icon = item.icon;
+    const checked = Boolean(config[item.key]);
+    return (
+      <div
+        key={item.key}
+        className={`flex min-h-[132px] items-start justify-between gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm transition-opacity ${
+          disabled ? "opacity-55" : ""
+        }`}
+      >
+        <div className="flex min-w-0 gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/65">
+            <Icon className={`h-5 w-5 ${item.accent}`} />
+          </div>
+          <div>
+            <p className="text-sm font-black">{item.title}</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {item.description}
+            </p>
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              {checked ? "Activo aquí" : "Desactivado aquí"}
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={checked}
+          disabled={savingKey !== null || disabled}
+          onCheckedChange={(value) => void toggle(item.key, value)}
+          aria-label={item.title}
+        />
+      </div>
+    );
+  };
+
   return (
     <section className="rn-pos-surface overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-border/60 px-5 py-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-3 border-b border-border/60 px-4 py-4 sm:px-5 md:flex-row md:items-center md:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <SlidersHorizontal className="h-5 w-5" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-lg font-black">Control de escaneo</h3>
+              <h2 className="text-lg font-black">Escaneo y verificación</h2>
               <Badge variant="secondary" className="rounded-full">
-                Este dispositivo
+                Este usuario y dispositivo
               </Badge>
             </div>
             <p className="mt-1 max-w-2xl text-sm leading-5 text-muted-foreground">
-              Tú decides cómo trabajar aquí. Estas preferencias se guardan solo
-              para tu usuario en este dispositivo y no cambian otras cajas, PCs o celulares.
+              Estos ajustes no cambian otras cajas, computadoras, tablets o celulares.
             </p>
           </div>
         </div>
         <span className="text-xs font-semibold text-muted-foreground">
-          No se sincroniza
+          Configuración local
         </span>
       </div>
 
-      <div className="grid gap-3 p-4 md:grid-cols-2">
-        {ITEMS.map((item) => {
-          const Icon = item.icon;
-          const checked = Boolean(config[item.key]);
-          return (
-            <div
-              key={item.key}
-              className="flex min-h-[132px] items-start justify-between gap-4 rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm"
-            >
-              <div className="flex min-w-0 gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary/65">
-                  <Icon className={`h-5 w-5 ${item.accent}`} />
-                </div>
-                <div>
-                  <p className="text-sm font-black">{item.title}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {item.description}
-                  </p>
-                  <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    {checked ? "Activo aquí" : "Desactivado aquí"}
-                  </p>
-                </div>
-              </div>
-              <Switch
-                checked={checked}
-                disabled={savingKey !== null}
-                onCheckedChange={(value) => void toggle(item.key, value)}
-                aria-label={item.title}
-              />
+      <div className="space-y-5 p-3 sm:p-4">
+        <div className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+              <ScanLine className="h-5 w-5" />
             </div>
-          );
-        })}
+            <div>
+              <p className="font-black">Usar funciones de escaneo</p>
+              <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                Al desactivarlo, RackNova trabajará con búsqueda y captura manual y ocultará los lectores.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className="text-xs font-bold text-muted-foreground">
+              {config.escaneo_habilitado ? "Escaneo activo" : "Modo manual"}
+            </span>
+            <Switch
+              checked={config.escaneo_habilitado}
+              disabled={savingKey !== null}
+              onCheckedChange={(value) =>
+                void toggle("escaneo_habilitado", value)
+              }
+              aria-label="Usar funciones de escaneo"
+            />
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 px-1 text-xs font-black uppercase tracking-[0.14em] text-muted-foreground">
+            Lectores disponibles
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {READER_ITEMS.map((item) =>
+              renderItem(item, !config.escaneo_habilitado)
+            )}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-2 px-1 text-xs font-black uppercase tracking-[0.14em] text-muted-foreground">
+            Reglas de operación
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {FLOW_ITEMS.map((item) =>
+              renderItem(item, !config.escaneo_habilitado || !hasReader)
+            )}
+          </div>
+        </div>
+
+        {config.escaneo_habilitado && !hasReader && (
+          <p className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-900 dark:text-amber-100">
+            Activa al menos un lector para utilizar las verificaciones físicas.
+          </p>
+        )}
       </div>
     </section>
   );

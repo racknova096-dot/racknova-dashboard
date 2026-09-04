@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Link } from "react-router-dom";
 import {
   Banknote,
   Barcode,
@@ -28,6 +29,7 @@ import {
   RotateCcw,
   Search,
   ScanLine,
+  Settings,
   ShoppingCart,
   Sparkles,
   Store,
@@ -39,7 +41,6 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { RackNovaScannerDialog } from "@/components/scanner/RackNovaScannerDialog";
-import { ScanControlPanel } from "@/components/scanner/ScanControlPanel";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -262,7 +263,6 @@ export default function PuntoVenta() {
   const [lastScanSource, setLastScanSource] = useState<RackNovaScanResult["source"] | null>(null);
   // RACKNOVA_SCAN_OPTIONS_PHASE3
   const [scanConfig, setScanConfig] = useState<RackNovaScanConfig>(DEFAULT_SCAN_CONFIG);
-  const canManageScan = role === "admin" || role === "owner" || role === "operator";
 
   useEffect(() => {
     let cancelled = false;
@@ -1643,6 +1643,7 @@ export default function PuntoVenta() {
     enabled:
       Boolean(sesion?.estado === "ABIERTA") &&
       workspacePanel === "sale" &&
+      scanConfig.escaneo_habilitado &&
       scanConfig.hid_habilitado &&
       !cameraScannerOpen,
     onScan: handleRackNovaScan,
@@ -2000,7 +2001,7 @@ export default function PuntoVenta() {
 
   if (!estado?.habilitado) {
     return (
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="mx-auto max-w-4xl p-3 sm:p-6">
         <Card className="mt-12">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -2141,7 +2142,7 @@ export default function PuntoVenta() {
   }
 
   return (
-    <main className="racknova-pos-premium mx-auto max-w-[1680px] space-y-4 p-3 md:p-5">
+    <main className="racknova-pos-premium mx-auto w-full max-w-[1680px] space-y-4 p-2.5 sm:p-4 md:p-5">
       <section className="rn-pos-topbar flex flex-col gap-4 p-4 md:p-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
@@ -2156,7 +2157,7 @@ export default function PuntoVenta() {
           </div>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="inline-flex flex-wrap items-center gap-1 rounded-2xl border border-border/70 bg-secondary/45 p-1.5">
+          <div className="grid w-full grid-cols-2 items-center gap-1 rounded-2xl border border-border/70 bg-secondary/45 p-1.5 sm:inline-flex sm:w-auto sm:flex-wrap">
             <Button type="button" size="sm" variant={workspacePanel === "sale" ? "default" : "ghost"} onClick={() => { setWorkspacePanel("sale"); window.setTimeout(() => searchRef.current?.focus(), 50); }}><ShoppingCart className="mr-1 h-4 w-4" />Venta</Button>
             <Button type="button" size="sm" variant={workspacePanel === "cash" ? "default" : "ghost"} onClick={() => setWorkspacePanel("cash")}><CircleDollarSign className="mr-1 h-4 w-4" />Caja</Button>
             <Button type="button" size="sm" variant={workspacePanel === "history" ? "default" : "ghost"} onClick={() => setWorkspacePanel("history")}><History className="mr-1 h-4 w-4" />Historial</Button>
@@ -2197,9 +2198,9 @@ export default function PuntoVenta() {
                     variant="outline"
                     className="h-11 w-11 rounded-xl bg-background"
                     onClick={() => setCameraScannerOpen(true)}
-                    disabled={!scanConfig.camara_habilitada}
+                    disabled={!scanConfig.escaneo_habilitado || !scanConfig.camara_habilitada}
                     aria-label="Escanear con cámara"
-                    title={scanConfig.camara_habilitada ? "Escanear con cámara" : "Cámara desactivada por configuración"}
+                    title={scanConfig.escaneo_habilitado && scanConfig.camara_habilitada ? "Escanear con cámara" : "Cámara desactivada en Configuración"}
                   >
                     <Camera className="h-5 w-5" />
                   </Button>
@@ -2216,8 +2217,8 @@ export default function PuntoVenta() {
               </form>
               <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 px-1 text-[11px] font-semibold text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${scanConfig.hid_habilitado ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" : "bg-slate-400"}`} />
-                  <ScanLine className="h-3.5 w-3.5" /> {scanConfig.hid_habilitado ? "Pistola USB / Bluetooth lista" : "Pistola desactivada"}
+                  <span className={`h-2 w-2 rounded-full ${scanConfig.escaneo_habilitado && scanConfig.hid_habilitado ? "bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" : "bg-slate-400"}`} />
+                  <ScanLine className="h-3.5 w-3.5" /> {scanConfig.escaneo_habilitado && scanConfig.hid_habilitado ? "Pistola USB / Bluetooth lista" : "Escaneo HID desactivado"}
                 </span>
                 <span>
                   {lastScanSource === "camera"
@@ -2265,7 +2266,7 @@ export default function PuntoVenta() {
               <div className="space-y-2 text-sm"><div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{money(totals.subtotal)}</span></div>{(totals.automaticDiscount + totals.manualDiscount) > 0 && <div className="flex justify-between text-emerald-700 dark:text-emerald-300"><span>Descuentos</span><span>-{money(totals.automaticDiscount + totals.manualDiscount)}</span></div>}<div className="flex items-end justify-between border-t border-border/60 pt-3"><span className="font-bold">Total</span><strong className="text-3xl font-black tracking-[-0.04em]">{money(totals.total)}</strong></div>{quoteError && <p className="rounded-xl bg-destructive/10 p-2 text-xs text-destructive">{quoteError}</p>}</div>
               {scanConfig.pos_verificacion_requerida && cart.length > 0 && <div className={`mt-3 rounded-2xl border p-3 ${pendingVerificationCount > 0 ? "border-amber-500/30 bg-amber-500/10" : "border-emerald-500/30 bg-emerald-500/10"}`}>{pendingVerificationCount > 0 ? <div className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" /><div><p className="text-xs font-black text-amber-800 dark:text-amber-200">Verificación física pendiente</p><p className="mt-0.5 text-[11px] leading-4 text-amber-700/90 dark:text-amber-300">{pendingVerificationCount} producto(s) pendiente(s). Escanea el código de cada artículo para habilitar el cobro.</p></div></div> : <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="h-4 w-4" /><div><p className="text-xs font-black">Venta verificada</p><p className="text-[11px]">{verifiedProductCount} producto(s) confirmado(s) físicamente.</p></div></div>}</div>}
               <div className="mt-4 grid grid-cols-4 gap-1.5 rounded-2xl bg-background/70 p-1.5 ring-1 ring-border/60">{(["efectivo", "tarjeta", "transferencia", "mixto"] as MetodoPago[]).map((method) => <button key={method} type="button" onClick={() => setMetodoPago(method)} className={`rounded-xl px-1.5 py-2 text-[10px] font-bold capitalize transition ${metodoPago === method ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-secondary"}`}>{method === "transferencia" ? "Transfer." : method}</button>)}</div>
-              {metodoPago === "mixto" && <div className="mt-3 grid grid-cols-3 gap-2"><Input type="number" min="0" step="0.01" placeholder="Efectivo" value={montoEfectivoMixto} onChange={(event) => setMontoEfectivoMixto(event.target.value)} className="h-9 text-xs" /><Input type="number" min="0" step="0.01" placeholder="Tarjeta" value={montoTarjetaMixto} onChange={(event) => setMontoTarjetaMixto(event.target.value)} className="h-9 text-xs" /><Input type="number" min="0" step="0.01" placeholder="Transfer." value={montoTransferenciaMixto} onChange={(event) => setMontoTransferenciaMixto(event.target.value)} className="h-9 text-xs" /></div>}
+              {metodoPago === "mixto" && <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3"><Input type="number" min="0" step="0.01" placeholder="Efectivo" value={montoEfectivoMixto} onChange={(event) => setMontoEfectivoMixto(event.target.value)} className="h-10 text-sm" /><Input type="number" min="0" step="0.01" placeholder="Tarjeta" value={montoTarjetaMixto} onChange={(event) => setMontoTarjetaMixto(event.target.value)} className="h-10 text-sm" /><Input type="number" min="0" step="0.01" placeholder="Transferencia" value={montoTransferenciaMixto} onChange={(event) => setMontoTransferenciaMixto(event.target.value)} className="h-10 text-sm" /></div>}
               {(metodoPago === "tarjeta" || metodoPago === "transferencia" || metodoPago === "mixto") && <Input className="mt-3 h-9" placeholder="Referencia opcional" value={referencia} onChange={(event) => setReferencia(event.target.value)} />}
               {(metodoPago === "efectivo" || metodoPago === "mixto") && <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-3"><div><label className="text-[11px] font-bold text-muted-foreground">Efectivo recibido</label><Input type="number" min="0" step="0.01" value={efectivoRecibido} onChange={(event) => setEfectivoRecibido(event.target.value)} placeholder="0.00" className="mt-1 h-10" /></div><div className="pb-1 text-right"><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Cambio</p><p className="text-lg font-black">{money(change)}</p></div></div>}
               <Button className="mt-4 h-14 w-full rounded-2xl text-base font-black shadow-lg shadow-primary/20" disabled={selling || quoting || !quote || Boolean(cartQuantityError) || cart.length === 0 || pendingVerificationCount > 0} onClick={checkout}>{selling ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : pendingVerificationCount > 0 ? <ScanLine className="mr-2 h-5 w-5" /> : metodoPago === "efectivo" ? <Banknote className="mr-2 h-5 w-5" /> : <CreditCard className="mr-2 h-5 w-5" />}{quoting ? "Calculando..." : pendingVerificationCount > 0 ? `Verifica ${pendingVerificationCount} producto(s)` : `Cobrar · ${money(totals.total)}`}</Button>
@@ -2294,8 +2295,7 @@ export default function PuntoVenta() {
       )}
 
       {workspacePanel === "tools" && <section className="space-y-4">
-        <ScanControlPanel config={scanConfig} canManage={canManageScan} onChange={setScanConfig} />
-        <div className="rn-pos-surface flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-bold text-primary">Administración comercial</p><h2 className="mt-1 text-2xl font-black">Herramientas</h2><p className="mt-1 text-sm text-muted-foreground">Clientes, crédito, promociones, mayoreo, precios y reportes fuera del flujo principal de cobro.</p></div>{isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}</div><POSFase3Panel /></section>}
+        <div className="rn-pos-surface flex flex-col gap-3 p-4 sm:p-5 md:flex-row md:items-center md:justify-between"><div><p className="text-sm font-bold text-primary">Administración comercial</p><h2 className="mt-1 text-2xl font-black">Herramientas</h2><p className="mt-1 text-sm text-muted-foreground">Clientes, crédito, promociones, mayoreo, precios y reportes fuera del flujo principal de cobro.</p></div><div className="flex flex-col gap-2 sm:flex-row"><Button variant="outline" asChild><Link to="/configuracion"><Settings className="mr-2 h-4 w-4" />Configurar escaneo</Link></Button>{isAdmin && <Button variant="outline" onClick={togglePOS}>Desactivar POS</Button>}</div></div><POSFase3Panel /></section>}
 
       <RackNovaScannerDialog
         open={cameraScannerOpen}

@@ -25,6 +25,7 @@ import RackNovaIA from "./pages/RackNovaIA";
 import Catalogo from "./pages/Catalogo";
 import Usuarios from "./pages/Usuarios";
 import PuntoVenta from "./pages/PuntoVenta";
+import Configuracion from "./pages/Configuracion";
 import ProtectedRoute from "./pages/ProtectedRoute";
 import ProtectedLayout from "@/components/layout/ProtectedLayout";
 
@@ -155,6 +156,15 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
                 <Usuarios />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/configuracion"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "operator"]}>
+                <Configuracion />
               </ProtectedRoute>
             }
           />
