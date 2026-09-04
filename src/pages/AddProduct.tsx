@@ -5,6 +5,7 @@ import { ArrowLeft, PackagePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InventoryForm } from "@/components/inventory/InventoryForm";
 import { ProveedorEntradaCard } from "@/components/compras/ProveedorEntradaCard";
+import { ProductoImagenEntradaCard } from "@/components/catalog/ProductoImagenEntradaCard";
 import { PageHero } from "@/components/layout/PageHero";
 
 export default function AddProduct() {
@@ -13,7 +14,7 @@ export default function AddProduct() {
       <PageHero
         badge="Alta y restock de inventario"
         title="Agregar Producto"
-        description="Registra entradas, proveedor, costo, ubicación y stock objetivo en un solo flujo."
+        description="Registra entradas, proveedor, imagen, costo, ubicación y stock objetivo en un solo flujo."
         icon={PackagePlus}
         actions={
           <Button variant="secondary" asChild>
@@ -40,18 +41,19 @@ export default function AddProduct() {
             tone: "purple",
           },
           {
-            label: "Costos",
-            value: "Promedio",
+            label: "Imagen",
+            value: "Por SKU",
             tone: "amber",
           },
         ]}
       >
-        Selecciona quién surtió la entrada. Esa relación permitirá que RackNova
-        agrupe automáticamente los faltantes y prepare la lista de compra de cada
-        proveedor.
+        Selecciona quién surtió la entrada y, si el artículo es nuevo, puedes
+        agregar su imagen. Si ese SKU ya tiene foto en catálogo, RackNova reutiliza
+        automáticamente la misma.
       </PageHero>
 
       <ProveedorEntradaCard />
+      <ProductoImagenEntradaCard />
       <InventoryForm />
     </div>
   );
