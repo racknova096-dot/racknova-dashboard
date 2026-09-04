@@ -1,4 +1,4 @@
-const CACHE_VERSION = "racknova-pwa-v1";
+const CACHE_VERSION = "racknova-pwa-v2";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -14,9 +14,9 @@ self.addEventListener("install", (event) => {
     caches.open(STATIC_CACHE).then((cache) =>
       cache.addAll([
         appShellUrl,
-        new URL("manifest.webmanifest", self.registration.scope).toString(),
-        new URL("pwa-icon-192.png", self.registration.scope).toString(),
-        new URL("pwa-icon-512.png", self.registration.scope).toString(),
+        new URL("manifest.webmanifest?v=2", self.registration.scope).toString(),
+        new URL("racknova-icon-192-v2.png", self.registration.scope).toString(),
+        new URL("racknova-icon-512-v2.png", self.registration.scope).toString(),
       ])
     )
   );
