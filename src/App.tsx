@@ -8,7 +8,7 @@ import { InventoryProvider, useInventory } from "@/context/InventoryContext";
 import { Navigation } from "@/components/layout/Navigation";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { RackNovaIAAssistant } from "@/components/ia/RackNovaIAAssistant";
-import { BlockingLoader } from "@/components/ui/blocking-loader";
+import { RackNovaStartupScreen } from "@/components/system/RackNovaStartupScreen";
 import { NativeDashboardAutoReload } from "@/components/system/NativeDashboardAutoReload";
 import { NativeLiveDataRefresh } from "@/components/system/NativeLiveDataRefresh";
 import { canUseIA } from "@/lib/roles";
@@ -54,10 +54,8 @@ function AppContent() {
       <NativeLiveDataRefresh />
       {!isLoginPage && <Navigation />}
       {showIAAssistant && <RackNovaIAAssistant />}
-      <BlockingLoader
+      <RackNovaStartupScreen
         show={!isLoginPage && showInitialInventoryLoader}
-        title="Cargando base de datos"
-        description="Estamos cargando inventario y movimientos. Las acciones estarán bloqueadas hasta terminar."
       />
 
       <Routes>
