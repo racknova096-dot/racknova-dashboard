@@ -23,7 +23,6 @@ type Props = {
 
 type BooleanConfigKey =
   | "pos_verificacion_requerida"
-  | "ubicacion_verificacion_requerida"
   | "hid_habilitado"
   | "camara_habilitada";
 
@@ -41,14 +40,6 @@ const ITEMS: Array<{
       "Si lo activas en este dispositivo, los productos elegidos manualmente deben coincidir con un escaneo físico antes de habilitar Cobrar.",
     icon: ShieldCheck,
     accent: "text-emerald-600",
-  },
-  {
-    key: "ubicacion_verificacion_requerida",
-    title: "Confirmar ubicación con escaneo",
-    description:
-      "Activa en este dispositivo el flujo de ubicación + producto para acomodo y reubicación cuando esa operación esté disponible.",
-    icon: MapPinCheck,
-    accent: "text-violet-600",
   },
   {
     key: "hid_habilitado",
