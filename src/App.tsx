@@ -24,7 +24,7 @@ import RackView from "./pages/RackView";
 import RackNovaIA from "./pages/RackNovaIA";
 import Catalogo from "./pages/CatalogoApp";
 import Usuarios from "./pages/Usuarios";
-import PuntoVenta from "./pages/PuntoVenta";
+import PuntoVenta from "./pages/PuntoVentaApp";
 import Configuracion from "./pages/ConfiguracionApp";
 import Compras from "./pages/Compras";
 import ProtectedRoute from "./pages/ProtectedRoute";
