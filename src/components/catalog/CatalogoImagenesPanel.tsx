@@ -14,11 +14,14 @@ import {
 import type { ProductoCatalogo } from "@/types/inventory";
 import { ProductImage } from "./ProductImage";
 
+const PAGE_SIZE = 30;
+
 export function CatalogoImagenesPanel() {
   const [items, setItems] = useState<ProductoCatalogo[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [workingSku, setWorkingSku] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const { toast } = useToast();
 
@@ -56,6 +59,12 @@ export function CatalogoImagenesPanel() {
       )
     );
   }, [items, search]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search]);
+
+  const visibleItems = filtered.slice(0, visibleCount);
 
   const onFile = async (item: ProductoCatalogo, event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -142,59 +151,72 @@ export function CatalogoImagenesPanel() {
             No hay productos para mostrar.
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((item) => {
-              const busy = workingSku === item.sku;
-              return (
-                <div
-                  key={item.sku}
-                  className="flex gap-3 rounded-2xl border bg-background p-3"
-                >
-                  <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border bg-muted/40">
-                    <ProductImage sku={item.sku} alt={item.nombre} />
-                  </div>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleItems.map((item) => {
+                const busy = workingSku === item.sku;
+                return (
+                  <div
+                    key={item.sku}
+                    className="flex gap-3 rounded-2xl border bg-background p-3"
+                  >
+                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border bg-muted/40">
+                      <ProductImage sku={item.sku} alt={item.nombre} />
+                    </div>
 
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{item.nombre}</p>
-                    <p className="truncate text-xs text-muted-foreground">{item.sku}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <input
-                        ref={(node) => {
-                          fileInputs.current[item.sku] = node;
-                        }}
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="hidden"
-                        disabled={busy}
-                        onChange={(event) => void onFile(item, event)}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() => fileInputs.current[item.sku]?.click()}
-                      >
-                        {busy ? (
-                          <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Upload className="mr-1 h-3.5 w-3.5" />
-                        )}
-                        Subir / cambiar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        disabled={busy}
-                        onClick={() => void remove(item)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{item.nombre}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.sku}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <input
+                          ref={(node) => {
+                            fileInputs.current[item.sku] = node;
+                          }}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          disabled={busy}
+                          onChange={(event) => void onFile(item, event)}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => fileInputs.current[item.sku]?.click()}
+                        >
+                          {busy ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="mr-1 h-3.5 w-3.5" />
+                          )}
+                          Subir / cambiar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          disabled={busy}
+                          onClick={() => void remove(item)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
+            {visibleCount < filtered.length && (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
+                >
+                  Mostrar {Math.min(PAGE_SIZE, filtered.length - visibleCount)} más
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
