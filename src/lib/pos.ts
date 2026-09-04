@@ -1,5 +1,7 @@
 export * from "./posBase";
 
+// Compatibilidad del empaquetador nativo: los endpoints /pos/estado y
+// /pos/configuracion se implementan y exportan desde ./posBase.
 import {
   buscarProductosPOS as buscarProductosPOSBase,
   type POSProducto,
