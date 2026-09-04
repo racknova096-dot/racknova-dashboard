@@ -13,6 +13,7 @@ import {
   Menu,
   Package,
   Plus,
+  ShoppingBasket,
   ShoppingCart,
   Settings,
   Table,
@@ -66,6 +67,7 @@ const operationItems: NavItem[] = [
 ];
 
 const managementItems: NavItem[] = [
+  { path: "/compras", label: "Compras", icon: ShoppingBasket, color: "from-amber-500 to-orange-500" },
   { path: "/catalogo", label: "Catálogo", icon: BookOpen, color: "from-sky-500 to-blue-500" },
   { path: "/racknova-ia", label: "RackNova IA", icon: Bot, color: "from-blue-600 to-cyan-500" },
   { path: "/usuarios", label: "Usuarios", icon: Users, color: "from-indigo-500 to-purple-500" },
@@ -113,7 +115,6 @@ export function Navigation() {
     };
   }, []);
 
-  // RACKNOVA_MENU_POR_ROL
   const allowedPaths = useMemo(() => {
     if (role === "viewer") {
       return new Set(["/", "/products"]);
@@ -124,6 +125,7 @@ export function Navigation() {
         "/",
         "/add",
         "/products",
+        "/compras",
         "/tracking",
         "/reportes",
         "/catalogo",
@@ -198,131 +200,131 @@ export function Navigation() {
 
   return (
     <>
-    <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_1px_0_hsl(222_47%_11%/0.025)] backdrop-blur-2xl">
-      <div className="mx-auto max-w-[1500px] px-3 py-2 sm:px-6 sm:py-3">
-        <div className="flex items-center justify-between gap-3">
-          <Link to="/" className="group flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 shadow-lg shadow-slate-950/15 transition-transform group-hover:scale-[1.03] sm:h-11 sm:w-11 dark:bg-white">
-              <Package className="h-5 w-5 text-white sm:h-6 sm:w-6 dark:text-slate-950" />
+      <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_1px_0_hsl(222_47%_11%/0.025)] backdrop-blur-2xl">
+        <div className="mx-auto max-w-[1500px] px-3 py-2 sm:px-6 sm:py-3">
+          <div className="flex items-center justify-between gap-3">
+            <Link to="/" className="group flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-950 shadow-lg shadow-slate-950/15 transition-transform group-hover:scale-[1.03] sm:h-11 sm:w-11 dark:bg-white">
+                <Package className="h-5 w-5 text-white sm:h-6 sm:w-6 dark:text-slate-950" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="truncate text-lg font-black tracking-tight racknova-page-title sm:text-xl">RackNova</h1>
+                <p className="hidden truncate text-xs text-muted-foreground sm:block">Sistema inteligente de inventario</p>
+              </div>
+            </Link>
+
+            <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 xl:flex">
+              {visiblePrimaryItems.map((item) => (
+                <NavButton key={item.path} item={item} active={isActive(item.path)} />
+              ))}
+              {visibleOperationItems.length > 0 && (
+                <NavGroup
+                  label="Operación"
+                  items={visibleOperationItems}
+                  active={groupIsActive(visibleOperationItems)}
+                  isActive={isActive}
+                />
+              )}
+              {visibleManagementItems.length > 0 && (
+                <NavGroup
+                  label="Gestión"
+                  items={visibleManagementItems}
+                  active={groupIsActive(visibleManagementItems)}
+                  isActive={isActive}
+                />
+              )}
             </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-black tracking-tight racknova-page-title sm:text-xl">RackNova</h1>
-              <p className="hidden truncate text-xs text-muted-foreground sm:block">Sistema inteligente de inventario</p>
-            </div>
-          </Link>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-center gap-1 xl:flex">
-            {visiblePrimaryItems.map((item) => (
-              <NavButton key={item.path} item={item} active={isActive(item.path)} />
-            ))}
-            {visibleOperationItems.length > 0 && (
-              <NavGroup
-                label="Operación"
-                items={visibleOperationItems}
-                active={groupIsActive(visibleOperationItems)}
-                isActive={isActive}
-              />
-            )}
-            {visibleManagementItems.length > 0 && (
-              <NavGroup
-                label="Gestión"
-                items={visibleManagementItems}
-                active={groupIsActive(visibleManagementItems)}
-                isActive={isActive}
-              />
-            )}
-          </div>
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <div className="hidden md:block xl:hidden">
+                <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl" aria-label="Abrir menú">
+                      <Menu className="h-5 w-5" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="flex w-[88vw] max-w-sm flex-col overflow-hidden p-0">
+                    <SheetHeader className="border-b border-border/60 p-5 text-left">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 dark:bg-white">
+                          <Package className="h-6 w-6 text-white dark:text-slate-950" />
+                        </div>
+                        <div>
+                          <SheetTitle className="text-xl font-black">RackNova</SheetTitle>
+                          <SheetDescription>Menú principal</SheetDescription>
+                        </div>
+                      </div>
+                    </SheetHeader>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <div className="hidden md:block xl:hidden">
-              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-11 w-11 rounded-xl" aria-label="Abrir menú">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="flex w-[88vw] max-w-sm flex-col overflow-hidden p-0">
-                  <SheetHeader className="border-b border-border/60 p-5 text-left">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 dark:bg-white">
-                        <Package className="h-6 w-6 text-white dark:text-slate-950" />
-                      </div>
-                      <div>
-                        <SheetTitle className="text-xl font-black">RackNova</SheetTitle>
-                        <SheetDescription>Menú principal</SheetDescription>
-                      </div>
+                    <div className="flex-1 overflow-y-auto p-3">
+                      <MobileNavGroup label="Principal" items={visiblePrimaryItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />
+                      {visibleOperationItems.length > 0 && <MobileNavGroup label="Operación" items={visibleOperationItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />}
+                      {visibleManagementItems.length > 0 && <MobileNavGroup label="Gestión" items={visibleManagementItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />}
                     </div>
-                  </SheetHeader>
 
-                  <div className="flex-1 overflow-y-auto p-3">
-                    <MobileNavGroup label="Principal" items={visiblePrimaryItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />
-                    {visibleOperationItems.length > 0 && <MobileNavGroup label="Operación" items={visibleOperationItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />}
-                    {visibleManagementItems.length > 0 && <MobileNavGroup label="Gestión" items={visibleManagementItems} isActive={isActive} onSelect={() => setMobileMenuOpen(false)} />}
-                  </div>
+                    <div className="border-t border-border/60 bg-secondary/20 p-4">
+                      <div className="mb-3 flex items-center gap-3 rounded-xl bg-background p-3">
+                        <UserCircle2 className="h-9 w-9 shrink-0 text-primary" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-bold">{userName}</p>
+                          <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+                        </div>
+                      </div>
+                      <div className="mb-3 flex items-center justify-between rounded-xl bg-background p-3">
+                        <div>
+                          <p className="text-sm font-bold">Apariencia</p>
+                          <p className="text-xs text-muted-foreground">Claro, oscuro o sistema</p>
+                        </div>
+                        <ThemeToggle />
+                      </div>
+                      <Button variant="outline" className="h-11 w-full justify-start text-destructive" onClick={logout}>
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Cerrar sesión
+                      </Button>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
 
-                  <div className="border-t border-border/60 bg-secondary/20 p-4">
-                    <div className="mb-3 flex items-center gap-3 rounded-xl bg-background p-3">
-                      <UserCircle2 className="h-9 w-9 shrink-0 text-primary" />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-bold">{userName}</p>
-                        <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
-                      </div>
-                    </div>
-                    <div className="mb-3 flex items-center justify-between rounded-xl bg-background p-3">
-                      <div>
-                        <p className="text-sm font-bold">Apariencia</p>
-                        <p className="text-xs text-muted-foreground">Claro, oscuro o sistema</p>
-                      </div>
-                      <ThemeToggle />
-                    </div>
-                    <Button variant="outline" className="h-11 w-full justify-start text-destructive" onClick={logout}>
+              <div className="hidden md:block">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="h-10 max-w-[230px] gap-2 rounded-xl px-3">
+                      <UserCircle2 className="h-5 w-5 shrink-0 text-primary" />
+                      <span className="hidden min-w-0 text-left md:block">
+                        <span className="block truncate text-sm font-semibold">{userName}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{roleLabel}</span>
+                      </span>
+                      <ChevronDown className="hidden h-4 w-4 shrink-0 md:block" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuLabel>
+                      <span className="block truncate">{userName}</span>
+                      <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">{userEmail}</span>
+                      <span className="mt-1 block text-xs font-normal text-primary">{roleLabel}</span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={logout}>
                       <LogOut className="mr-2 h-4 w-4" />
                       Cerrar sesión
-                    </Button>
-                  </div>
-                </SheetContent>
-              </Sheet>
-            </div>
-
-            <div className="hidden md:block">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-10 max-w-[230px] gap-2 rounded-xl px-3">
-                  <UserCircle2 className="h-5 w-5 shrink-0 text-primary" />
-                  <span className="hidden min-w-0 text-left md:block">
-                    <span className="block truncate text-sm font-semibold">{userName}</span>
-                    <span className="block truncate text-[11px] text-muted-foreground">{roleLabel}</span>
-                  </span>
-                  <ChevronDown className="hidden h-4 w-4 shrink-0 md:block" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>
-                  <span className="block truncate">{userName}</span>
-                  <span className="mt-1 block truncate text-xs font-normal text-muted-foreground">{userEmail}</span>
-                  <span className="mt-1 block text-xs font-normal text-primary">{roleLabel}</span>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={logout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Cerrar sesión
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            </div>
-            <div className="hidden sm:block">
-              <ThemeToggle />
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className="hidden sm:block">
+                <ThemeToggle />
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    </nav>
-    <MobileBottomNavigation
-      items={mobilePrimaryItems}
-      isActive={isActive}
-      moreActive={mobileMoreActive || mobileMenuOpen}
-      onMore={() => setMobileMenuOpen(true)}
-    />
+      </nav>
+      <MobileBottomNavigation
+        items={mobilePrimaryItems}
+        isActive={isActive}
+        moreActive={mobileMoreActive || mobileMenuOpen}
+        onMore={() => setMobileMenuOpen(true)}
+      />
     </>
   );
 }

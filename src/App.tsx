@@ -26,6 +26,7 @@ import Catalogo from "./pages/Catalogo";
 import Usuarios from "./pages/Usuarios";
 import PuntoVenta from "./pages/PuntoVenta";
 import Configuracion from "./pages/ConfiguracionApp";
+import Compras from "./pages/Compras";
 import ProtectedRoute from "./pages/ProtectedRoute";
 import ProtectedLayout from "@/components/layout/ProtectedLayout";
 
@@ -102,6 +103,15 @@ function AppContent() {
             element={
               <ProtectedRoute allowedRoles={["admin", "operator"]}>
                 <PuntoVenta />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/compras"
+            element={
+              <ProtectedRoute allowedRoles={["admin", "operator"]}>
+                <Compras />
               </ProtectedRoute>
             }
           />

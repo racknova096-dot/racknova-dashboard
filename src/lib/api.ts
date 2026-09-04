@@ -27,6 +27,38 @@ export const getAuthHeaders = () => {
   };
 };
 
+const emitProductSaved = async (endpoint: string, options: RequestInit, response: Response) => {
+  if (
+    typeof window === "undefined" ||
+    endpoint !== "/productos" ||
+    String(options.method || "GET").toUpperCase() !== "POST" ||
+    !response.ok
+  ) {
+    return;
+  }
+
+  try {
+    const saved = await response.clone().json();
+    let requestData: Record<string, unknown> = {};
+    if (typeof options.body === "string") {
+      requestData = JSON.parse(options.body);
+    }
+    window.dispatchEvent(
+      new CustomEvent("racknova:product-saved", {
+        detail: {
+          sku: String(saved?.sku || requestData.sku || ""),
+          nombre: String(saved?.nombre || requestData.nombre || ""),
+          costo_proveedor: Number(
+            requestData.costo_proveedor ?? saved?.costo_proveedor ?? 0
+          ),
+        },
+      })
+    );
+  } catch (error) {
+    console.warn("RackNova: no se pudo emitir product-saved", error);
+  }
+};
+
 export const apiFetch = async (
   endpoint: string,
   options: RequestInit = {}
@@ -55,6 +87,8 @@ export const apiFetch = async (
     clearSessionAndRedirect();
     throw new Error("Sesión expirada. Inicia sesión nuevamente.");
   }
+
+  void emitProductSaved(endpoint, options, response);
 
   return response;
 };

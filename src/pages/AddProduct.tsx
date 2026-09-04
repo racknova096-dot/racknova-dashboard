@@ -4,6 +4,7 @@ import { ArrowLeft, PackagePlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { InventoryForm } from "@/components/inventory/InventoryForm";
+import { ProveedorEntradaCard } from "@/components/compras/ProveedorEntradaCard";
 import { PageHero } from "@/components/layout/PageHero";
 
 export default function AddProduct() {
@@ -12,7 +13,7 @@ export default function AddProduct() {
       <PageHero
         badge="Alta y restock de inventario"
         title="Agregar Producto"
-        description="Registra entradas, crea una ubicación física libre para productos nuevos y guía cada reabastecimiento hacia el mismo lugar."
+        description="Registra entradas, proveedor, costo, ubicación y stock objetivo en un solo flujo."
         icon={PackagePlus}
         actions={
           <Button variant="secondary" asChild>
@@ -34,8 +35,8 @@ export default function AddProduct() {
             tone: "blue",
           },
           {
-            label: "Ubicación",
-            value: "Libre · RNLOC",
+            label: "Proveedor",
+            value: "Trazable",
             tone: "purple",
           },
           {
@@ -45,11 +46,12 @@ export default function AddProduct() {
           },
         ]}
       >
-        Si el producto es nuevo, RackNova genera una etiqueta para el lugar
-        físico que tú elijas. En entradas futuras puede pedirte escanear esa misma
-        etiqueta antes de confirmar el acomodo.
+        Selecciona quién surtió la entrada. Esa relación permitirá que RackNova
+        agrupe automáticamente los faltantes y prepare la lista de compra de cada
+        proveedor.
       </PageHero>
 
+      <ProveedorEntradaCard />
       <InventoryForm />
     </div>
   );
