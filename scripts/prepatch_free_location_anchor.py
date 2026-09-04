@@ -4,7 +4,7 @@ path = Path("src/context/InventoryContext.tsx")
 text = path.read_text(encoding="utf-8")
 
 old = '    const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");\n\n    const response = await apiFetch(\n'
-new = '''    const isFreeLocation = updatedProduct.locationId.startsWith("RNLOC:");\n    const [rack, nivelStr, slotStr] = isFreeLocation\n      ? ["LIBRE", "0", "0"]\n      : updatedProduct.locationId.split("-");\n\n    const response = await apiFetch(\n'''
+new = '''      const isFreeLocation = updatedProduct.locationId.startsWith("RNLOC:");\n      const [rack, nivelStr, slotStr] = isFreeLocation\n        ? ["LIBRE", "0", "0"]\n        : updatedProduct.locationId.split("-");\n\n      const response = await apiFetch(\n'''
 
 if new not in text:
     if old not in text:
