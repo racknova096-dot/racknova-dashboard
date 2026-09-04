@@ -22,7 +22,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import RackView from "./pages/RackView";
 import RackNovaIA from "./pages/RackNovaIA";
-import Catalogo from "./pages/Catalogo";
+import Catalogo from "./pages/CatalogoApp";
 import Usuarios from "./pages/Usuarios";
 import PuntoVenta from "./pages/PuntoVenta";
 import Configuracion from "./pages/ConfiguracionApp";
