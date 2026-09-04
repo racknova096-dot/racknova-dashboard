@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Barcode,
   Camera,
-  MapPinCheck,
   ScanLine,
   ShieldCheck,
   SlidersHorizontal,

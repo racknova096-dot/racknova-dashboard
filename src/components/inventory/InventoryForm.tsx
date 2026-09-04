@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 import {
   Select,
@@ -34,6 +35,7 @@ import {
   crearUbicacionScan,
   desactivarUbicacionScan,
   obtenerConfiguracionScan,
+  guardarConfiguracionScan,
   type RackNovaLocationIdentity,
   type RackNovaScanConfig,
 } from "@/lib/scanControl";
@@ -585,6 +587,29 @@ export function InventoryForm() {
     resolveAutocomplete(term, {
       showToast: true,
     });
+  };
+
+  const updateEntryScanPreference = async (
+    patch: Partial<RackNovaScanConfig>
+  ) => {
+    const previous = scanConfig;
+    const optimistic = { ...scanConfig, ...patch };
+    setScanConfig(optimistic);
+
+    try {
+      const saved = await guardarConfiguracionScan(patch);
+      setScanConfig(saved);
+    } catch (error) {
+      setScanConfig(previous);
+      toast({
+        title: "No se pudo guardar la preferencia",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1345,6 +1370,75 @@ export function InventoryForm() {
                 </CardHeader>
 
                 <CardContent className="space-y-4">
+                  <div className="rounded-2xl border border-border/70 bg-background p-4">
+                    <div className="mb-4">
+                      <p className="text-sm font-bold">Control de acomodo en este dispositivo</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Estas opciones son locales. Cambiarlas aquí no obliga a otras
+                        cajas, computadoras o celulares a trabajar igual.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                        <div>
+                          <p className="text-sm font-semibold">Confirmar acomodo</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Exige escanear la ubicación al reabastecer.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={scanConfig.ubicacion_verificacion_requerida}
+                          disabled={!scanConfig.hid_habilitado && !scanConfig.camara_habilitada}
+                          onCheckedChange={(value) =>
+                            void updateEntryScanPreference({
+                              ubicacion_verificacion_requerida: value,
+                            })
+                          }
+                          aria-label="Confirmar acomodo con escaneo"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                        <div>
+                          <p className="text-sm font-semibold">Pistola USB / Bluetooth</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Acepta lectores tipo teclado HID.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={scanConfig.hid_habilitado}
+                          onCheckedChange={(value) =>
+                            void updateEntryScanPreference({ hid_habilitado: value })
+                          }
+                          aria-label="Lector HID para entrada"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                        <div>
+                          <p className="text-sm font-semibold">Cámara</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Permite confirmar con cámara del dispositivo.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={scanConfig.camara_habilitada}
+                          onCheckedChange={(value) =>
+                            void updateEntryScanPreference({ camara_habilitada: value })
+                          }
+                          aria-label="Cámara para entrada"
+                        />
+                      </label>
+                    </div>
+
+                    {!scanConfig.hid_habilitado && !scanConfig.camara_habilitada && (
+                      <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+                        Activa al menos un lector antes de exigir confirmación de acomodo.
+                      </p>
+                    )}
+                  </div>
+
                   {!isRestock && (
                     <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
                       <p className="font-semibold">Tú decides dónde va el producto</p>
