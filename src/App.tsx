@@ -25,7 +25,7 @@ import RackNovaIA from "./pages/RackNovaIA";
 import Catalogo from "./pages/Catalogo";
 import Usuarios from "./pages/Usuarios";
 import PuntoVenta from "./pages/PuntoVenta";
-import Configuracion from "./pages/Configuracion";
+import Configuracion from "./pages/ConfiguracionApp";
 import ProtectedRoute from "./pages/ProtectedRoute";
 import ProtectedLayout from "@/components/layout/ProtectedLayout";
 
