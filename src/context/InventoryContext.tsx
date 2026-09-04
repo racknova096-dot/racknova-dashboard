@@ -103,7 +103,7 @@ const mapBackendProduct = (product: any): Product => {
     id: String(
       product.id_producto ?? product.id ?? `${product.sku}-${rack}-${nivel}-${slot}`
     ),
-    locationId: `${rack}-${nivel}-${slot}`,
+    locationId: product.ubicacion_codigo || `${rack}-${nivel}-${slot}`,
     sku: product.sku,
     nombre: product.nombre,
     descripcion: product.descripcion ?? null,
@@ -352,34 +352,36 @@ useEffect(() => {
         return currentSku === newSku || currentName === newName;
       });
 
-      const finalLocationId = existingProduct?.locationId ?? product.locationId;
-
-      const location = locations.find((item) => item.id === finalLocationId);
-
-      if (!location) {
-        alert("❌ La ubicación seleccionada no existe.");
-        return;
-      }
-
+      const finalLocationId =
+        product.locationId || existingProduct?.locationId || "SIN-UBICACION";
+      const isFreeLocation = finalLocationId.startsWith("RNLOC:");
       const isRestock = Boolean(existingProduct);
 
-      if (!isRestock) {
-        if (location.status !== "libre") {
-          alert("❌ El slot no está libre.");
-          return;
+      if (!isFreeLocation) {
+        const location = locations.find((item) => item.id === finalLocationId);
+
+        if (!location) {
+          throw new Error("La ubicación heredada seleccionada no existe.");
         }
 
-        const slotOccupied = products.some(
-          (item) => item.locationId === finalLocationId
-        );
+        if (!isRestock) {
+          if (location.status !== "libre") {
+            throw new Error("El slot heredado no está libre.");
+          }
 
-        if (slotOccupied) {
-          alert("❌ Este slot ya tiene un producto. Primero elimínalo.");
-          return;
+          const slotOccupied = products.some(
+            (item) => item.locationId === finalLocationId
+          );
+
+          if (slotOccupied) {
+            throw new Error("Este slot heredado ya tiene un producto.");
+          }
         }
       }
 
-      const [rack, nivelStr, slotStr] = finalLocationId.split("-");
+      const [rack, nivelStr, slotStr] = isFreeLocation
+        ? ["LIBRE", "0", "0"]
+        : finalLocationId.split("-");
 
       const backendProduct = {
         sku: product.sku,
@@ -391,6 +393,7 @@ useEffect(() => {
         caducidad: product.caducidad || null,
         stock_minimo: Number(product.stock_minimo ?? 10),
         stock_alto: Number(product.stock_alto ?? 30),
+        ubicacion_codigo: isFreeLocation ? finalLocationId : null,
         rack,
         nivel: nivelStr,
         slot: slotStr,
@@ -417,8 +420,7 @@ useEffect(() => {
         if (!response.ok) {
           const errorText = await response.text();
           console.error("❌ Error guardando producto:", response.status, errorText);
-          alert("No se pudo guardar el producto en backend.");
-          return;
+          throw new Error("No se pudo guardar el producto en backend.");
         }
 
         const saved = await response.json();
@@ -474,6 +476,14 @@ useEffect(() => {
         return;
       }
 
+      if (isFreeLocation) {
+        console.log(
+          "Ubicación RNLOC: no requiere comando físico de rack:",
+          finalLocationId
+        );
+        return;
+      }
+
       const nivel = parseInt(nivelStr);
       const slot = parseInt(slotStr);
 
@@ -516,7 +526,10 @@ useEffect(() => {
       }
     } catch (error) {
       console.error("❌ Error al preparar producto:", error);
-      alert("Error al preparar producto.");
+      const message =
+        error instanceof Error ? error.message : "Error al preparar producto.";
+      alert(message);
+      throw error instanceof Error ? error : new Error(message);
     }
   };
 
@@ -552,9 +565,12 @@ useEffect(() => {
       stock_alto: Number(updates.stock_alto ?? originalProduct.stock_alto ?? 30),
     };
 
-    const [rack, nivelStr, slotStr] = updatedProduct.locationId.split("-");
+      const isFreeLocation = updatedProduct.locationId.startsWith("RNLOC:");
+      const [rack, nivelStr, slotStr] = isFreeLocation
+        ? ["LIBRE", "0", "0"]
+        : updatedProduct.locationId.split("-");
 
-    const response = await apiFetch(
+      const response = await apiFetch(
       `/productos/${encodeURIComponent(originalProduct.sku)}`,
       {
         method: "PUT",
@@ -563,6 +579,7 @@ useEffect(() => {
           nombre: updatedProduct.nombre,
           descripcion: updatedProduct.descripcion ?? null,
           cantidad: updatedProduct.cantidad,
+          ubicacion_codigo: isFreeLocation ? updatedProduct.locationId : null,
           rack,
           nivel: nivelStr,
           slot: slotStr,

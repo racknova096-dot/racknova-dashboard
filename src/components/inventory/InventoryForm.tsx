@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 import {
   Select,
@@ -25,13 +26,28 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useInventory } from "@/context/InventoryContext";
 import { useToast } from "@/hooks/use-toast";
-import { QRConfirmationModal } from "./QRConfirmationModal";
+import { LocationLabelModal } from "./LocationLabelModal";
+import { RackNovaScannerDialog } from "@/components/scanner/RackNovaScannerDialog";
+import { useRackNovaScanner } from "@/hooks/useRackNovaScanner";
+import type { RackNovaScanResult } from "@/lib/racknovaScan";
+import {
+  DEFAULT_SCAN_CONFIG,
+  crearUbicacionScan,
+  desactivarUbicacionScan,
+  obtenerConfiguracionScan,
+  guardarConfiguracionScan,
+  type RackNovaLocationIdentity,
+  type RackNovaScanConfig,
+} from "@/lib/scanControl";
 
 import {
   Package,
   Plus,
   MapPin,
   Search,
+  ScanLine,
+  Camera,
+  CheckCircle2,
   Lock,
   RotateCcw,
   History,
@@ -141,32 +157,23 @@ export function InventoryForm() {
   const [lotsLoading, setLotsLoading] = useState(false);
   const [fefoNotice, setFefoNotice] = useState<FefoNotice | null>(null);
 
-  const [showQRConfirmation, setShowQRConfirmation] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  const [lastAddedProduct, setLastAddedProduct] = useState<{
-    sku: string;
-    nombre: string;
-    rack: string;
-    nivel: number;
-    slot: number;
-    timestamp: Date;
-    descripcion?: string | null;
-    cantidad?: number;
-    costoProveedor?: number;
-    precioVentaSugerido?: number;
-    caducidad?: string | null;
+  const [scanConfig, setScanConfig] =
+    useState<RackNovaScanConfig>(DEFAULT_SCAN_CONFIG);
+  const [locationVerified, setLocationVerified] = useState(false);
+  const [cameraScannerOpen, setCameraScannerOpen] = useState(false);
+  const [locationLabel, setLocationLabel] = useState<{
+    location: RackNovaLocationIdentity;
+    productName: string;
   } | null>(null);
 
-  const { products, locations, addProduct, getProductByLocation } =
-    useInventory();
+  const { products, addProduct } = useInventory();
 
   const { toast } = useToast();
 
   const identityLocked =
     selectedSource === "inventory" || selectedSource === "catalog";
 
-  const locationLocked = selectedSource === "inventory";
   const isRestock = selectedSource === "inventory";
   const unidadActual = UNIDADES_MANEJO[unidadManejo];
   const factorInventario = unidadActual.factor;
@@ -174,17 +181,10 @@ export function InventoryForm() {
   const stockActualComercial = selectedInventoryProduct
     ? Number(selectedInventoryProduct.cantidad || 0) / factorInventario
     : 0;
+  const locationVerificationActive =
+    scanConfig.ubicacion_verificacion_requerida &&
+    (scanConfig.hid_habilitado || scanConfig.camara_habilitada);
 
-  const availableSlots = locations.filter((loc) => {
-    if (!selectedRack || !selectedNivel) return false;
-
-    const isCorrectLocation =
-      loc.rack === selectedRack && loc.nivel.toString() === selectedNivel;
-
-    const hasProduct = getProductByLocation(loc.id);
-
-    return isCorrectLocation && !hasProduct;
-  });
 
   const searchTerm = useMemo(() => {
     if (selectedSource) return "";
@@ -215,6 +215,54 @@ export function InventoryForm() {
 
     return nueva < actual;
   }, [caducidad, earliestLot]);
+
+  useEffect(() => {
+    void obtenerConfiguracionScan().then(setScanConfig);
+
+    const handleConfig = (event: Event) => {
+      const custom = event as CustomEvent<RackNovaScanConfig>;
+      if (custom.detail) setScanConfig(custom.detail);
+    };
+
+    window.addEventListener("racknova:scan-config-local", handleConfig);
+    return () =>
+      window.removeEventListener("racknova:scan-config-local", handleConfig);
+  }, []);
+
+  const handleLocationScan = (scan: RackNovaScanResult) => {
+    const expected = selectedInventoryProduct?.locationId?.trim();
+    if (!expected || !expected.startsWith("RNLOC:")) return;
+
+    if (scan.code.trim() === expected) {
+      setLocationVerified(true);
+      toast({
+        title: "Ubicación confirmada",
+        description: "La etiqueta coincide con el lugar asignado al producto.",
+      });
+      return;
+    }
+
+    if (scan.code.trim().startsWith("RNLOC:")) {
+      setLocationVerified(false);
+      toast({
+        title: "Ubicación incorrecta",
+        description: "Esa etiqueta pertenece a otro punto físico.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  useRackNovaScanner({
+    enabled:
+      Boolean(selectedInventoryProduct) &&
+      locationVerificationActive &&
+      scanConfig.hid_habilitado,
+    onScan: handleLocationScan,
+  });
+
+  useEffect(() => {
+    setLocationVerified(false);
+  }, [selectedInventoryProduct?.sku]);
 
   const findInventoryExactMatch = (term: string) => {
     const cleanTerm = term.trim().toLowerCase();
@@ -276,11 +324,10 @@ export function InventoryForm() {
     setStockMinimo(Number(product.stock_minimo ?? 10).toString());
     setStockAlto(Number(product.stock_alto ?? 30).toString());
 
-    const [rack, nivel, slot] = product.locationId.split("-");
-
-    setSelectedRack(rack);
-    setSelectedNivel(nivel);
-    setSelectedSlot(slot);
+    setSelectedRack("");
+    setSelectedNivel("");
+    setSelectedSlot("");
+    setLocationVerified(false);
 
     setCatalogResults([]);
   };
@@ -545,6 +592,37 @@ export function InventoryForm() {
     });
   };
 
+  const updateEntryScanPreference = async (
+    patch: Partial<RackNovaScanConfig>
+  ) => {
+    const previous = scanConfig;
+    const normalizedPatch: Partial<RackNovaScanConfig> = { ...patch };
+    const nextHid = patch.hid_habilitado ?? scanConfig.hid_habilitado;
+    const nextCamera = patch.camara_habilitada ?? scanConfig.camara_habilitada;
+
+    if (!nextHid && !nextCamera) {
+      normalizedPatch.ubicacion_verificacion_requerida = false;
+    }
+
+    const optimistic = { ...scanConfig, ...normalizedPatch };
+    setScanConfig(optimistic);
+
+    try {
+      const saved = await guardarConfiguracionScan(normalizedPatch);
+      setScanConfig(saved);
+    } catch (error) {
+      setScanConfig(previous);
+      toast({
+        title: "No se pudo guardar la preferencia",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -684,25 +762,26 @@ export function InventoryForm() {
       stockAltoComercial * factorInventario
     );
 
-    let locationId = "";
+    let locationId = selectedInventoryProduct?.locationId?.trim() || "";
+    const alreadyHasFreeLocation = locationId.startsWith("RNLOC:");
 
-    if (selectedInventoryProduct) {
-      locationId = selectedInventoryProduct.locationId;
-    } else {
-      if (!selectedRack || !selectedNivel || !selectedSlot) {
-        toast({
-          title: "Error",
-          description: "Debe seleccionar rack, nivel y slot.",
-          variant: "destructive",
-        });
-
-        return;
-      }
-
-      locationId = `${selectedRack}-${selectedNivel}-${selectedSlot}`;
+    if (
+      isRestock &&
+      alreadyHasFreeLocation &&
+      locationVerificationActive &&
+      !locationVerified
+    ) {
+      toast({
+        title: "Confirma la ubicación",
+        description:
+          "Escanea la etiqueta física asignada antes de registrar este restock.",
+        variant: "destructive",
+      });
+      return;
     }
 
-    const [finalRack, finalNivel, finalSlot] = locationId.split("-");
+    let createdLocationForThisEntry: RackNovaLocationIdentity | null = null;
+    let inventorySaved = false;
 
     const caducidadValue =
       caducidadNoAplica || !caducidad ? null : caducidad;
@@ -713,6 +792,13 @@ export function InventoryForm() {
     try {
       setIsSaving(true);
 
+      if (!locationId.startsWith("RNLOC:")) {
+        createdLocationForThisEntry = await crearUbicacionScan({
+          nombre: `Ubicación de ${finalNombre}`,
+          descripcion: `Punto físico asignado a ${finalNombre} (${finalSku}).`,
+        });
+        locationId = createdLocationForThisEntry.codigo_ubicacion;
+      }
 
       const unitResponse = await apiFetch(
         `/pos/v3/productos/unidad/${encodeURIComponent(finalSku)}`,
@@ -746,22 +832,14 @@ export function InventoryForm() {
         stock_minimo: stockMinimoNum,
         stock_alto: stockAltoNum,
       });
+      inventorySaved = true;
 
-      setLastAddedProduct({
-        sku: finalSku,
-        nombre: finalNombre,
-        rack: finalRack,
-        nivel: parseInt(finalNivel),
-        slot: parseInt(finalSlot),
-        timestamp: new Date(),
-        descripcion: finalDescripcion || null,
-        cantidad: cantidadComercial,
-        costoProveedor: costoProveedorComercial,
-        precioVentaSugerido: precioVentaSugeridoNum,
-        caducidad: caducidadValue,
-      });
-
-      setShowQRConfirmation(true);
+      if (createdLocationForThisEntry) {
+        setLocationLabel({
+          location: createdLocationForThisEntry,
+          productName: finalNombre,
+        });
+      }
 
       if (shouldShowFefoNotice) {
         setFefoNotice({
@@ -782,6 +860,12 @@ export function InventoryForm() {
       resetForm();
     } catch (error) {
       console.error("Error agregando producto:", error);
+
+      if (createdLocationForThisEntry && !inventorySaved) {
+        void desactivarUbicacionScan(createdLocationForThisEntry.id_ubicacion).catch(
+          () => undefined
+        );
+      }
 
       toast({
         title: "Error",
@@ -973,10 +1057,10 @@ export function InventoryForm() {
 
                         <p className="mt-1 text-sm text-blue-700 dark:text-blue-300">
                           Este producto ya existe en inventario. RackNova sumará
-                          la nueva cantidad, conservará la ubicación{" "}
-                          <strong>{selectedInventoryProduct.locationId}</strong>
-                          , recalculará el costo promedio y creará un lote nuevo
-                          con la caducidad capturada.
+                          la nueva cantidad y lo mantendrá asociado a{" "}
+                          <strong>{selectedInventoryProduct.locationId}</strong>.
+                          Si todavía usa una ubicación heredada, esta entrada la
+                          convertirá a una etiqueta libre RNLOC.
                         </p>
                       </div>
                     )}
@@ -1288,136 +1372,157 @@ export function InventoryForm() {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="overflow-hidden border-violet-500/20">
                 <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2 text-lg">
-                    <MapPin className="h-4 w-4" />
-                    Ubicación en Inventario
+                    <MapPin className="h-4 w-4 text-violet-600" />
+                    Ubicación física libre
                   </CardTitle>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {locationLocked && selectedInventoryProduct ? (
-                    <div className="rounded-md border bg-muted/40 p-4">
-                      <p className="text-sm font-semibold">
-                        Ubicación fija por restock
-                      </p>
-
-                      <p className="mt-1 font-mono text-sm">
-                        {selectedInventoryProduct.locationId}
-                      </p>
-
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Como el producto ya está en inventario, RackNova usará
-                        la misma ubicación y no permitirá seleccionar otra.
+                  <div className="rounded-2xl border border-border/70 bg-background p-4">
+                    <div className="mb-4">
+                      <p className="text-sm font-bold">Control de acomodo en este dispositivo</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Estas opciones son locales. Cambiarlas aquí no obliga a otras
+                        cajas, computadoras o celulares a trabajar igual.
                       </p>
                     </div>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="rack">Rack *</Label>
 
-                        <Select
-                          value={selectedRack}
-                          disabled={isSaving}
-                          onValueChange={(value) => {
-                            setSelectedRack(value);
-                            setSelectedNivel("");
-                            setSelectedSlot("");
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar Rack" />
-                          </SelectTrigger>
-
-                          <SelectContent>
-                            <SelectItem value="A">Rack A</SelectItem>
-                            <SelectItem value="B">Rack B</SelectItem>
-                            <SelectItem value="C">Rack C</SelectItem>
-                            <SelectItem value="D">Rack D</SelectItem>
-                            <SelectItem value="E">Rack E</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="nivel">Nivel *</Label>
-
-                        <Select
-                          value={selectedNivel}
-                          disabled={!selectedRack || isSaving}
-                          onValueChange={(value) => {
-                            setSelectedNivel(value);
-                            setSelectedSlot("");
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar Nivel" />
-                          </SelectTrigger>
-
-                          <SelectContent>
-                            <SelectItem value="1">Nivel 1</SelectItem>
-                            <SelectItem value="2">Nivel 2</SelectItem>
-                            <SelectItem value="3">Nivel 3</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="slot">Slot *</Label>
-
-                        <Select
-                          value={selectedSlot}
-                          onValueChange={setSelectedSlot}
-                          disabled={
-                            !selectedNivel ||
-                            availableSlots.length === 0 ||
-                            isSaving
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleccionar Slot" />
-                          </SelectTrigger>
-
-                          <SelectContent>
-                            {availableSlots.length === 0 ? (
-                              <SelectItem value="none" disabled>
-                                {!selectedNivel
-                                  ? "Seleccione nivel primero"
-                                  : "No hay slots disponibles"}
-                              </SelectItem>
-                            ) : (
-                              availableSlots.map((location) => (
-                                <SelectItem
-                                  key={location.id}
-                                  value={location.slot.toString()}
-                                >
-                                  Slot {location.slot}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {selectedRack && selectedNivel && (
-                        <div className="rounded-md bg-muted p-3">
-                          <p className="text-sm text-muted-foreground">
-                            <strong>Ubicación seleccionada:</strong>
-                          </p>
-
-                          <p className="font-mono text-sm">
-                            {selectedRack}-{selectedNivel}-
-                            {selectedSlot || "?"}
-                          </p>
-
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {availableSlots.length} slots disponibles en este
-                            nivel
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                        <div>
+                          <p className="text-sm font-semibold">Confirmar acomodo</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Exige escanear la ubicación al reabastecer.
                           </p>
                         </div>
+                        <Switch
+                          checked={scanConfig.ubicacion_verificacion_requerida}
+                          disabled={!scanConfig.hid_habilitado && !scanConfig.camara_habilitada}
+                          onCheckedChange={(value) =>
+                            void updateEntryScanPreference({
+                              ubicacion_verificacion_requerida: value,
+                            })
+                          }
+                          aria-label="Confirmar acomodo con escaneo"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                        <div>
+                          <p className="text-sm font-semibold">Pistola USB / Bluetooth</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Acepta lectores tipo teclado HID.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={scanConfig.hid_habilitado}
+                          onCheckedChange={(value) =>
+                            void updateEntryScanPreference({ hid_habilitado: value })
+                          }
+                          aria-label="Lector HID para entrada"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between gap-3 rounded-xl border p-3">
+                        <div>
+                          <p className="text-sm font-semibold">Cámara</p>
+                          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                            Permite confirmar con cámara del dispositivo.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={scanConfig.camara_habilitada}
+                          onCheckedChange={(value) =>
+                            void updateEntryScanPreference({ camara_habilitada: value })
+                          }
+                          aria-label="Cámara para entrada"
+                        />
+                      </label>
+                    </div>
+
+                    {!scanConfig.hid_habilitado && !scanConfig.camara_habilitada && (
+                      <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+                        Activa al menos un lector antes de exigir confirmación de acomodo.
+                      </p>
+                    )}
+                  </div>
+
+                  {!isRestock && (
+                    <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-4">
+                      <p className="font-semibold">Tú decides dónde va el producto</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        No necesitas crear racks, niveles ni posiciones. Al guardar,
+                        RackNova generará una etiqueta QR + Code128. Coloca el
+                        producto donde quieras y pega la etiqueta exactamente ahí.
+                      </p>
+                    </div>
+                  )}
+
+                  {isRestock && selectedInventoryProduct?.locationId.startsWith("RNLOC:") && (
+                    <div className="space-y-3 rounded-2xl border bg-muted/30 p-4">
+                      <div>
+                        <p className="text-sm font-semibold">Ubicación asignada</p>
+                        <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                          {selectedInventoryProduct.locationId}
+                        </p>
+                      </div>
+
+                      {locationVerificationActive ? (
+                        <div className={`rounded-xl border p-3 ${locationVerified ? "border-emerald-500/30 bg-emerald-500/10" : "border-amber-500/30 bg-amber-500/10"}`}>
+                          <div className="flex items-start gap-3">
+                            {locationVerified ? (
+                              <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                            ) : (
+                              <ScanLine className="mt-0.5 h-5 w-5 text-amber-600" />
+                            )}
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold">
+                                {locationVerified
+                                  ? "Ubicación confirmada"
+                                  : "Escanea la etiqueta donde vas a acomodarlo"}
+                              </p>
+                              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                                {locationVerified
+                                  ? "La lectura coincide con la ubicación guardada."
+                                  : "Esto confirma físicamente que el reabastecimiento va al mismo lugar."}
+                              </p>
+                              {!locationVerified && scanConfig.camara_habilitada && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-3"
+                                  onClick={() => setCameraScannerOpen(true)}
+                                >
+                                  <Camera className="mr-2 h-4 w-4" />
+                                  Usar cámara
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs leading-5 text-muted-foreground">
+                          La confirmación física está desactivada en este dispositivo.
+                          RackNova te muestra la ubicación, pero no te obliga a escanearla.
+                        </p>
                       )}
-                    </>
+                    </div>
+                  )}
+
+                  {isRestock && selectedInventoryProduct && !selectedInventoryProduct.locationId.startsWith("RNLOC:") && (
+                    <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
+                      <p className="font-semibold">Migración automática a ubicación libre</p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Este producto todavía usa la ubicación anterior{" "}
+                        <strong>{selectedInventoryProduct.locationId}</strong>. Al
+                        registrar esta entrada, RackNova generará una nueva etiqueta
+                        RNLOC para que la pegues donde realmente guardas el artículo.
+                      </p>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -1450,10 +1555,21 @@ export function InventoryForm() {
           </CardContent>
         </Card>
 
-        <QRConfirmationModal
-          isOpen={showQRConfirmation}
-          onClose={() => setShowQRConfirmation(false)}
-          productData={lastAddedProduct}
+        <LocationLabelModal
+          open={Boolean(locationLabel)}
+          onOpenChange={(open) => {
+            if (!open) setLocationLabel(null);
+          }}
+          location={locationLabel?.location ?? null}
+          productName={locationLabel?.productName ?? null}
+        />
+
+        <RackNovaScannerDialog
+          open={cameraScannerOpen}
+          onOpenChange={setCameraScannerOpen}
+          onScan={handleLocationScan}
+          title="Confirmar ubicación de acomodo"
+          description="Escanea la etiqueta RackNova pegada en el lugar donde vas a colocar este producto."
         />
       </div>
     </>
