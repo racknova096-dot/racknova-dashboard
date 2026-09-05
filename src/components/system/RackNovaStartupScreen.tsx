@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BrainCircuit, Database, Loader2, Sparkles } from "lucide-react";
+
+const MINIMUM_VISIBLE_MS = 5000;
 
 const IA_TIPS = [
   "Pregúntale a RackNova IA qué productos necesitan atención.",
@@ -37,12 +39,37 @@ function getFriendlyName() {
 
 export function RackNovaStartupScreen({ show }: { show: boolean }) {
   const [tipIndex, setTipIndex] = useState(0);
-  const greeting = useMemo(() => getGreeting(), [show]);
-  const name = useMemo(() => getFriendlyName(), [show]);
+  const [minimumElapsed, setMinimumElapsed] = useState(false);
+  const startedRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!show || startedRef.current) return;
+
+    startedRef.current = true;
+    setMinimumElapsed(false);
+    timerRef.current = window.setTimeout(() => {
+      setMinimumElapsed(true);
+      timerRef.current = null;
+    }, MINIMUM_VISIBLE_MS);
+  }, [show]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    },
+    []
+  );
+
+  const visible = show || (startedRef.current && !minimumElapsed);
+  const greeting = useMemo(() => getGreeting(), [visible]);
+  const name = useMemo(() => getFriendlyName(), [visible]);
   const iconSrc = `${import.meta.env.BASE_URL}racknova-icon-192-v2.png`;
 
   useEffect(() => {
-    if (!show) {
+    if (!visible) {
       setTipIndex(0);
       return;
     }
@@ -52,9 +79,9 @@ export function RackNovaStartupScreen({ show }: { show: boolean }) {
     }, 2800);
 
     return () => window.clearInterval(timer);
-  }, [show]);
+  }, [visible]);
 
-  if (!show) return null;
+  if (!visible) return null;
 
   return (
     <div
