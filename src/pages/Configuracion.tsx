@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { PageHero } from "@/components/layout/PageHero";
 import { RackNovaScannerDialog } from "@/components/scanner/RackNovaScannerDialog";
 import { ScanControlPanel } from "@/components/scanner/ScanControlPanel";
+import { LocalOwnerReset } from "@/components/system/LocalOwnerReset";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -317,6 +318,8 @@ export default function Configuracion() {
           </CardContent>
         </Card>
       </div>
+
+      <LocalOwnerReset />
 
       <RackNovaScannerDialog
         open={cameraOpen}
