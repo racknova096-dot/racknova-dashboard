@@ -3,6 +3,8 @@ import {
   Barcode,
   Camera,
   CheckCircle2,
+  DatabaseBackup,
+  KeyRound,
   Laptop,
   Loader2,
   LockKeyhole,
@@ -10,6 +12,8 @@ import {
   Settings,
   ShieldAlert,
   Smartphone,
+  Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,6 +23,7 @@ import { ScanControlPanel } from "@/components/scanner/ScanControlPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useRackNovaScanner } from "@/hooks/useRackNovaScanner";
 import {
   DEFAULT_SCAN_CONFIG,
@@ -26,6 +31,11 @@ import {
   type RackNovaScanConfig,
 } from "@/lib/scanControl";
 import type { RackNovaScanResult } from "@/lib/racknovaScan";
+import {
+  borrarDatosLocalesComoPropietario,
+  obtenerEstadoBorradoLocalPropietario,
+  type LocalOwnerResetStatus,
+} from "@/lib/localOwnerReset";
 
 type CameraPermission =
   | "checking"
@@ -80,6 +90,12 @@ export default function Configuracion() {
   const [requestingCamera, setRequestingCamera] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [lastScan, setLastScan] = useState<RackNovaScanResult | null>(null);
+  const [ownerResetStatus, setOwnerResetStatus] =
+    useState<LocalOwnerResetStatus | null>(null);
+  const [ownerZoneOpen, setOwnerZoneOpen] = useState(false);
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [ownerConfirmation, setOwnerConfirmation] = useState("");
+  const [ownerResetting, setOwnerResetting] = useState(false);
 
   const refreshCameraPermission = useCallback(async () => {
     if (typeof window === "undefined") return;
@@ -112,6 +128,7 @@ export default function Configuracion() {
   useEffect(() => {
     void obtenerConfiguracionScan().then(setConfig);
     void refreshCameraPermission();
+    void obtenerEstadoBorradoLocalPropietario().then(setOwnerResetStatus);
 
     const handleConfig = (event: Event) => {
       const custom = event as CustomEvent<RackNovaScanConfig>;
@@ -158,6 +175,44 @@ export default function Configuracion() {
       );
     } finally {
       setRequestingCamera(false);
+    }
+  };
+
+  const handleOwnerReset = async () => {
+    if (!ownerResetStatus || ownerResetting) return;
+
+    if (!ownerPassword.trim()) {
+      toast.error("Escribe tu contraseña de propietario.");
+      return;
+    }
+
+    if (ownerConfirmation.trim() !== ownerResetStatus.confirmation_phrase) {
+      toast.error(
+        `Escribe exactamente: ${ownerResetStatus.confirmation_phrase}`
+      );
+      return;
+    }
+
+    setOwnerResetting(true);
+    try {
+      const result = await borrarDatosLocalesComoPropietario(
+        ownerPassword,
+        ownerConfirmation.trim()
+      );
+      toast.success(
+        `${result.message} Respaldo: ${result.backup_path}`
+      );
+      setOwnerPassword("");
+      setOwnerConfirmation("");
+      window.setTimeout(() => window.location.reload(), 1400);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No fue posible borrar los datos locales."
+      );
+    } finally {
+      setOwnerResetting(false);
     }
   };
 
@@ -317,6 +372,117 @@ export default function Configuracion() {
           </CardContent>
         </Card>
       </div>
+
+      {ownerResetStatus?.available && (
+        <section className="space-y-3">
+          {!ownerZoneOpen ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => setOwnerZoneOpen(true)}
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                Administración avanzada del propietario
+              </Button>
+            </div>
+          ) : (
+            <Card className="racknova-card overflow-hidden border-red-200/80 dark:border-red-900/60">
+              <CardHeader className="border-b border-red-200/70 bg-red-50/60 dark:border-red-900/50 dark:bg-red-950/20">
+                <CardTitle className="flex items-center gap-2 text-lg text-red-700 dark:text-red-300">
+                  <TriangleAlert className="h-5 w-5" />
+                  Zona privada del propietario
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5 pt-5">
+                <div className="rounded-2xl border border-red-200/70 bg-red-50/50 p-4 text-sm leading-6 text-red-900 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-100">
+                  <div className="flex items-start gap-3">
+                    <DatabaseBackup className="mt-0.5 h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="font-black">
+                        Borrar datos operativos de esta RackNova Local
+                      </p>
+                      <p className="mt-1">
+                        Antes de borrar, RackNova crea automáticamente un respaldo completo
+                        de PostgreSQL. Se conservan usuarios, empresa, activación, vínculo
+                        con RackNova Cloud e identidad del nodo.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold">
+                      Contraseña del propietario
+                    </label>
+                    <Input
+                      type="password"
+                      autoComplete="current-password"
+                      value={ownerPassword}
+                      onChange={(event) => setOwnerPassword(event.target.value)}
+                      placeholder="Confirma tu contraseña"
+                      disabled={ownerResetting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold">
+                      Frase de confirmación
+                    </label>
+                    <Input
+                      value={ownerConfirmation}
+                      onChange={(event) => setOwnerConfirmation(event.target.value)}
+                      placeholder={ownerResetStatus.confirmation_phrase}
+                      disabled={ownerResetting}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Escribe exactamente:{" "}
+                      <span className="font-mono font-bold">
+                        {ownerResetStatus.confirmation_phrase}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={ownerResetting}
+                    onClick={() => {
+                      setOwnerZoneOpen(false);
+                      setOwnerPassword("");
+                      setOwnerConfirmation("");
+                    }}
+                  >
+                    Ocultar zona privada
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={
+                      ownerResetting ||
+                      !ownerPassword.trim() ||
+                      ownerConfirmation.trim() !==
+                        ownerResetStatus.confirmation_phrase
+                    }
+                    onClick={() => void handleOwnerReset()}
+                  >
+                    {ownerResetting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" />
+                    )}
+                    Crear respaldo y borrar datos locales
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </section>
+      )}
 
       <RackNovaScannerDialog
         open={cameraOpen}
