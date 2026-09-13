@@ -2541,7 +2541,179 @@ export default function PuntoVenta() {
         description="Usa la cámara para leer el código de barras o QR del producto."
       />
 
-      {ticket && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setTicket(null); }}><div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-white/10 bg-background shadow-2xl"><div className="flex items-start justify-between border-b border-border/60 p-5"><div><p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">Ticket de venta</p><h2 className="mt-1 text-2xl font-black">{ticket.folio}</h2><p className="text-sm text-muted-foreground">{formatDate(ticket.fecha)} · {ticket.usuario}</p></div><Button size="icon" variant="ghost" onClick={() => setTicket(null)}><XCircle className="h-5 w-5" /></Button></div><div className="space-y-4 p-5"><div className="divide-y divide-border/60 rounded-2xl border border-border/60">{ticket.items.map((item) => <div key={item.id_detalle} className="flex items-center justify-between gap-4 p-3.5"><div><p className="font-bold">{item.nombre}</p><p className="text-xs text-muted-foreground">{mostrarCantidad(item.cantidad)} {unidadVenta(item)} · {item.sku}</p></div><strong>{money(item.subtotal)}</strong></div>)}</div><div className="rounded-2xl bg-secondary/45 p-4"><div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal</span><span>{money(ticket.subtotal)}</span></div><div className="mt-2 flex justify-between text-sm text-muted-foreground"><span>Descuentos</span><span>-{money(ticket.descuento_total)}</span></div><div className="mt-3 flex justify-between border-t border-border/60 pt-3 text-xl"><span className="font-bold">Total</span><strong>{money(ticket.total)}</strong></div></div><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={() => setTicket(null)}>Cerrar</Button><Button onClick={() => printTicket(ticket)}><Printer className="mr-2 h-4 w-4" />Imprimir ticket</Button></div></div></div></div>}
+      {ticket && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setTicket(null);
+          }}
+        >
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-white/10 bg-background shadow-2xl">
+            <div className="flex items-start justify-between border-b border-border/60 p-5">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">
+                  Ticket de venta
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <h2 className="text-2xl font-black">{ticket.folio}</h2>
+                  {ticket.estado_devolucion === "PARCIAL" && (
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    >
+                      Devolución parcial
+                    </Badge>
+                  )}
+                  {ticket.estado_devolucion === "TOTAL" && (
+                    <Badge
+                      variant="outline"
+                      className="border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                    >
+                      Devolución total
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {formatDate(ticket.fecha)} · {ticket.usuario}
+                </p>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setTicket(null)}
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="divide-y divide-border/60 rounded-2xl border border-border/60">
+                {ticket.items.map((item) => (
+                  <div
+                    key={item.id_detalle}
+                    className="flex items-center justify-between gap-4 p-3.5"
+                  >
+                    <div>
+                      <p className="font-bold">{item.nombre}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {mostrarCantidad(item.cantidad)} {unidadVenta(item)} · {item.sku}
+                      </p>
+                      {Number(item.cantidad_devuelta || 0) > 0 && (
+                        <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                          Devuelto: {mostrarCantidad(item.cantidad_devuelta)} {unidadVenta(item)}
+                        </p>
+                      )}
+                    </div>
+                    <strong>{money(item.subtotal)}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-2xl bg-secondary/45 p-4">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>{money(ticket.subtotal)}</span>
+                </div>
+                <div className="mt-2 flex justify-between text-sm text-muted-foreground">
+                  <span>Descuentos</span>
+                  <span>-{money(ticket.descuento_total)}</span>
+                </div>
+                <div className="mt-3 flex justify-between border-t border-border/60 pt-3">
+                  <span className="font-bold">Total original</span>
+                  <strong>{money(ticket.total)}</strong>
+                </div>
+                {Number(ticket.monto_devuelto || 0) > 0 && (
+                  <>
+                    <div className="mt-2 flex justify-between text-sm font-semibold text-amber-700 dark:text-amber-300">
+                      <span>Devuelto</span>
+                      <span>-{money(Number(ticket.monto_devuelto || 0))}</span>
+                    </div>
+                    <div className="mt-3 flex justify-between border-t border-border/60 pt-3 text-xl">
+                      <span className="font-bold">Total neto</span>
+                      <strong>
+                        {money(
+                          Number(
+                            ticket.total_neto ??
+                              Math.max(
+                                ticket.total - Number(ticket.monto_devuelto || 0),
+                                0
+                              )
+                          )
+                        )}
+                      </strong>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {(ticket.devoluciones || []).length > 0 && (
+                <div className="space-y-3">
+                  <div>
+                    <h3 className="font-black">Historial de devoluciones</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Las devoluciones quedan vinculadas permanentemente a este ticket.
+                    </p>
+                  </div>
+                  {(ticket.devoluciones || []).map((returnRow) => (
+                    <div
+                      key={returnRow.id_devolucion}
+                      className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] p-4"
+                    >
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-black">{returnRow.folio}</p>
+                            <Badge variant="outline">{returnRow.estado}</Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {formatDate(returnRow.fecha)} · {returnRow.usuario}
+                          </p>
+                          <p className="mt-2 text-sm">{returnRow.motivo}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Reembolso: {returnRow.metodo_reembolso}
+                          </p>
+                        </div>
+                        <strong className="text-lg text-amber-700 dark:text-amber-300">
+                          -{money(returnRow.monto)}
+                        </strong>
+                      </div>
+
+                      <div className="mt-3 divide-y divide-border/50 rounded-xl border border-border/50 bg-background/70">
+                        {returnRow.items.map((item) => (
+                          <div
+                            key={item.id_detalle_devolucion}
+                            className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
+                          >
+                            <div>
+                              <p className="font-semibold">{item.nombre}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {mostrarCantidad(item.cantidad)} {unidadVenta(item)} · {item.sku}
+                              </p>
+                            </div>
+                            <span className="font-semibold">
+                              -{money(item.subtotal)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setTicket(null)}>
+                  Cerrar
+                </Button>
+                <Button onClick={() => printTicket(ticket)}>
+                  <Printer className="mr-2 h-4 w-4" />
+                  Imprimir ticket
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {returnSale && <div className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"><div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-white/10 bg-background shadow-2xl"><div className="flex items-start justify-between border-b border-border/60 p-5"><div><p className="text-[11px] font-bold uppercase tracking-[0.15em] text-amber-600">Registrar devolución</p><h2 className="mt-1 text-2xl font-black">Venta {returnSale.folio}</h2><p className="text-sm text-muted-foreground">Selecciona únicamente lo que regresó el cliente.</p></div><Button size="icon" variant="ghost" onClick={() => setReturnSale(null)}><XCircle className="h-5 w-5" /></Button></div><div className="space-y-4 p-5"><div className="space-y-2.5">{returnSale.items.map((item) => { const available = maxReturn(item); const factor = Number(item.factor_inventario || 1); const step = factor > 1 ? 1 / factor : 1; return <div key={item.id_detalle} className="grid gap-3 rounded-2xl border border-border/60 p-4 sm:grid-cols-[1fr_170px] sm:items-end"><div><p className="font-bold">{item.nombre}</p><p className="text-xs text-muted-foreground">{item.sku} · disponibles para devolver {available}</p></div><div><label className="text-xs font-bold text-muted-foreground">Cantidad</label><Input type="number" min="0" max={available} step={step} disabled={available <= 0} value={returnQuantities[item.id_detalle] || ""} onChange={(event) => { const raw = event.target.value; setReturnQuantities((current) => ({ ...current, [item.id_detalle]: raw === "" ? "" : String(Math.min(Math.max(Number(raw), 0), available)) })); }} placeholder={available > 0 ? `Máximo ${available}` : "Sin disponibles"} /></div></div>; })}</div><div className="grid gap-3 md:grid-cols-2"><div><label className="text-xs font-bold text-muted-foreground">Motivo</label><Input className="mt-1" placeholder="Ejemplo: producto dañado" value={returnReason} onChange={(event) => setReturnReason(event.target.value)} /></div><div><label className="text-xs font-bold text-muted-foreground">Reembolso</label><select className="mt-1 h-11 w-full rounded-xl border border-input/90 bg-card px-3" value={refundMethod} onChange={(event) => setRefundMethod(event.target.value as MetodoReembolso)}><option value="efectivo">Efectivo</option><option value="tarjeta">Tarjeta</option><option value="transferencia">Transferencia</option></select></div></div><div className="flex items-center justify-between rounded-2xl bg-secondary/50 p-4"><div><p className="font-bold">Total a reembolsar</p><p className="text-xs text-muted-foreground">El inventario se restaurará al confirmar.</p></div><strong className="text-2xl font-black">{money(returnTotal)}</strong></div><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={() => setReturnSale(null)}>Cancelar</Button><Button disabled={returning || returnTotal <= 0 || returnReason.trim().length < 3} onClick={submitReturn}>{returning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar devolución</Button></div></div></div></div>}
 
