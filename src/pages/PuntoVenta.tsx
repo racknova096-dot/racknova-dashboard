@@ -112,7 +112,7 @@ const roundQuantity = (value: number) =>
   Math.round((Number(value || 0) + Number.EPSILON) * 1_000_000) /
   1_000_000;
 
-const unidadVenta = (product: POSProducto | POSVentaDetalleItem) => {
+const unidadVenta = (product: { unidad_venta?: string | null }) => {
   const unit = String(product.unidad_venta || "pieza").toLowerCase();
   if (unit === "litro") return "L";
   if (unit === "kg") return "kg";
