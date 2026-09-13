@@ -581,6 +581,7 @@ useEffect(() => {
           sku: updatedProduct.sku,
           nombre: updatedProduct.nombre,
           descripcion: updatedProduct.descripcion ?? null,
+          unidad_manejo: updatedProduct.unidad_manejo ?? "pieza",
           cantidad: updatedProduct.cantidad,
           ubicacion_codigo: isFreeLocation ? updatedProduct.locationId : null,
           rack,
