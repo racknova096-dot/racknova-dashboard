@@ -102,6 +102,10 @@ export type POSVentaResumen = {
   saldo_pendiente?: number;
   fecha_vencimiento?: string | null;
   descuento_promociones?: number;
+  numero_devoluciones?: number;
+  monto_devuelto?: number;
+  total_neto?: number;
+  estado_devolucion?: "NINGUNA" | "PARCIAL" | "TOTAL";
 };
 
 export type POSVentaDetalleItem = {
@@ -127,10 +131,41 @@ export type POSVentaDetalleItem = {
   ganancia: number;
 };
 
+export type POSDevolucionHistorialItem = {
+  id_detalle_devolucion: number;
+  id_detalle_venta: number;
+  id_producto?: number | null;
+  sku: string;
+  nombre: string;
+  cantidad: number;
+  cantidad_inventario: number;
+  unidad_venta: string;
+  factor_inventario: number;
+  precio_unitario: number;
+  subtotal: number;
+};
+
+export type POSDevolucionHistorial = {
+  id_devolucion: number;
+  folio: string;
+  id_venta: number;
+  id_sesion: number;
+  usuario: string;
+  motivo: string;
+  metodo_reembolso: string;
+  monto: number;
+  ajuste_credito: number;
+  reembolso_real: number;
+  estado: string;
+  fecha: string;
+  items: POSDevolucionHistorialItem[];
+};
+
 export type POSVentaDetalle = POSVentaResumen & {
   mensaje?: string;
   duplicada?: boolean;
   items: POSVentaDetalleItem[];
+  devoluciones?: POSDevolucionHistorial[];
   pagos: Array<{
     id_pago: number;
     metodo: string;
