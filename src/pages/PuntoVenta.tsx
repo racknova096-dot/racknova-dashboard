@@ -146,6 +146,13 @@ const money = (value: number) =>
     currency: "MXN",
   }).format(Number(value || 0));
 
+const returnStatusLabel = (status?: string | null) => {
+  const normalized = String(status || "NINGUNA").toUpperCase();
+  if (normalized === "TOTAL") return "Devolución total";
+  if (normalized === "PARCIAL") return "Devolución parcial";
+  return "Sin devolución";
+};
+
 const productImageUrl = (product: POSProducto) =>
   product.imagen_url ||
   product.image_url ||
@@ -611,6 +618,8 @@ export default function PuntoVenta() {
         sale.usuario,
         sale.cliente_nombre || "",
         sale.estado,
+        sale.estado_devolucion || "",
+        returnStatusLabel(sale.estado_devolucion),
       ].some((value) =>
         String(value).toLowerCase().includes(search)
       )
