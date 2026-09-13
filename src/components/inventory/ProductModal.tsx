@@ -553,6 +553,7 @@ export function ProductModal({
           locationId: location.id,
           sku: finalSku,
           nombre: nombre.trim(),
+          unidad_manejo: unidadManejo,
           cantidad: cantidadNum,
           costo_proveedor: costoProveedorNum,
           precio_venta_sugerido: precioVentaSugeridoNum,
@@ -592,6 +593,7 @@ export function ProductModal({
         await updateProduct(product.id, {
           sku: finalSku,
           nombre: nombre.trim(),
+          unidad_manejo: unidadManejo,
           cantidad: cantidadNum,
           costo_proveedor: costoProveedorNum,
           precio_venta_sugerido: precioVentaSugeridoNum,
