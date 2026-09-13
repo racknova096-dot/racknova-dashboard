@@ -116,6 +116,9 @@ const unidadVenta = (product: POSProducto | POSVentaDetalleItem) => {
   const unit = String(product.unidad_venta || "pieza").toLowerCase();
   if (unit === "litro") return "L";
   if (unit === "kg") return "kg";
+  if (unit === "bulto") return "bulto";
+  if (unit === "caja") return "caja";
+  if (unit === "paquete") return "paq";
   return "pza";
 };
 
