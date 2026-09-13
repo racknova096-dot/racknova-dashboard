@@ -1,4 +1,5 @@
 export type SlotStatus = "libre" | "en_proceso" | "ocupado" | "quitando";
+export type UnidadManejo = "pieza" | "bulto" | "caja" | "paquete" | "kg" | "litro";
 
 export interface Location {
   id: string;
@@ -17,6 +18,7 @@ export interface Product {
   descripcion?: string | null;
 
   cantidad: number;
+  unidad_manejo?: UnidadManejo;
 
   costo_proveedor: number;
   precio_venta_sugerido?: number;
@@ -46,6 +48,7 @@ export interface ProductoCatalogo {
   sku: string;
   nombre: string;
   descripcion?: string | null;
+  unidad_manejo?: UnidadManejo;
 
   fecha_creacion?: string;
   ultima_actualizacion?: string;
