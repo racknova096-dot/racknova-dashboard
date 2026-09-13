@@ -826,6 +826,7 @@ export function InventoryForm() {
         sku: finalSku,
         nombre: finalNombre,
         descripcion: finalDescripcion || null,
+        unidad_manejo: unidadManejo,
         cantidad: cantidadNum,
         costo_proveedor: costoProveedorNum,
         precio_venta_sugerido: precioVentaSugeridoNum,
