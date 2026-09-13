@@ -32,10 +32,30 @@ import ProtectedLayout from "@/components/layout/ProtectedLayout";
 
 const queryClient = new QueryClient();
 
+const STARTUP_AFTER_LOGIN_KEY = "racknova:startup-after-login";
+
+function consumeStartupAfterLoginFlag() {
+  if (typeof window === "undefined") return false;
+
+  const shouldShow =
+    window.sessionStorage.getItem(STARTUP_AFTER_LOGIN_KEY) === "1";
+
+  if (shouldShow) {
+    // Se consume de inmediato para que un refresh durante o después
+    // de la pantalla de inicio no vuelva a mostrarla.
+    window.sessionStorage.removeItem(STARTUP_AFTER_LOGIN_KEY);
+  }
+
+  return shouldShow;
+}
+
 function AppContent() {
   const location = useLocation();
   const { isInventoryLoading } = useInventory();
   const initialInventoryLoaded = useRef(false);
+  const showStartupAfterLogin = useRef(
+    consumeStartupAfterLoginFlag()
+  ).current;
 
   useEffect(() => {
     if (!isInventoryLoading) {
@@ -46,7 +66,9 @@ function AppContent() {
   const isLoginPage = location.pathname === "/login";
   const showIAAssistant = !isLoginPage && canUseIA();
   const showInitialInventoryLoader =
-    !initialInventoryLoaded.current && isInventoryLoading;
+    showStartupAfterLogin &&
+    !initialInventoryLoaded.current &&
+    isInventoryLoading;
 
   return (
     <div className="min-h-screen bg-background">
