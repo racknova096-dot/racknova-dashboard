@@ -43,7 +43,7 @@ interface ProductModalProps {
 }
 
 // RACKNOVA_UNIDADES_MODAL
-type UnidadManejo = "pieza" | "kg" | "litro";
+type UnidadManejo = "pieza" | "bulto" | "caja" | "paquete" | "kg" | "litro";
 
 const UNIDADES_MANEJO: Record<
   UnidadManejo,
@@ -63,6 +63,30 @@ const UNIDADES_MANEJO: Record<
     factor: 1,
     paso: 1,
     unidadInterna: "pieza",
+  },
+  bulto: {
+    etiqueta: "bulto",
+    etiquetaPlural: "bultos",
+    simbolo: "bulto",
+    factor: 1,
+    paso: 1,
+    unidadInterna: "bulto",
+  },
+  caja: {
+    etiqueta: "caja",
+    etiquetaPlural: "cajas",
+    simbolo: "caja",
+    factor: 1,
+    paso: 1,
+    unidadInterna: "caja",
+  },
+  paquete: {
+    etiqueta: "paquete",
+    etiquetaPlural: "paquetes",
+    simbolo: "paq",
+    factor: 1,
+    paso: 1,
+    unidadInterna: "paquete",
   },
   kg: {
     etiqueta: "kilogramo",
@@ -85,6 +109,10 @@ const UNIDADES_MANEJO: Record<
 const unidadNormalizada = (value: unknown): UnidadManejo => {
   const clean = String(value || "pieza").trim().toLowerCase();
 
+  if (["bulto", "bultos"].includes(clean)) return "bulto";
+  if (["caja", "cajas"].includes(clean)) return "caja";
+  if (["paquete", "paquetes", "paq"].includes(clean)) return "paquete";
+
   if (["kg", "kilo", "kilos", "kilogramo", "kilogramos"].includes(clean)) {
     return "kg";
   }
@@ -98,6 +126,9 @@ const unidadNormalizada = (value: unknown): UnidadManejo => {
 
 const numeroComercial = (value: number, decimals = 3) =>
   Number(Number(value || 0).toFixed(decimals)).toString();
+
+const esUnidadEntera = (unidad: UnidadManejo) =>
+  ["pieza", "bulto", "caja", "paquete"].includes(unidad);
 
 const cantidadInterna = (
   value: number,
@@ -380,7 +411,7 @@ export function ProductModal({
       toast({
         title: "Cantidad inválida",
         description:
-          unidadManejo === "pieza"
+          esUnidadEntera(unidadManejo)
             ? "Las piezas deben capturarse con números enteros."
             : `Captura máximo 3 decimales en ${unidadActual.simbolo}.`,
         variant: "destructive",
@@ -621,7 +652,7 @@ export function ProductModal({
       toast({
         title: "Cantidad inválida",
         description:
-          unidadManejo === "pieza"
+          esUnidadEntera(unidadManejo)
             ? "Captura piezas completas."
             : `Captura máximo 3 decimales en ${unidadActual.simbolo}.`,
         variant: "destructive",
@@ -798,6 +829,9 @@ export function ProductModal({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pieza">Pieza</SelectItem>
+                    <SelectItem value="bulto">Bulto</SelectItem>
+                    <SelectItem value="caja">Caja</SelectItem>
+                    <SelectItem value="paquete">Paquete</SelectItem>
                     <SelectItem value="kg">Kilogramo (kg)</SelectItem>
                     <SelectItem value="litro">Litro (L)</SelectItem>
                   </SelectContent>
@@ -807,8 +841,8 @@ export function ProductModal({
                     ? "Consultando unidad..."
                     : mode === "edit" && Number(product?.cantidad || 0) > 0
                       ? "La unidad está bloqueada mientras exista inventario."
-                      : unidadManejo === "pieza"
-                        ? "Se administrará en piezas completas."
+                      : esUnidadEntera(unidadManejo)
+                        ? `Se administrará en ${unidadActual.etiquetaPlural}; solo se permiten cantidades enteras.`
                         : `Se guardará internamente en ${unidadActual.unidadInterna}s.`}
                 </p>
               </div>
@@ -822,7 +856,7 @@ export function ProductModal({
                   value={cantidad}
                   onChange={(event) => setCantidad(event.target.value)}
                   placeholder={
-                    unidadManejo === "pieza" ? "Ej: 100" : "Ej: 12.500"
+                    esUnidadEntera(unidadManejo) ? "Ej: 100" : "Ej: 12.500"
                   }
                   min={unidadActual.paso}
                   step={unidadActual.paso}
