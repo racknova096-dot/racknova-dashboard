@@ -61,7 +61,12 @@ export default function Login() {
       localStorage.setItem("nombre", user?.nombre || user?.name || user?.email || username);
       localStorage.setItem("rol", role);
 
-     window.location.href = import.meta.env.BASE_URL;
+      // La pantalla de arranque debe mostrarse una sola vez después
+      // de un login correcto. App.tsx consume y elimina esta marca
+      // al entrar; un F5 posterior ya no vuelve a mostrarla.
+      sessionStorage.setItem("racknova:startup-after-login", "1");
+
+      window.location.href = import.meta.env.BASE_URL;
     } catch (error) {
       console.error("Error en login:", error);
       setError("No se pudo conectar con el servidor");
