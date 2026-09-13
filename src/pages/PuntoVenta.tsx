@@ -2355,7 +2355,178 @@ export default function PuntoVenta() {
 
       {workspacePanel === "history" && (
         <section className="space-y-4">
-          <Card><CardHeader className="border-b border-border/60"><div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><CardTitle className="flex items-center gap-2 text-xl"><History className="h-5 w-5 text-primary" />Historial de ventas</CardTitle><p className="mt-1 text-sm text-muted-foreground">Consulta tickets, cancela ventas autorizadas o registra devoluciones.</p></div><Button variant="outline" size="sm" onClick={() => void loadSales()} disabled={loadingSales}>{loadingSales && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}<RefreshCw className="mr-2 h-4 w-4" />Actualizar</Button></div></CardHeader><CardContent className="space-y-4 pt-5"><div className="relative max-w-xl"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-10" value={salesSearch} onChange={(event) => setSalesSearch(event.target.value)} placeholder="Buscar por folio, cajero, cliente o estado" /></div><div className="overflow-x-auto rounded-2xl border border-border/60"><table className="w-full min-w-[900px] text-sm"><thead className="bg-secondary/45 text-left text-xs text-muted-foreground"><tr><th className="p-3">Folio</th><th className="p-3">Fecha</th><th className="p-3">Cajero</th><th className="p-3">Cliente</th><th className="p-3">Estado</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Acciones</th></tr></thead><tbody className="divide-y divide-border/60">{filteredSales.map((sale) => <tr key={sale.id_venta} className="transition hover:bg-secondary/25"><td className="p-3 font-bold">{sale.folio}</td><td className="p-3">{formatDate(sale.fecha)}</td><td className="p-3">{sale.usuario}</td><td className="p-3">{sale.cliente_nombre || "Público general"}</td><td className="p-3"><Badge variant={sale.estado === "COMPLETADA" ? "default" : "destructive"}>{sale.estado}</Badge></td><td className="p-3 text-right font-black">{money(sale.total)}</td><td className="p-3"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => void openSale(sale.id_venta)}>Ver</Button>{isAdmin && sale.estado === "COMPLETADA" && <Button size="sm" variant="outline" onClick={() => void beginReturn(sale)}><RotateCcw className="mr-1 h-4 w-4" />Devolver</Button>}{isAdmin && sale.estado === "COMPLETADA" && <Button size="sm" variant="destructive" onClick={() => void cancelSale(sale)}><XCircle className="mr-1 h-4 w-4" />Cancelar</Button>}</div></td></tr>)}</tbody></table></div>{filteredSales.length === 0 && <div className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">No se encontraron ventas.</div>}</CardContent></Card>
+          <Card>
+            <CardHeader className="border-b border-border/60">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <History className="h-5 w-5 text-primary" />
+                    Historial de ventas
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Consulta tickets y revisa claramente devoluciones parciales o totales.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void loadSales()}
+                  disabled={loadingSales}
+                >
+                  {loadingSales && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Actualizar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-5">
+              <div className="relative max-w-xl">
+                <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-10"
+                  value={salesSearch}
+                  onChange={(event) => setSalesSearch(event.target.value)}
+                  placeholder="Buscar por folio, cajero, cliente, estado o devolución"
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-border/60">
+                <table className="w-full min-w-[1080px] text-sm">
+                  <thead className="bg-secondary/45 text-left text-xs text-muted-foreground">
+                    <tr>
+                      <th className="p-3">Folio</th>
+                      <th className="p-3">Fecha</th>
+                      <th className="p-3">Cajero</th>
+                      <th className="p-3">Cliente</th>
+                      <th className="p-3">Estado</th>
+                      <th className="p-3">Devolución</th>
+                      <th className="p-3 text-right">Importes</th>
+                      <th className="p-3 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {filteredSales.map((sale) => {
+                      const returnStatus = String(
+                        sale.estado_devolucion || "NINGUNA"
+                      ).toUpperCase();
+                      const returnedAmount = Number(sale.monto_devuelto || 0);
+                      const netAmount = Number(
+                        sale.total_neto ?? Math.max(sale.total - returnedAmount, 0)
+                      );
+
+                      return (
+                        <tr
+                          key={sale.id_venta}
+                          className="transition hover:bg-secondary/25"
+                        >
+                          <td className="p-3 font-bold">{sale.folio}</td>
+                          <td className="p-3">{formatDate(sale.fecha)}</td>
+                          <td className="p-3">{sale.usuario}</td>
+                          <td className="p-3">
+                            {sale.cliente_nombre || "Público general"}
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              variant={
+                                sale.estado === "COMPLETADA"
+                                  ? "default"
+                                  : "destructive"
+                              }
+                            >
+                              {sale.estado}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
+                            {returnStatus === "PARCIAL" ? (
+                              <div className="space-y-1">
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                >
+                                  Devolución parcial
+                                </Badge>
+                                <p className="text-xs text-muted-foreground">
+                                  {sale.numero_devoluciones || 1} devolución(es)
+                                </p>
+                              </div>
+                            ) : returnStatus === "TOTAL" ? (
+                              <div className="space-y-1">
+                                <Badge
+                                  variant="outline"
+                                  className="border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                                >
+                                  Devolución total
+                                </Badge>
+                                <p className="text-xs text-muted-foreground">
+                                  {sale.numero_devoluciones || 1} devolución(es)
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">
+                                Sin devolución
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <div className="font-black">{money(sale.total)}</div>
+                            {returnedAmount > 0 && (
+                              <>
+                                <div className="mt-0.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+                                  -{money(returnedAmount)} devuelto
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  Neto {money(netAmount)}
+                                </div>
+                              </>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void openSale(sale.id_venta)}
+                              >
+                                Ver
+                              </Button>
+                              {isAdmin &&
+                                sale.estado === "COMPLETADA" &&
+                                returnStatus !== "TOTAL" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => void beginReturn(sale)}
+                                  >
+                                    <RotateCcw className="mr-1 h-4 w-4" />
+                                    Devolver
+                                  </Button>
+                                )}
+                              {isAdmin && sale.estado === "COMPLETADA" && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => void cancelSale(sale)}
+                                >
+                                  <XCircle className="mr-1 h-4 w-4" />
+                                  Cancelar
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {filteredSales.length === 0 && (
+                <div className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
+                  No se encontraron ventas.
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </section>
       )}
 
