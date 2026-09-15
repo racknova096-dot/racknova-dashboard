@@ -53,3 +53,5 @@ Checkpoint de producción:
 `backup/production-baseline-20260915`
 
 No eliminarlo hasta existir una versión posterior de producción validada.
+
+<!-- staging-deployment-bootstrap: 2026-09-15 -->
