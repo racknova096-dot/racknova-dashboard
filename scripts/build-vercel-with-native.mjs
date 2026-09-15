@@ -111,6 +111,15 @@ function validateNativeBundle() {
   }
 }
 
+const vercelEnvironment = String(process.env.VERCEL_ENV || "").trim();
+process.env.VITE_DEPLOY_ENV = vercelEnvironment;
+
+if (vercelEnvironment === "preview" && !process.env.VITE_PREVIEW_API_URL) {
+  console.log(
+    "=== RackNova Preview segura: backend de producción deshabilitado ===",
+  );
+}
+
 console.log("=== RackNova Cloud Dashboard ===");
 runVite(["build"]);
 
