@@ -1,48 +1,55 @@
-# RackNova — Ambientes y flujo de despliegue
+# RackNova — flujo de producción sin costo adicional
 
 ## Producción
-- Rama: `main`
-- Uso: clientes y operación real
-- Regla: no desarrollar ni probar cambios directamente aquí.
-- Toda publicación debe venir desde `develop` después de validación.
+- Rama: `main`.
+- Vercel Production publica únicamente la versión estable.
+- Nunca desarrollar directamente sobre `main`.
 
-## Staging / Pruebas
-- Rama: `develop`
-- Uso: integrar y validar mejoras antes de producción.
-- Debe usar servicios y datos de staging, nunca la base de producción.
+## Desarrollo y pruebas
+- Rama de integración: `develop`.
+- Cada cambio nace desde `develop` en `feature/*` o `fix/*`.
+- Vercel puede generar Preview Deployments para revisar interfaz, responsive, navegación y compilación.
 
-## Desarrollo
-Cada mejora se trabaja en una rama independiente creada desde `develop`:
+### Protección de datos
+Las Preview Deployments NO usan el backend de producción por defecto.
 
-```text
-feature/<nombre-de-mejora>
-fix/<nombre-del-arreglo>
+En Vercel Preview:
+- `VITE_DEPLOY_ENV=preview` se inyecta durante el build.
+- `src/config.ts` no usa `VITE_API_URL` de producción.
+- Solo se conecta a una API si se define expresamente `VITE_PREVIEW_API_URL`.
+- Sin esa variable, las operaciones de API quedan aisladas/fallan de forma segura.
+
+Para pruebas funcionales completas, usar el backend local de desarrollo en:
+
+`http://127.0.0.1:8010`
+
+Desarrollo local del dashboard:
+
+```powershell
+Copy-Item .env.development.example .env.development.local
+npm install
+npm run dev
 ```
 
-Flujo:
+## Flujo
 
 ```text
 feature/* o fix/*
         ↓
      develop
         ↓
- validación staging
+Vercel Preview + pruebas locales
+        ↓
+ aprobación explícita
         ↓
        main
         ↓
    producción
 ```
 
-## Regla de promoción
-1. Crear rama desde `develop`.
-2. Implementar y probar.
-3. Integrar a `develop`.
-4. Validar dashboard, backend y datos en staging.
-5. Solo con aprobación explícita, promover `develop` a `main`.
-
 ## Rollback
-Baseline de producción creado el 2026-09-15:
+Checkpoint de producción:
 
 `backup/production-baseline-20260915`
 
-No eliminar este checkpoint hasta tener al menos una versión de producción posterior validada.
+No eliminarlo hasta existir una versión posterior de producción validada.
