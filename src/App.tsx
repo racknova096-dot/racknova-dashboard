@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -62,6 +62,13 @@ function AppContent() {
       initialInventoryLoaded.current = true;
     }
   }, [isInventoryLoading]);
+
+  useLayoutEffect(() => {
+    // Cada sección de RackNova inicia arriba, como una aplicación,
+    // sin conservar el scroll de la pantalla anterior.
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [location.pathname]);
 
   const isLoginPage = location.pathname === "/login";
   const showIAAssistant = !isLoginPage && canUseIA();
