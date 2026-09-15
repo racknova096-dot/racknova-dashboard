@@ -112,11 +112,23 @@ function validateNativeBundle() {
 }
 
 const vercelEnvironment = String(process.env.VERCEL_ENV || "").trim();
-process.env.VITE_DEPLOY_ENV = vercelEnvironment;
+const gitBranch = String(process.env.VERCEL_GIT_COMMIT_REF || "").trim();
 
-if (vercelEnvironment === "preview" && !process.env.VITE_PREVIEW_API_URL) {
+const deployEnvironment =
+  vercelEnvironment === "production" && gitBranch === "main"
+    ? "production"
+    : vercelEnvironment === "preview"
+      ? "preview"
+      : "staging";
+
+process.env.VITE_DEPLOY_ENV = deployEnvironment;
+
+if (
+  (deployEnvironment === "preview" || deployEnvironment === "staging") &&
+  !process.env.VITE_PREVIEW_API_URL
+) {
   console.log(
-    "=== RackNova Preview segura: backend de producción deshabilitado ===",
+    "=== RackNova entorno aislado: backend de producción deshabilitado ===",
   );
 }
 
