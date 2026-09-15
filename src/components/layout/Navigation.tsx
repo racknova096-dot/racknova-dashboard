@@ -200,7 +200,7 @@ export function Navigation() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_1px_0_hsl(222_47%_11%/0.025)] backdrop-blur-2xl">
+      <nav className="sticky top-0 z-50 border-b border-border/60 bg-background/95 shadow-[0_1px_0_hsl(222_47%_11%/0.025)] backdrop-blur-2xl md:fixed md:inset-x-0 md:top-0 md:w-full">
         <div className="mx-auto max-w-[1500px] px-3 py-2 sm:px-6 sm:py-3">
           <div className="flex items-center justify-between gap-3">
             <Link to="/" className="group flex min-w-0 items-center gap-3">
@@ -319,6 +319,7 @@ export function Navigation() {
           </div>
         </div>
       </nav>
+      <div className="hidden h-[69px] md:block" aria-hidden="true" />
       <MobileBottomNavigation
         items={mobilePrimaryItems}
         isActive={isActive}
