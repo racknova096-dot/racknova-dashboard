@@ -1,2 +1,4 @@
+const configuredApiUrl = String(import.meta.env.VITE_API_URL || "").trim();
+
 export const API_URL =
-  import.meta.env.VITE_API_URL || "https://racknova-backend-1.onrender.com";
+  configuredApiUrl || "http://127.0.0.1:8010";
